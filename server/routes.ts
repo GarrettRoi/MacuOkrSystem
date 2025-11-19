@@ -23,13 +23,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authResult = await storage.verifyPassword(password);
       
       if (authResult.isValid) {
-        req.session.isAdmin = authResult.isAdmin;
-        res.json({ success: true, isAdmin: authResult.isAdmin });
+        req.session.regenerate((err) => {
+          if (err) {
+            return res.status(500).json({ error: "Session error" });
+          }
+          
+          req.session.isAdmin = authResult.isAdmin;
+          req.session.sessionVersion = Date.now();
+          delete req.session.selectedStaffId;
+          delete req.session.selectedStaffName;
+          
+          req.session.save((err) => {
+            if (err) {
+              return res.status(500).json({ error: "Session save error" });
+            }
+            res.json({ success: true, isAdmin: authResult.isAdmin });
+          });
+        });
       } else {
         res.status(401).json({ error: "Invalid password" });
       }
     } catch (error) {
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/auth/session", async (req, res) => {
+    try {
+      if (req.session.isAdmin === undefined) {
+        return res.json({ authenticated: false });
+      }
+      
+      const sessionData: any = {
+        authenticated: true,
+        isAdmin: req.session.isAdmin,
+        selectedStaffId: req.session.selectedStaffId,
+        selectedStaffName: req.session.selectedStaffName,
+      };
+      
+      if (req.session.selectedStaffId) {
+        const staff = await storage.getStaffWithDetails(req.session.selectedStaffId);
+        if (staff && staff.department) {
+          sessionData.selectedStaff = staff;
+        } else {
+          delete req.session.selectedStaffId;
+          delete req.session.selectedStaffName;
+          delete sessionData.selectedStaffId;
+          delete sessionData.selectedStaffName;
+        }
+      }
+      
+      res.json(sessionData);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to retrieve session" });
+    }
+  });
+
+  app.post("/api/auth/select-staff", async (req, res) => {
+    try {
+      if (req.session.isAdmin === undefined) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      
+      const { staffId } = req.body;
+      if (!staffId) {
+        return res.status(400).json({ error: "Staff ID required" });
+      }
+      
+      const staff = await storage.getStaffWithDetails(staffId);
+      if (!staff) {
+        return res.status(404).json({ error: "Staff not found" });
+      }
+      
+      if (!staff.department) {
+        return res.status(400).json({ error: "Staff member has invalid department data" });
+      }
+      
+      req.session.selectedStaffId = staff.id;
+      req.session.selectedStaffName = staff.name;
+      
+      req.session.save((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Session save error" });
+        }
+        res.json({ success: true, staff });
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to select staff" });
+    }
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      req.session.destroy((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Logout failed" });
+        }
+        res.clearCookie('connect.sid');
+        res.json({ success: true });
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Logout failed" });
     }
   });
 

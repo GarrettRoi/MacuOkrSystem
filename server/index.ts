@@ -8,6 +8,9 @@ const app = express();
 declare module 'express-session' {
   interface SessionData {
     isAdmin?: boolean;
+    selectedStaffId?: string;
+    selectedStaffName?: string;
+    sessionVersion?: number;
   }
 }
 

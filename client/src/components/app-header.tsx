@@ -68,7 +68,9 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
                 </Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">{staff.department.name}</p>
+            {staff.department && (
+              <p className="text-xs text-muted-foreground">{staff.department.name}</p>
+            )}
           </div>
           <Button variant="ghost" size="icon" onClick={onLogout} data-testid="button-logout">
             <LogOut className="h-4 w-4" />
