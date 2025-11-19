@@ -71,15 +71,22 @@ function AppContent() {
   });
 
   useEffect(() => {
-    if (!sessionLoading && session && !sessionChecked) {
+    if (!sessionLoading && session) {
+      if (!sessionChecked) {
+        setSessionChecked(true);
+      }
+      
       if (session.authenticated) {
         setIsAuthenticated(true);
         setIsAdmin(session.isAdmin || false);
         if (session.selectedStaff) {
           setSelectedStaff(session.selectedStaff);
         }
+      } else {
+        setIsAuthenticated(false);
+        setIsAdmin(false);
+        setSelectedStaff(null);
       }
-      setSessionChecked(true);
     }
   }, [session, sessionLoading, sessionChecked]);
 
