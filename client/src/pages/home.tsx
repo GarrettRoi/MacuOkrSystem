@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, TrendingUp, BarChart3, Settings, Download } from "lucide-react";
+import { FileText, TrendingUp, BarChart3, Settings, Download, LineChart } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
 
 interface HomeProps {
@@ -33,6 +33,14 @@ export default function Home({ staff }: HomeProps) {
       path: "/dashboard",
       color: "text-purple-600",
       bg: "bg-purple-50",
+    },
+    {
+      title: "Historical Trends",
+      description: "Year-over-year comparison and quarterly trend analysis",
+      icon: LineChart,
+      path: "/trends",
+      color: "text-indigo-600",
+      bg: "bg-indigo-50",
     },
     {
       title: "Admin Panel",

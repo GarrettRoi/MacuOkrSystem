@@ -11,8 +11,14 @@ import {
   type InsertQuarterlyUpdate,
   type StaffWithDetails,
   type OkrWithDetails,
+  departments,
+  subDepartments,
+  staff,
+  okrs,
+  quarterlyUpdates,
 } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   verifyPassword(password: string): Promise<boolean>;
@@ -49,271 +55,233 @@ export interface IStorage {
   deleteQuarterlyUpdate(id: string): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
+export class DatabaseStorage implements IStorage {
   private accessPassword: string = "14:12";
-  private departments: Map<string, Department> = new Map();
-  private subDepartments: Map<string, SubDepartment> = new Map();
-  private staff: Map<string, Staff> = new Map();
-  private okrs: Map<string, Okr> = new Map();
-  private quarterlyUpdates: Map<string, QuarterlyUpdate> = new Map();
-
-  constructor() {
-    this.seedData();
-  }
-
-  private seedData() {
-    const dept1 = this.createDepartmentSync({ name: "Academic Affairs" });
-    const dept2 = this.createDepartmentSync({ name: "Student Services" });
-    const dept3 = this.createDepartmentSync({ name: "Administration" });
-
-    const subDept1 = this.createSubDepartmentSync({ name: "Undergraduate Studies", departmentId: dept1.id });
-    const subDept2 = this.createSubDepartmentSync({ name: "Graduate Programs", departmentId: dept1.id });
-
-    this.createStaffSync({
-      name: "Dr. Sarah Johnson",
-      email: "sarah.johnson@macu.edu",
-      departmentId: dept1.id,
-      subDepartmentId: subDept1.id,
-    });
-
-    this.createStaffSync({
-      name: "Michael Chen",
-      email: "michael.chen@macu.edu",
-      departmentId: dept2.id,
-      subDepartmentId: undefined,
-    });
-
-    this.createStaffSync({
-      name: "Emily Rodriguez",
-      email: "emily.rodriguez@macu.edu",
-      departmentId: dept3.id,
-      subDepartmentId: undefined,
-    });
-  }
-
-  private createDepartmentSync(dept: InsertDepartment): Department {
-    const id = randomUUID();
-    const department: Department = { ...dept, id };
-    this.departments.set(id, department);
-    return department;
-  }
-
-  private createSubDepartmentSync(subDept: InsertSubDepartment): SubDepartment {
-    const id = randomUUID();
-    const subDepartment: SubDepartment = { ...subDept, id };
-    this.subDepartments.set(id, subDepartment);
-    return subDepartment;
-  }
-
-  private createStaffSync(staff: InsertStaff): Staff {
-    const id = randomUUID();
-    const staffMember: Staff = {
-      id,
-      name: staff.name,
-      email: staff.email,
-      departmentId: staff.departmentId,
-      subDepartmentId: staff.subDepartmentId || null,
-    };
-    this.staff.set(id, staffMember);
-    return staffMember;
-  }
 
   async verifyPassword(password: string): Promise<boolean> {
     return password === this.accessPassword;
   }
 
   async getAllStaff(): Promise<Staff[]> {
-    return Array.from(this.staff.values());
+    return await db.select().from(staff);
   }
 
   async getAllStaffWithDetails(): Promise<StaffWithDetails[]> {
-    const staffList = Array.from(this.staff.values());
-    return staffList.map((s) => {
-      const department = this.departments.get(s.departmentId)!;
-      const subDepartment = s.subDepartmentId ? this.subDepartments.get(s.subDepartmentId) : undefined;
-      return {
-        ...s,
-        department,
-        subDepartment: subDepartment || null,
-      };
-    });
+    const result = await db
+      .select({
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        departmentId: staff.departmentId,
+        subDepartmentId: staff.subDepartmentId,
+        department: departments,
+        subDepartment: subDepartments,
+      })
+      .from(staff)
+      .leftJoin(departments, eq(staff.departmentId, departments.id))
+      .leftJoin(subDepartments, eq(staff.subDepartmentId, subDepartments.id));
+
+    return result.map((row) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      departmentId: row.departmentId,
+      subDepartmentId: row.subDepartmentId,
+      department: row.department!,
+      subDepartment: row.subDepartment,
+    }));
   }
 
   async getStaff(id: string): Promise<Staff | undefined> {
-    return this.staff.get(id);
+    const [result] = await db.select().from(staff).where(eq(staff.id, id));
+    return result || undefined;
   }
 
   async getStaffWithDetails(id: string): Promise<StaffWithDetails | undefined> {
-    const staff = this.staff.get(id);
-    if (!staff) return undefined;
-    const department = this.departments.get(staff.departmentId)!;
-    const subDepartment = staff.subDepartmentId ? this.subDepartments.get(staff.subDepartmentId) : undefined;
+    const result = await db
+      .select({
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        departmentId: staff.departmentId,
+        subDepartmentId: staff.subDepartmentId,
+        department: departments,
+        subDepartment: subDepartments,
+      })
+      .from(staff)
+      .leftJoin(departments, eq(staff.departmentId, departments.id))
+      .leftJoin(subDepartments, eq(staff.subDepartmentId, subDepartments.id))
+      .where(eq(staff.id, id));
+
+    if (result.length === 0) return undefined;
+
+    const row = result[0];
     return {
-      ...staff,
-      department,
-      subDepartment: subDepartment || null,
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      departmentId: row.departmentId,
+      subDepartmentId: row.subDepartmentId,
+      department: row.department!,
+      subDepartment: row.subDepartment,
     };
   }
 
   async createStaff(insertStaff: InsertStaff): Promise<Staff> {
-    const id = randomUUID();
-    const staff: Staff = {
-      id,
-      name: insertStaff.name,
-      email: insertStaff.email,
-      departmentId: insertStaff.departmentId,
-      subDepartmentId: insertStaff.subDepartmentId || null,
-    };
-    this.staff.set(id, staff);
-    return staff;
+    const [staffMember] = await db
+      .insert(staff)
+      .values(insertStaff)
+      .returning();
+    return staffMember;
   }
 
   async deleteStaff(id: string): Promise<void> {
-    this.staff.delete(id);
+    await db.delete(staff).where(eq(staff.id, id));
   }
 
   async getAllDepartments(): Promise<Department[]> {
-    return Array.from(this.departments.values());
+    return await db.select().from(departments);
   }
 
   async getDepartment(id: string): Promise<Department | undefined> {
-    return this.departments.get(id);
+    const [dept] = await db.select().from(departments).where(eq(departments.id, id));
+    return dept || undefined;
   }
 
   async createDepartment(dept: InsertDepartment): Promise<Department> {
-    const id = randomUUID();
-    const department: Department = { ...dept, id };
-    this.departments.set(id, department);
+    const [department] = await db
+      .insert(departments)
+      .values(dept)
+      .returning();
     return department;
   }
 
   async deleteDepartment(id: string): Promise<void> {
-    this.departments.delete(id);
+    await db.delete(departments).where(eq(departments.id, id));
   }
 
   async getAllSubDepartments(): Promise<SubDepartment[]> {
-    return Array.from(this.subDepartments.values());
+    return await db.select().from(subDepartments);
   }
 
   async getSubDepartment(id: string): Promise<SubDepartment | undefined> {
-    return this.subDepartments.get(id);
+    const [subDept] = await db.select().from(subDepartments).where(eq(subDepartments.id, id));
+    return subDept || undefined;
   }
 
   async createSubDepartment(subDept: InsertSubDepartment): Promise<SubDepartment> {
-    const id = randomUUID();
-    const subDepartment: SubDepartment = { ...subDept, id };
-    this.subDepartments.set(id, subDepartment);
+    const [subDepartment] = await db
+      .insert(subDepartments)
+      .values(subDept)
+      .returning();
     return subDepartment;
   }
 
   async deleteSubDepartment(id: string): Promise<void> {
-    this.subDepartments.delete(id);
+    await db.delete(subDepartments).where(eq(subDepartments.id, id));
   }
 
   async getAllOkrs(): Promise<Okr[]> {
-    return Array.from(this.okrs.values());
+    return await db.select().from(okrs);
   }
 
   async getAllOkrsWithDetails(): Promise<OkrWithDetails[]> {
-    const okrList = Array.from(this.okrs.values());
-    const result: OkrWithDetails[] = [];
-    
-    for (const okr of okrList) {
-      const staff = this.staff.get(okr.staffId);
-      if (staff) {
-        const department = this.departments.get(staff.departmentId)!;
-        const subDepartment = staff.subDepartmentId ? this.subDepartments.get(staff.subDepartmentId) : undefined;
-        result.push({
-          ...okr,
-          staff: {
-            ...staff,
-            department,
-            subDepartment: subDepartment || null,
-          },
-        });
-      }
-    }
-    
-    return result;
+    const result = await db
+      .select({
+        okr: okrs,
+        staff: staff,
+        department: departments,
+        subDepartment: subDepartments,
+      })
+      .from(okrs)
+      .leftJoin(staff, eq(okrs.staffId, staff.id))
+      .leftJoin(departments, eq(staff.departmentId, departments.id))
+      .leftJoin(subDepartments, eq(staff.subDepartmentId, subDepartments.id));
+
+    return result.map((row) => ({
+      ...row.okr,
+      staff: {
+        ...row.staff!,
+        department: row.department!,
+        subDepartment: row.subDepartment,
+      },
+    }));
   }
 
   async getOkr(id: string): Promise<Okr | undefined> {
-    return this.okrs.get(id);
+    const [okr] = await db.select().from(okrs).where(eq(okrs.id, id));
+    return okr || undefined;
   }
 
   async getOkrsByStaff(staffId: string): Promise<Okr[]> {
-    return Array.from(this.okrs.values()).filter((okr) => okr.staffId === staffId);
+    return await db.select().from(okrs).where(eq(okrs.staffId, staffId));
   }
 
   async createOkr(insertOkr: InsertOkr): Promise<Okr> {
-    const id = randomUUID();
-    const okr: Okr = {
-      id,
-      ...insertOkr,
-      currentValue: 0,
-      status: "not_started",
-      createdAt: new Date(),
-    };
-    this.okrs.set(id, okr);
+    const [okr] = await db
+      .insert(okrs)
+      .values(insertOkr)
+      .returning();
     return okr;
   }
 
   async updateOkr(id: string, updates: Partial<Okr>): Promise<Okr> {
-    const okr = this.okrs.get(id);
-    if (!okr) throw new Error("OKR not found");
-    const updated = { ...okr, ...updates };
-    this.okrs.set(id, updated);
-    return updated;
+    const [okr] = await db
+      .update(okrs)
+      .set(updates)
+      .where(eq(okrs.id, id))
+      .returning();
+    return okr;
   }
 
   async deleteOkr(id: string): Promise<void> {
-    this.okrs.delete(id);
+    await db.delete(okrs).where(eq(okrs.id, id));
   }
 
   async getAllQuarterlyUpdates(): Promise<QuarterlyUpdate[]> {
-    return Array.from(this.quarterlyUpdates.values());
+    return await db.select().from(quarterlyUpdates);
   }
 
   async getQuarterlyUpdate(id: string): Promise<QuarterlyUpdate | undefined> {
-    return this.quarterlyUpdates.get(id);
+    const [update] = await db.select().from(quarterlyUpdates).where(eq(quarterlyUpdates.id, id));
+    return update || undefined;
   }
 
   async getQuarterlyUpdatesByOkr(okrId: string): Promise<QuarterlyUpdate[]> {
-    return Array.from(this.quarterlyUpdates.values()).filter((update) => update.okrId === okrId);
+    return await db.select().from(quarterlyUpdates).where(eq(quarterlyUpdates.okrId, okrId));
   }
 
   async createQuarterlyUpdate(insertUpdate: InsertQuarterlyUpdate): Promise<QuarterlyUpdate> {
-    const id = randomUUID();
-    const update: QuarterlyUpdate = {
-      id,
-      ...insertUpdate,
-      submittedAt: new Date(),
-    };
-    this.quarterlyUpdates.set(id, update);
+    const [update] = await db
+      .insert(quarterlyUpdates)
+      .values(insertUpdate)
+      .returning();
     
-    const okr = this.okrs.get(insertUpdate.okrId);
+    const okr = await this.getOkr(insertUpdate.okrId);
     if (okr) {
-      okr.currentValue = insertUpdate.progress;
-      
+      const updates: Partial<Okr> = {
+        currentValue: insertUpdate.progress,
+      };
+
       if (insertUpdate.progress === 0) {
-        okr.status = "not_started";
+        updates.status = "not_started";
       } else if (insertUpdate.progress >= okr.targetValue) {
-        okr.status = "completed";
+        updates.status = "completed";
       } else if (insertUpdate.progress < okr.targetValue * 0.5) {
-        okr.status = "at_risk";
+        updates.status = "at_risk";
       } else {
-        okr.status = "in_progress";
+        updates.status = "in_progress";
       }
-      
-      this.okrs.set(okr.id, okr);
+
+      await this.updateOkr(okr.id, updates);
     }
     
     return update;
   }
 
   async deleteQuarterlyUpdate(id: string): Promise<void> {
-    this.quarterlyUpdates.delete(id);
+    await db.delete(quarterlyUpdates).where(eq(quarterlyUpdates.id, id));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

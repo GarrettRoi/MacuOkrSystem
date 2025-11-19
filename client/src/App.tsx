@@ -12,6 +12,7 @@ import QuarterlyUpdate from "@/pages/quarterly-update";
 import Dashboard from "@/pages/dashboard";
 import Admin from "@/pages/admin";
 import Export from "@/pages/export";
+import Trends from "@/pages/trends";
 import AppHeader from "@/components/app-header";
 import type { StaffWithDetails } from "@shared/schema";
 
@@ -22,6 +23,7 @@ function Router({ staff }: { staff: StaffWithDetails }) {
       <Route path="/submit-okr" component={() => <SubmitOkr staff={staff} />} />
       <Route path="/quarterly-update" component={() => <QuarterlyUpdate staff={staff} />} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/trends" component={Trends} />
       <Route path="/admin" component={Admin} />
       <Route path="/export" component={Export} />
       <Route component={() => <Home staff={staff} />} />

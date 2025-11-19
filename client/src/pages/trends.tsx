@@ -1,0 +1,288 @@
+import { useQuery } from "@tanstack/react-query";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { TrendingUp, Calendar, Target } from "lucide-react";
+import { useState } from "react";
+import type { OkrWithDetails } from "@shared/schema";
+
+export default function TrendsPage() {
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear.toString());
+  const [comparisonYear, setComparisonYear] = useState((currentYear - 1).toString());
+
+  const { data: okrs, isLoading } = useQuery<OkrWithDetails[]>({
+    queryKey: ["/api/okrs"],
+  });
+
+  const years = okrs
+    ? Array.from(new Set(okrs.map((okr) => okr.year))).sort((a, b) => b - a)
+    : [];
+
+  const quarterlyData = okrs
+    ? ["Q1", "Q2", "Q3", "Q4"].map((quarter) => {
+        const currentYearOkrs = okrs.filter(
+          (okr) => okr.year === parseInt(selectedYear) && okr.quarter === quarter
+        );
+        const comparisonYearOkrs = okrs.filter(
+          (okr) => okr.year === parseInt(comparisonYear) && okr.quarter === quarter
+        );
+
+        const currentAvg = currentYearOkrs.length > 0
+          ? currentYearOkrs.reduce((sum, okr) => sum + Math.min(100, okr.targetValue > 0 ? (okr.currentValue / okr.targetValue) * 100 : 0), 0) / currentYearOkrs.length
+          : 0;
+
+        const comparisonAvg = comparisonYearOkrs.length > 0
+          ? comparisonYearOkrs.reduce((sum, okr) => sum + Math.min(100, okr.targetValue > 0 ? (okr.currentValue / okr.targetValue) * 100 : 0), 0) / comparisonYearOkrs.length
+          : 0;
+
+        return {
+          quarter,
+          [selectedYear]: Math.round(currentAvg),
+          [comparisonYear]: Math.round(comparisonAvg),
+          count: currentYearOkrs.length,
+        };
+      })
+    : [];
+
+  const departmentTrends = okrs
+    ? Object.values(
+        okrs.reduce((acc, okr) => {
+          const deptName = okr.staff.department.name;
+          if (!acc[deptName]) {
+            acc[deptName] = {
+              department: deptName,
+              currentYear: 0,
+              comparisonYear: 0,
+              currentCount: 0,
+              comparisonCount: 0,
+            };
+          }
+
+          const progressPercent = Math.min(100, okr.targetValue > 0 ? (okr.currentValue / okr.targetValue) * 100 : 0);
+          
+          if (okr.year === parseInt(selectedYear)) {
+            acc[deptName].currentYear += progressPercent;
+            acc[deptName].currentCount += 1;
+          } else if (okr.year === parseInt(comparisonYear)) {
+            acc[deptName].comparisonYear += progressPercent;
+            acc[deptName].comparisonCount += 1;
+          }
+
+          return acc;
+        }, {} as Record<string, any>)
+      ).map((dept) => ({
+        department: dept.department,
+        [selectedYear]: dept.currentCount > 0 ? Math.round(dept.currentYear / dept.currentCount) : 0,
+        [comparisonYear]: dept.comparisonCount > 0 ? Math.round(dept.comparisonYear / dept.comparisonCount) : 0,
+      }))
+    : [];
+
+  const completionRates = okrs
+    ? ["Q1", "Q2", "Q3", "Q4"].map((quarter) => {
+        const currentYearOkrs = okrs.filter(
+          (okr) => okr.year === parseInt(selectedYear) && okr.quarter === quarter
+        );
+        const completedCount = currentYearOkrs.filter((okr) => okr.status === "completed").length;
+        const completionRate = currentYearOkrs.length > 0
+          ? Math.round((completedCount / currentYearOkrs.length) * 100)
+          : 0;
+
+        return {
+          quarter,
+          completionRate,
+          total: currentYearOkrs.length,
+          completed: completedCount,
+        };
+      })
+    : [];
+
+  const totalOkrs = okrs?.filter((okr) => okr.year === parseInt(selectedYear)).length || 0;
+  const completedOkrs = okrs?.filter(
+    (okr) => okr.year === parseInt(selectedYear) && okr.status === "completed"
+  ).length || 0;
+  const avgProgress = okrs
+    ? Math.round(
+        okrs
+          .filter((okr) => okr.year === parseInt(selectedYear))
+          .reduce((sum, okr) => sum + Math.min(100, okr.targetValue > 0 ? (okr.currentValue / okr.targetValue) * 100 : 0), 0) /
+          (okrs.filter((okr) => okr.year === parseInt(selectedYear)).length || 1)
+      )
+    : 0;
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground" data-testid="text-page-title">
+                Historical Trends & Analysis
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Year-over-year comparison and quarterly performance trends
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <div className="space-y-1">
+                <label className="text-sm text-muted-foreground">Current Year</label>
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger className="w-32" data-testid="select-current-year">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm text-muted-foreground">Compare To</label>
+                <Select value={comparisonYear} onValueChange={setComparisonYear}>
+                  <SelectTrigger className="w-32" data-testid="select-comparison-year">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-64 w-full" />
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total OKRs ({selectedYear})</CardTitle>
+                    <Target className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid="text-total-okrs">
+                      {totalOkrs}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {completedOkrs} completed
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Avg Progress</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid="text-avg-progress">
+                      {avgProgress}%
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Across all quarters
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid="text-completion-rate">
+                      {totalOkrs > 0 ? Math.round((completedOkrs / totalOkrs) * 100) : 0}%
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {completedOkrs} of {totalOkrs} OKRs
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Year-over-Year Progress Comparison</CardTitle>
+                  <CardDescription>
+                    Average OKR progress by quarter comparing {selectedYear} vs {comparisonYear}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={quarterlyData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="quarter" />
+                      <YAxis label={{ value: "Progress (%)", angle: -90, position: "insideLeft" }} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey={selectedYear} fill="hsl(var(--primary))" name={`${selectedYear}`} />
+                      <Bar dataKey={comparisonYear} fill="hsl(var(--muted-foreground))" name={`${comparisonYear}`} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quarterly Completion Trends ({selectedYear})</CardTitle>
+                  <CardDescription>
+                    Percentage of OKRs marked as completed each quarter
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={completionRates}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="quarter" />
+                      <YAxis label={{ value: "Completion Rate (%)", angle: -90, position: "insideLeft" }} />
+                      <Tooltip />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="completionRate"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2}
+                        name="Completion %"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Department Performance Comparison</CardTitle>
+                  <CardDescription>
+                    Average progress across all quarters: {selectedYear} vs {comparisonYear}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={departmentTrends} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" label={{ value: "Progress (%)", position: "insideBottom", offset: -5 }} />
+                      <YAxis type="category" dataKey="department" width={150} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey={selectedYear} fill="hsl(var(--primary))" name={`${selectedYear}`} />
+                      <Bar dataKey={comparisonYear} fill="hsl(var(--muted-foreground))" name={`${comparisonYear}`} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </>
+          )}
+    </div>
+  );
+}
