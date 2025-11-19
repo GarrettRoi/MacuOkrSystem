@@ -5,9 +5,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
-import { TrendingUp, Users, Target, AlertTriangle } from "lucide-react";
-import type { OkrWithDetails, QuarterlyUpdate, Department } from "@shared/schema";
+import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter } from "lucide-react";
+import type { OkrWithDetails, QuarterlyUpdate, Department, StaffWithDetails } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const currentYear = new Date().getFullYear();
@@ -18,6 +21,11 @@ const CHART_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--c
 export default function Dashboard() {
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
   const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
+  const [departmentFilter, setDepartmentFilter] = useState<string>("All");
+  const [staffFilter, setStaffFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [keywordSearch, setKeywordSearch] = useState<string>("");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const { data: okrs, isLoading: okrsLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
@@ -31,13 +39,42 @@ export default function Dashboard() {
     queryKey: ["/api/departments"],
   });
 
-  const isLoading = okrsLoading || updatesLoading || depsLoading;
+  const { data: staff, isLoading: staffLoading } = useQuery<StaffWithDetails[]>({
+    queryKey: ["/api/staff"],
+  });
+
+  const isLoading = okrsLoading || updatesLoading || depsLoading || staffLoading;
 
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
-    return quarterMatch && yearMatch;
+    const departmentMatch = departmentFilter === "All" || String(okr.staff.departmentId) === departmentFilter;
+    const staffMatch = staffFilter === "All" || String(okr.staffId) === staffFilter;
+    const statusMatch = statusFilter === "All" || okr.status === statusFilter;
+    const keywordMatch = !keywordSearch || 
+      okr.title.toLowerCase().includes(keywordSearch.toLowerCase()) ||
+      okr.description.toLowerCase().includes(keywordSearch.toLowerCase());
+    
+    return quarterMatch && yearMatch && departmentMatch && staffMatch && statusMatch && keywordMatch;
   }) || [];
+
+  const clearAllFilters = () => {
+    setQuarterFilter("All");
+    setYearFilter(String(currentYear));
+    setDepartmentFilter("All");
+    setStaffFilter("All");
+    setStatusFilter("All");
+    setKeywordSearch("");
+  };
+
+  const activeFilterCount = [
+    quarterFilter !== "All",
+    yearFilter !== String(currentYear),
+    departmentFilter !== "All",
+    staffFilter !== "All",
+    statusFilter !== "All",
+    keywordSearch !== "",
+  ].filter(Boolean).length;
 
   const totalOkrs = filteredOkrs.length;
   const avgProgress = totalOkrs > 0
@@ -47,11 +84,11 @@ export default function Dashboard() {
   const uniqueStaffWithOkrs = new Set(filteredOkrs.map((okr) => okr.staffId)).size;
   
   const okrsNeedingUpdate = filteredOkrs.filter((okr) => {
-    const hasRecentUpdate = updates?.some((update) => 
-      update.okrId === okr.id && 
-      update.quarter === quarterFilter &&
-      Number(yearFilter) === update.year
-    );
+    const hasRecentUpdate = updates?.some((update) => {
+      const quarterMatch = update.quarter === quarterFilter;
+      const yearMatch = yearFilter === "All" || update.year === Number(yearFilter);
+      return update.okrId === okr.id && quarterMatch && yearMatch;
+    });
     return !hasRecentUpdate && quarterFilter !== "All";
   }).length;
 
@@ -76,39 +113,154 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">OKR Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Track progress and performance across all departments
-          </p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">OKR Dashboard</h1>
+            <p className="text-muted-foreground mt-1">
+              Track progress and performance across all departments
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3 items-center">
+            <Select value={quarterFilter} onValueChange={setQuarterFilter}>
+              <SelectTrigger className="w-32" data-testid="select-filter-quarter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {QUARTERS.map((q) => (
+                  <SelectItem key={q} value={q} data-testid={`option-filter-quarter-${q}`}>
+                    {q}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={yearFilter} onValueChange={setYearFilter}>
+              <SelectTrigger className="w-32" data-testid="select-filter-year">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {YEARS.map((y) => (
+                  <SelectItem key={y} value={y} data-testid={`option-filter-year-${y}`}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="default"
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              data-testid="button-toggle-advanced-filters"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-2" data-testid="badge-active-filters">
+                  {activeFilterCount}
+                </Badge>
+              )}
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Select value={quarterFilter} onValueChange={setQuarterFilter}>
-            <SelectTrigger className="w-32" data-testid="select-filter-quarter">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {QUARTERS.map((q) => (
-                <SelectItem key={q} value={q} data-testid={`option-filter-quarter-${q}`}>
-                  {q}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={yearFilter} onValueChange={setYearFilter}>
-            <SelectTrigger className="w-32" data-testid="select-filter-year">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {YEARS.map((y) => (
-                <SelectItem key={y} value={y} data-testid={`option-filter-year-${y}`}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+
+        {showAdvancedFilters && (
+          <Card data-testid="card-advanced-filters">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Advanced Filters</CardTitle>
+                {activeFilterCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearAllFilters}
+                    data-testid="button-clear-filters"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Clear All
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Department</label>
+                  <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                    <SelectTrigger data-testid="select-filter-department">
+                      <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Departments</SelectItem>
+                      {departments?.map((dept) => (
+                        <SelectItem key={dept.id} value={String(dept.id)} data-testid={`option-filter-dept-${dept.id}`}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Staff Member</label>
+                  <Select value={staffFilter} onValueChange={setStaffFilter}>
+                    <SelectTrigger data-testid="select-filter-staff">
+                      <SelectValue placeholder="All Staff" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Staff</SelectItem>
+                      {staff?.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)} data-testid={`option-filter-staff-${s.id}`}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Status</label>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger data-testid="select-filter-status">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Statuses</SelectItem>
+                      <SelectItem value="not_started">Not Started</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="at_risk">At Risk</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Keyword Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search in titles and descriptions..."
+                    value={keywordSearch}
+                    onChange={(e) => setKeywordSearch(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-keyword-search"
+                  />
+                  {keywordSearch && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 px-2"
+                      onClick={() => setKeywordSearch("")}
+                      data-testid="button-clear-keyword"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {isLoading ? (
