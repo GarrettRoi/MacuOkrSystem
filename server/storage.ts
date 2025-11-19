@@ -21,7 +21,7 @@ import { db } from "./db";
 import { eq } from "drizzle-orm";
 
 export interface IStorage {
-  verifyPassword(password: string): Promise<boolean>;
+  verifyPassword(password: string): Promise<{ isValid: boolean; isAdmin: boolean }>;
   
   getAllStaff(): Promise<Staff[]>;
   getAllStaffWithDetails(): Promise<StaffWithDetails[]>;
@@ -56,10 +56,16 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  private accessPassword: string = "14:12";
+  private adminPassword: string = "admin14:12";
+  private staffPassword: string = "staff14:12";
 
-  async verifyPassword(password: string): Promise<boolean> {
-    return password === this.accessPassword;
+  async verifyPassword(password: string): Promise<{ isValid: boolean; isAdmin: boolean }> {
+    if (password === this.adminPassword) {
+      return { isValid: true, isAdmin: true };
+    } else if (password === this.staffPassword) {
+      return { isValid: true, isAdmin: false };
+    }
+    return { isValid: false, isAdmin: false };
   }
 
   async getAllStaff(): Promise<Staff[]> {

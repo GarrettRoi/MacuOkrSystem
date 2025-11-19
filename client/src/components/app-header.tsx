@@ -1,24 +1,29 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Home, FileText, TrendingUp, BarChart3, Settings, Download, LogOut } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Home, FileText, TrendingUp, BarChart3, Settings, Download, LogOut, LineChart } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
 
 interface AppHeaderProps {
   staff: StaffWithDetails;
   onLogout: () => void;
+  isAdmin: boolean;
 }
 
-export default function AppHeader({ staff, onLogout }: AppHeaderProps) {
+export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) {
   const [location] = useLocation();
 
-  const navItems = [
-    { path: "/", icon: Home, label: "Home" },
-    { path: "/submit-okr", icon: FileText, label: "Submit OKR" },
-    { path: "/quarterly-update", icon: TrendingUp, label: "Quarterly Update" },
-    { path: "/dashboard", icon: BarChart3, label: "Dashboard" },
-    { path: "/admin", icon: Settings, label: "Admin" },
-    { path: "/export", icon: Download, label: "Export" },
+  const allNavItems = [
+    { path: "/", icon: Home, label: "Home", adminOnly: false },
+    { path: "/submit-okr", icon: FileText, label: "Submit OKR", adminOnly: false },
+    { path: "/quarterly-update", icon: TrendingUp, label: "Quarterly Update", adminOnly: false },
+    { path: "/dashboard", icon: BarChart3, label: "Dashboard", adminOnly: false },
+    { path: "/trends", icon: LineChart, label: "Trends", adminOnly: false },
+    { path: "/admin", icon: Settings, label: "Admin", adminOnly: true },
+    { path: "/export", icon: Download, label: "Export", adminOnly: false },
   ];
+
+  const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -55,7 +60,14 @@ export default function AppHeader({ staff, onLogout }: AppHeaderProps) {
 
         <div className="flex items-center gap-3 ml-4">
           <div className="hidden md:block text-right">
-            <p className="text-sm font-medium" data-testid="text-current-user">{staff.name}</p>
+            <div className="flex items-center gap-2 justify-end">
+              <p className="text-sm font-medium" data-testid="text-current-user">{staff.name}</p>
+              {isAdmin && (
+                <Badge variant="secondary" className="text-xs" data-testid="badge-admin">
+                  Admin
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">{staff.department.name}</p>
           </div>
           <Button variant="ghost" size="icon" onClick={onLogout} data-testid="button-logout">

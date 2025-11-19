@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { AlertCircle } from "lucide-react";
 
 interface PasswordGateProps {
-  onAuthenticated: () => void;
+  onAuthenticated: (isAdmin: boolean) => void;
 }
 
 export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
@@ -27,7 +27,8 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
       });
 
       if (response.ok) {
-        onAuthenticated();
+        const data = await response.json();
+        onAuthenticated(data.isAdmin);
       } else {
         setError("Incorrect password. Please try again.");
         setPassword("");
@@ -60,13 +61,16 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter password"
+                placeholder="Enter admin or staff password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 data-testid="input-password"
                 autoFocus
                 className="text-base"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Admin password for full access, or staff password for limited access
+              </p>
             </div>
             
             {error && (

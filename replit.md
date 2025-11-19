@@ -62,7 +62,7 @@ Preferred communication style: Simple, everyday language.
 **Schema Design**:
 - **departments**: ID, name (unique)
 - **sub_departments**: ID, name, departmentId (foreign key with cascade delete)
-- **staff**: ID, name, email (unique), departmentId, optional subDepartmentId
+- **staff**: ID, name, email (unique), departmentId, optional subDepartmentId, isAdmin (boolean, default false)
 - **okrs**: ID, staffId (foreign key with cascade delete), title, description, quarter, year, targetValue, currentValue, status, createdAt timestamp
 - **quarterly_updates**: ID, okrId (foreign key with cascade delete), staffId, quarter, year, progress, notes, submittedAt timestamp
 
@@ -72,11 +72,23 @@ Preferred communication style: Simple, everyday language.
 
 ### Authentication and Authorization
 
-**Authentication Mechanism**: Simple password-based gate for initial application access. Password verification endpoint at `/api/auth/verify`.
+**Authentication Mechanism**: Dual password-based authentication system with two access levels:
+- Admin password (`admin14:12`): Grants full system access including admin panel
+- Staff password (`staff14:12`): Grants limited access, excludes admin features
 
-**Session Management**: After password verification, users select their staff profile. No traditional session/token system - selected staff persists in client state.
+Password verification endpoint at `/api/auth/verify` returns authentication result with `isAdmin` flag.
 
-**Authorization Model**: No role-based access control implemented. All authenticated users have access to all features after staff selection.
+**Session Management**: After password verification, users select their staff profile. No traditional session/token system - selected staff and access level persist in client state.
+
+**Authorization Model**: Role-based access control with two tiers:
+- **Admin Access**: Full access to all features including admin panel, user management, and system settings
+- **Staff Access**: Access to core OKR features (submit, update, view dashboard, trends, export) but restricted from admin panel
+
+**Access Control Implementation**:
+- Frontend: Conditional rendering of admin features based on `isAdmin` state
+- Backend: Password-based role determination (`admin14:12` vs `staff14:12`)
+- Database: Staff table includes `isAdmin` boolean field for administrative record-keeping
+- UI Indicators: Admin badge displayed in header for users with admin access
 
 ### Page Architecture
 

@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import {
@@ -9,14 +9,22 @@ import {
   insertQuarterlyUpdateSchema,
 } from "@shared/schema";
 
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.isAdmin) {
+    return res.status(403).json({ error: "Forbidden: Admin access required" });
+  }
+  next();
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/verify", async (req, res) => {
     try {
       const { password } = req.body;
-      const isValid = await storage.verifyPassword(password);
+      const authResult = await storage.verifyPassword(password);
       
-      if (isValid) {
-        res.json({ success: true });
+      if (authResult.isValid) {
+        req.session.isAdmin = authResult.isAdmin;
+        res.json({ success: true, isAdmin: authResult.isAdmin });
       } else {
         res.status(401).json({ error: "Invalid password" });
       }
@@ -46,7 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/staff", async (req, res) => {
+  app.post("/api/staff", requireAdmin, async (req, res) => {
     try {
       const parsed = insertStaffSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -60,7 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/staff/:id", async (req, res) => {
+  app.delete("/api/staff/:id", requireAdmin, async (req, res) => {
     try {
       await storage.deleteStaff(req.params.id);
       res.status(204).send();
@@ -78,7 +86,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/departments", async (req, res) => {
+  app.post("/api/departments", requireAdmin, async (req, res) => {
     try {
       const parsed = insertDepartmentSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -92,7 +100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/departments/:id", async (req, res) => {
+  app.delete("/api/departments/:id", requireAdmin, async (req, res) => {
     try {
       await storage.deleteDepartment(req.params.id);
       res.status(204).send();
@@ -110,7 +118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/sub-departments", async (req, res) => {
+  app.post("/api/sub-departments", requireAdmin, async (req, res) => {
     try {
       const parsed = insertSubDepartmentSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -124,7 +132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/sub-departments/:id", async (req, res) => {
+  app.delete("/api/sub-departments/:id", requireAdmin, async (req, res) => {
     try {
       await storage.deleteSubDepartment(req.params.id);
       res.status(204).send();

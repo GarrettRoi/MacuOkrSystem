@@ -16,42 +16,49 @@ import Trends from "@/pages/trends";
 import AppHeader from "@/components/app-header";
 import type { StaffWithDetails } from "@shared/schema";
 
-function Router({ staff }: { staff: StaffWithDetails }) {
+function Router({ staff, isAdmin }: { staff: StaffWithDetails; isAdmin: boolean }) {
   return (
     <Switch>
-      <Route path="/" component={() => <Home staff={staff} />} />
+      <Route path="/" component={() => <Home staff={staff} isAdmin={isAdmin} />} />
       <Route path="/submit-okr" component={() => <SubmitOkr staff={staff} />} />
       <Route path="/quarterly-update" component={() => <QuarterlyUpdate staff={staff} />} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/trends" component={Trends} />
-      <Route path="/admin" component={Admin} />
+      {isAdmin && <Route path="/admin" component={Admin} />}
       <Route path="/export" component={Export} />
-      <Route component={() => <Home staff={staff} />} />
+      <Route component={() => <Home staff={staff} isAdmin={isAdmin} />} />
     </Switch>
   );
 }
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<StaffWithDetails | null>(null);
+
+  const handleAuthenticated = (adminAccess: boolean) => {
+    setIsAdmin(adminAccess);
+    setIsAuthenticated(true);
+  };
 
   const handleLogout = () => {
     setSelectedStaff(null);
     setIsAuthenticated(false);
+    setIsAdmin(false);
   };
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         {!isAuthenticated ? (
-          <PasswordGate onAuthenticated={() => setIsAuthenticated(true)} />
+          <PasswordGate onAuthenticated={handleAuthenticated} />
         ) : !selectedStaff ? (
           <StaffSelection onStaffSelected={setSelectedStaff} />
         ) : (
           <div className="min-h-screen flex flex-col">
-            <AppHeader staff={selectedStaff} onLogout={handleLogout} />
+            <AppHeader staff={selectedStaff} onLogout={handleLogout} isAdmin={isAdmin} />
             <main className="flex-1 bg-background">
-              <Router staff={selectedStaff} />
+              <Router staff={selectedStaff} isAdmin={isAdmin} />
             </main>
           </div>
         )}

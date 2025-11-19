@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -20,6 +20,7 @@ export const staff = pgTable("staff", {
   email: text("email").notNull().unique(),
   departmentId: varchar("department_id").notNull().references(() => departments.id),
   subDepartmentId: varchar("sub_department_id").references(() => subDepartments.id),
+  isAdmin: boolean("is_admin").notNull().default(false),
 });
 
 export const okrs = pgTable("okrs", {

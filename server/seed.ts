@@ -29,6 +29,7 @@ async function seed() {
     email: "sarah.johnson@macu.edu",
     departmentId: dept1.id,
     subDepartmentId: subDept1.id,
+    isAdmin: true,
   });
 
   await db.insert(staff).values({

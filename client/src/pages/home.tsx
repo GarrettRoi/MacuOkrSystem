@@ -6,10 +6,11 @@ import type { StaffWithDetails } from "@shared/schema";
 
 interface HomeProps {
   staff: StaffWithDetails;
+  isAdmin: boolean;
 }
 
-export default function Home({ staff }: HomeProps) {
-  const actions = [
+export default function Home({ staff, isAdmin }: HomeProps) {
+  const allActions = [
     {
       title: "Submit New OKR",
       description: "Create a new Objective and Key Result for tracking",
@@ -17,6 +18,7 @@ export default function Home({ staff }: HomeProps) {
       path: "/submit-okr",
       color: "text-blue-600",
       bg: "bg-blue-50",
+      adminOnly: false,
     },
     {
       title: "Quarterly Update",
@@ -25,6 +27,7 @@ export default function Home({ staff }: HomeProps) {
       path: "/quarterly-update",
       color: "text-green-600",
       bg: "bg-green-50",
+      adminOnly: false,
     },
     {
       title: "View Dashboard",
@@ -33,6 +36,7 @@ export default function Home({ staff }: HomeProps) {
       path: "/dashboard",
       color: "text-purple-600",
       bg: "bg-purple-50",
+      adminOnly: false,
     },
     {
       title: "Historical Trends",
@@ -41,6 +45,7 @@ export default function Home({ staff }: HomeProps) {
       path: "/trends",
       color: "text-indigo-600",
       bg: "bg-indigo-50",
+      adminOnly: false,
     },
     {
       title: "Admin Panel",
@@ -49,6 +54,7 @@ export default function Home({ staff }: HomeProps) {
       path: "/admin",
       color: "text-orange-600",
       bg: "bg-orange-50",
+      adminOnly: true,
     },
     {
       title: "Export Data",
@@ -57,8 +63,11 @@ export default function Home({ staff }: HomeProps) {
       path: "/export",
       color: "text-teal-600",
       bg: "bg-teal-50",
+      adminOnly: false,
     },
   ];
+
+  const actions = allActions.filter((action) => !action.adminOnly || isAdmin);
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
