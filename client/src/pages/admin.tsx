@@ -11,92 +11,92 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Settings, Pencil } from "lucide-react";
-import type { Staff, Department, SubDepartment } from "@shared/schema";
+import type { Staff, Spu, SubUnit } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Admin() {
   const { toast } = useToast();
   
-  const [deptDialogOpen, setDeptDialogOpen] = useState(false);
-  const [subDeptDialogOpen, setSubDeptDialogOpen] = useState(false);
+  const [spuDialogOpen, setSpuDialogOpen] = useState(false);
+  const [subUnitDialogOpen, setSubUnitDialogOpen] = useState(false);
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
   
-  const [editDeptDialogOpen, setEditDeptDialogOpen] = useState(false);
-  const [editSubDeptDialogOpen, setEditSubDeptDialogOpen] = useState(false);
+  const [editSpuDialogOpen, setEditSpuDialogOpen] = useState(false);
+  const [editSubUnitDialogOpen, setEditSubUnitDialogOpen] = useState(false);
   const [editStaffDialogOpen, setEditStaffDialogOpen] = useState(false);
   
-  const [newDeptName, setNewDeptName] = useState("");
-  const [newSubDeptName, setNewSubDeptName] = useState("");
-  const [newSubDeptParent, setNewSubDeptParent] = useState("");
+  const [newSpuName, setNewSpuName] = useState("");
+  const [newSubUnitName, setNewSubUnitName] = useState("");
+  const [newSubUnitParent, setNewSubUnitParent] = useState("");
   
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffEmail, setNewStaffEmail] = useState("");
-  const [newStaffDept, setNewStaffDept] = useState("");
-  const [newStaffSubDept, setNewStaffSubDept] = useState("");
+  const [newStaffSpu, setNewStaffSpu] = useState("");
+  const [newStaffSubUnit, setNewStaffSubUnit] = useState("");
   
-  const [editingDept, setEditingDept] = useState<Department | null>(null);
-  const [editingSubDept, setEditingSubDept] = useState<SubDepartment | null>(null);
+  const [editingSpu, setEditingSpu] = useState<Spu | null>(null);
+  const [editingSubUnit, setEditingSubUnit] = useState<SubUnit | null>(null);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
 
-  const { data: departments, isLoading: depsLoading } = useQuery<Department[]>({
-    queryKey: ["/api/departments"],
+  const { data: spus, isLoading: spusLoading } = useQuery<Spu[]>({
+    queryKey: ["/api/spus"],
   });
 
-  const { data: subDepartments, isLoading: subDepsLoading } = useQuery<SubDepartment[]>({
-    queryKey: ["/api/sub-departments"],
+  const { data: subUnits, isLoading: subUnitsLoading } = useQuery<SubUnit[]>({
+    queryKey: ["/api/sub-units"],
   });
 
   const { data: staff, isLoading: staffLoading } = useQuery<Staff[]>({
     queryKey: ["/api/staff"],
   });
 
-  const addDeptMutation = useMutation({
+  const addSpuMutation = useMutation({
     mutationFn: async (name: string) => {
-      return await apiRequest("POST", "/api/departments", { name });
+      return await apiRequest("POST", "/api/spus", { name });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
-      setDeptDialogOpen(false);
-      setNewDeptName("");
-      toast({ title: "Department Added", description: "The department has been created successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      setSpuDialogOpen(false);
+      setNewSpuName("");
+      toast({ title: "SPU Added", description: "The SPU has been created successfully." });
     },
   });
 
-  const deleteDeptMutation = useMutation({
+  const deleteSpuMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest("DELETE", `/api/departments/${id}`, {});
+      return await apiRequest("DELETE", `/api/spus/${id}`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
-      toast({ title: "Department Deleted", description: "The department has been removed." });
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      toast({ title: "SPU Deleted", description: "The SPU has been removed." });
     },
   });
 
-  const addSubDeptMutation = useMutation({
-    mutationFn: async (data: { name: string; departmentId: string }) => {
-      return await apiRequest("POST", "/api/sub-departments", data);
+  const addSubUnitMutation = useMutation({
+    mutationFn: async (data: { name: string; spuId: string }) => {
+      return await apiRequest("POST", "/api/sub-units", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sub-departments"] });
-      setSubDeptDialogOpen(false);
-      setNewSubDeptName("");
-      setNewSubDeptParent("");
-      toast({ title: "Sub-Department Added", description: "The sub-department has been created successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      setSubUnitDialogOpen(false);
+      setNewSubUnitName("");
+      setNewSubUnitParent("");
+      toast({ title: "Sub-Unit Added", description: "The sub-unit has been created successfully." });
     },
   });
 
-  const deleteSubDeptMutation = useMutation({
+  const deleteSubUnitMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest("DELETE", `/api/sub-departments/${id}`, {});
+      return await apiRequest("DELETE", `/api/sub-units/${id}`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sub-departments"] });
-      toast({ title: "Sub-Department Deleted", description: "The sub-department has been removed." });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      toast({ title: "Sub-Unit Deleted", description: "The sub-unit has been removed." });
     },
   });
 
   const addStaffMutation = useMutation({
-    mutationFn: async (data: { name: string; email: string; departmentId: string; subDepartmentId?: string }) => {
+    mutationFn: async (data: { name: string; email: string; spuId: string; subUnitId?: string }) => {
       return await apiRequest("POST", "/api/staff", data);
     },
     onSuccess: () => {
@@ -104,8 +104,8 @@ export default function Admin() {
       setStaffDialogOpen(false);
       setNewStaffName("");
       setNewStaffEmail("");
-      setNewStaffDept("");
-      setNewStaffSubDept("");
+      setNewStaffSpu("");
+      setNewStaffSubUnit("");
       toast({ title: "Staff Member Added", description: "The staff member has been created successfully." });
     },
   });
@@ -121,7 +121,7 @@ export default function Admin() {
   });
 
   const updateStaffMutation = useMutation({
-    mutationFn: async (data: { id: string; name?: string; email?: string; departmentId?: string; subDepartmentId?: string }) => {
+    mutationFn: async (data: { id: string; name?: string; email?: string; spuId?: string; subUnitId?: string }) => {
       const { id, ...updates } = data;
       return await apiRequest("PUT", `/api/staff/${id}`, updates);
     },
@@ -133,39 +133,39 @@ export default function Admin() {
     },
   });
 
-  const updateDeptMutation = useMutation({
+  const updateSpuMutation = useMutation({
     mutationFn: async (data: { id: string; name: string }) => {
       const { id, ...updates } = data;
-      return await apiRequest("PUT", `/api/departments/${id}`, updates);
+      return await apiRequest("PUT", `/api/spus/${id}`, updates);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
-      setEditDeptDialogOpen(false);
-      setEditingDept(null);
-      toast({ title: "Department Updated", description: "The department has been updated successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      setEditSpuDialogOpen(false);
+      setEditingSpu(null);
+      toast({ title: "SPU Updated", description: "The SPU has been updated successfully." });
     },
   });
 
-  const updateSubDeptMutation = useMutation({
-    mutationFn: async (data: { id: string; name?: string; departmentId?: string }) => {
+  const updateSubUnitMutation = useMutation({
+    mutationFn: async (data: { id: string; name?: string; spuId?: string }) => {
       const { id, ...updates } = data;
-      return await apiRequest("PUT", `/api/sub-departments/${id}`, updates);
+      return await apiRequest("PUT", `/api/sub-units/${id}`, updates);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sub-departments"] });
-      setEditSubDeptDialogOpen(false);
-      setEditingSubDept(null);
-      toast({ title: "Sub-Department Updated", description: "The sub-department has been updated successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      setEditSubUnitDialogOpen(false);
+      setEditingSubUnit(null);
+      toast({ title: "Sub-Unit Updated", description: "The sub-unit has been updated successfully." });
     },
   });
 
-  const getDepartmentName = (deptId: string) => {
-    return departments?.find((d) => d.id === deptId)?.name || "Unknown";
+  const getSpuName = (spuId: string) => {
+    return spus?.find((s) => s.id === spuId)?.name || "Unknown";
   };
 
-  const getSubDepartmentName = (subDeptId: string | null) => {
-    if (!subDeptId) return "—";
-    return subDepartments?.find((sd) => sd.id === subDeptId)?.name || "Unknown";
+  const getSubUnitName = (subUnitId: string | null) => {
+    if (!subUnitId) return "—";
+    return subUnits?.find((su) => su.id === subUnitId)?.name || "Unknown";
   };
 
   return (
@@ -175,7 +175,7 @@ export default function Admin() {
         <div>
           <h1 className="text-3xl font-bold">Admin Panel</h1>
           <p className="text-muted-foreground mt-1">
-            Manage staff, departments, and system settings
+            Manage staff, SPUs (Schools, Departments, Units), and system settings
           </p>
         </div>
       </div>
@@ -183,8 +183,8 @@ export default function Admin() {
       <Tabs defaultValue="staff" className="space-y-6">
         <TabsList>
           <TabsTrigger value="staff" data-testid="tab-staff">Staff Management</TabsTrigger>
-          <TabsTrigger value="departments" data-testid="tab-departments">Departments</TabsTrigger>
-          <TabsTrigger value="subdepartments" data-testid="tab-subdepartments">Sub-Departments</TabsTrigger>
+          <TabsTrigger value="spus" data-testid="tab-spus">SPUs</TabsTrigger>
+          <TabsTrigger value="subunits" data-testid="tab-subunits">Sub-Units</TabsTrigger>
         </TabsList>
 
         <TabsContent value="staff">
@@ -193,7 +193,7 @@ export default function Admin() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Staff Members</CardTitle>
-                  <CardDescription>Manage university staff and their department assignments</CardDescription>
+                  <CardDescription>Manage university staff and their SPU assignments</CardDescription>
                 </div>
                 <Dialog open={staffDialogOpen} onOpenChange={setStaffDialogOpen}>
                   <DialogTrigger asChild>
@@ -230,30 +230,30 @@ export default function Admin() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="staff-dept">Department *</Label>
-                        <Select value={newStaffDept} onValueChange={setNewStaffDept}>
-                          <SelectTrigger data-testid="select-staff-dept">
-                            <SelectValue placeholder="Select department" />
+                        <Label htmlFor="staff-spu">Primary SPU (School, Department, Unit) *</Label>
+                        <Select value={newStaffSpu} onValueChange={setNewStaffSpu}>
+                          <SelectTrigger data-testid="select-staff-spu">
+                            <SelectValue placeholder="Select primary SPU" />
                           </SelectTrigger>
                           <SelectContent>
-                            {departments?.map((dept) => (
-                              <SelectItem key={dept.id} value={dept.id}>
-                                {dept.name}
+                            {spus?.map((spu) => (
+                              <SelectItem key={spu.id} value={spu.id}>
+                                {spu.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="staff-subdept">Sub-Department (Optional)</Label>
-                        <Select value={newStaffSubDept} onValueChange={setNewStaffSubDept}>
-                          <SelectTrigger data-testid="select-staff-subdept">
+                        <Label htmlFor="staff-subunit">Sub-Unit or Division (Optional)</Label>
+                        <Select value={newStaffSubUnit} onValueChange={setNewStaffSubUnit}>
+                          <SelectTrigger data-testid="select-staff-subunit">
                             <SelectValue placeholder="None (Optional)" />
                           </SelectTrigger>
                           <SelectContent>
-                            {subDepartments?.filter((sd) => sd.departmentId === newStaffDept).map((subDept) => (
-                              <SelectItem key={subDept.id} value={subDept.id}>
-                                {subDept.name}
+                            {subUnits?.filter((su) => su.spuId === newStaffSpu).map((subUnit) => (
+                              <SelectItem key={subUnit.id} value={subUnit.id}>
+                                {subUnit.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -263,16 +263,16 @@ export default function Admin() {
                     <DialogFooter>
                       <Button
                         onClick={() => {
-                          if (newStaffName && newStaffEmail && newStaffDept) {
+                          if (newStaffName && newStaffEmail && newStaffSpu) {
                             addStaffMutation.mutate({
                               name: newStaffName,
                               email: newStaffEmail,
-                              departmentId: newStaffDept,
-                              subDepartmentId: newStaffSubDept || undefined,
+                              spuId: newStaffSpu,
+                              subUnitId: newStaffSubUnit || undefined,
                             });
                           }
                         }}
-                        disabled={!newStaffName || !newStaffEmail || !newStaffDept || addStaffMutation.isPending}
+                        disabled={!newStaffName || !newStaffEmail || !newStaffSpu || addStaffMutation.isPending}
                         data-testid="button-save-staff"
                       >
                         {addStaffMutation.isPending ? "Adding..." : "Add Staff"}
@@ -293,8 +293,8 @@ export default function Admin() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Sub-Department</TableHead>
+                      <TableHead>Primary SPU</TableHead>
+                      <TableHead>Sub-Unit</TableHead>
                       <TableHead className="w-20">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -310,8 +310,8 @@ export default function Admin() {
                         <TableRow key={member.id} data-testid={`row-staff-${member.id}`}>
                           <TableCell className="font-medium">{member.name}</TableCell>
                           <TableCell>{member.email}</TableCell>
-                          <TableCell>{getDepartmentName(member.departmentId)}</TableCell>
-                          <TableCell>{getSubDepartmentName(member.subDepartmentId)}</TableCell>
+                          <TableCell>{getSpuName(member.spuId)}</TableCell>
+                          <TableCell>{getSubUnitName(member.subUnitId)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Button
@@ -348,7 +348,7 @@ export default function Admin() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Edit Staff Member</DialogTitle>
-                <DialogDescription>Update staff member details and department assignments</DialogDescription>
+                <DialogDescription>Update staff member details and SPU assignments</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -373,36 +373,36 @@ export default function Admin() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-staff-dept">Department *</Label>
+                  <Label htmlFor="edit-staff-spu">Primary SPU (School, Department, Unit) *</Label>
                   <Select 
-                    value={editingStaff?.departmentId || ""} 
-                    onValueChange={(value) => setEditingStaff(editingStaff ? { ...editingStaff, departmentId: value } : null)}
+                    value={editingStaff?.spuId || ""} 
+                    onValueChange={(value) => setEditingStaff(editingStaff ? { ...editingStaff, spuId: value } : null)}
                   >
-                    <SelectTrigger data-testid="select-edit-staff-dept">
-                      <SelectValue placeholder="Select department" />
+                    <SelectTrigger data-testid="select-edit-staff-spu">
+                      <SelectValue placeholder="Select primary SPU" />
                     </SelectTrigger>
                     <SelectContent>
-                      {departments?.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.name}
+                      {spus?.map((spu) => (
+                        <SelectItem key={spu.id} value={spu.id}>
+                          {spu.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-staff-subdept">Sub-Department (Optional)</Label>
+                  <Label htmlFor="edit-staff-subunit">Sub-Unit or Division (Optional)</Label>
                   <Select 
-                    value={editingStaff?.subDepartmentId || ""} 
-                    onValueChange={(value) => setEditingStaff(editingStaff ? { ...editingStaff, subDepartmentId: value || null } : null)}
+                    value={editingStaff?.subUnitId || ""} 
+                    onValueChange={(value) => setEditingStaff(editingStaff ? { ...editingStaff, subUnitId: value || null } : null)}
                   >
-                    <SelectTrigger data-testid="select-edit-staff-subdept">
+                    <SelectTrigger data-testid="select-edit-staff-subunit">
                       <SelectValue placeholder="None (Optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      {subDepartments?.filter((sd) => sd.departmentId === editingStaff?.departmentId).map((subDept) => (
-                        <SelectItem key={subDept.id} value={subDept.id}>
-                          {subDept.name}
+                      {subUnits?.filter((su) => su.spuId === editingStaff?.spuId).map((subUnit) => (
+                        <SelectItem key={subUnit.id} value={subUnit.id}>
+                          {subUnit.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -422,17 +422,17 @@ export default function Admin() {
                 </Button>
                 <Button
                   onClick={() => {
-                    if (editingStaff && editingStaff.name && editingStaff.email && editingStaff.departmentId) {
+                    if (editingStaff && editingStaff.name && editingStaff.email && editingStaff.spuId) {
                       updateStaffMutation.mutate({
                         id: editingStaff.id,
                         name: editingStaff.name,
                         email: editingStaff.email,
-                        departmentId: editingStaff.departmentId,
-                        subDepartmentId: editingStaff.subDepartmentId || undefined,
+                        spuId: editingStaff.spuId,
+                        subUnitId: editingStaff.subUnitId || undefined,
                       });
                     }
                   }}
-                  disabled={!editingStaff?.name || !editingStaff?.email || !editingStaff?.departmentId || updateStaffMutation.isPending}
+                  disabled={!editingStaff?.name || !editingStaff?.email || !editingStaff?.spuId || updateStaffMutation.isPending}
                   data-testid="button-save-edit-staff"
                 >
                   {updateStaffMutation.isPending ? "Saving..." : "Save Changes"}
@@ -442,45 +442,45 @@ export default function Admin() {
           </Dialog>
         </TabsContent>
 
-        <TabsContent value="departments">
+        <TabsContent value="spus">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Departments</CardTitle>
-                  <CardDescription>Manage university departments</CardDescription>
+                  <CardTitle>SPUs (Schools, Departments, Units)</CardTitle>
+                  <CardDescription>Manage university SPUs</CardDescription>
                 </div>
-                <Dialog open={deptDialogOpen} onOpenChange={setDeptDialogOpen}>
+                <Dialog open={spuDialogOpen} onOpenChange={setSpuDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button data-testid="button-add-department">
+                    <Button data-testid="button-add-spu">
                       <Plus className="h-4 w-4 mr-2" />
-                      Add Department
+                      Add SPU
                     </Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>Add New Department</DialogTitle>
-                      <DialogDescription>Create a new department</DialogDescription>
+                      <DialogTitle>Add New SPU</DialogTitle>
+                      <DialogDescription>Create a new SPU (School, Department, or Unit)</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
-                        <Label htmlFor="dept-name">Department Name *</Label>
+                        <Label htmlFor="spu-name">SPU Name *</Label>
                         <Input
-                          id="dept-name"
-                          value={newDeptName}
-                          onChange={(e) => setNewDeptName(e.target.value)}
+                          id="spu-name"
+                          value={newSpuName}
+                          onChange={(e) => setNewSpuName(e.target.value)}
                           placeholder="e.g., Academic Affairs"
-                          data-testid="input-dept-name"
+                          data-testid="input-spu-name"
                         />
                       </div>
                     </div>
                     <DialogFooter>
                       <Button
-                        onClick={() => newDeptName && addDeptMutation.mutate(newDeptName)}
-                        disabled={!newDeptName || addDeptMutation.isPending}
-                        data-testid="button-save-department"
+                        onClick={() => newSpuName && addSpuMutation.mutate(newSpuName)}
+                        disabled={!newSpuName || addSpuMutation.isPending}
+                        data-testid="button-save-spu"
                       >
-                        {addDeptMutation.isPending ? "Adding..." : "Add Department"}
+                        {addSpuMutation.isPending ? "Adding..." : "Add SPU"}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -488,7 +488,7 @@ export default function Admin() {
               </div>
             </CardHeader>
             <CardContent>
-              {depsLoading ? (
+              {spusLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
@@ -496,39 +496,39 @@ export default function Admin() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Department Name</TableHead>
+                      <TableHead>SPU Name</TableHead>
                       <TableHead className="w-20">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {departments?.length === 0 ? (
+                    {spus?.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={2} className="text-center text-muted-foreground">
-                          No departments yet. Add your first department above.
+                          No SPUs yet. Add your first SPU above.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      departments?.map((dept) => (
-                        <TableRow key={dept.id} data-testid={`row-dept-${dept.id}`}>
-                          <TableCell className="font-medium">{dept.name}</TableCell>
+                      spus?.map((spu) => (
+                        <TableRow key={spu.id} data-testid={`row-spu-${spu.id}`}>
+                          <TableCell className="font-medium">{spu.name}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => {
-                                  setEditingDept(dept);
-                                  setEditDeptDialogOpen(true);
+                                  setEditingSpu(spu);
+                                  setEditSpuDialogOpen(true);
                                 }}
-                                data-testid={`button-edit-dept-${dept.id}`}
+                                data-testid={`button-edit-spu-${spu.id}`}
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => deleteDeptMutation.mutate(dept.id)}
-                                data-testid={`button-delete-dept-${dept.id}`}
+                                onClick={() => deleteSpuMutation.mutate(spu.id)}
+                                data-testid={`button-delete-spu-${spu.id}`}
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
@@ -543,21 +543,21 @@ export default function Admin() {
             </CardContent>
           </Card>
           
-          <Dialog open={editDeptDialogOpen} onOpenChange={setEditDeptDialogOpen}>
+          <Dialog open={editSpuDialogOpen} onOpenChange={setEditSpuDialogOpen}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Edit Department</DialogTitle>
-                <DialogDescription>Update the department name</DialogDescription>
+                <DialogTitle>Edit SPU</DialogTitle>
+                <DialogDescription>Update the SPU name</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-dept-name">Department Name *</Label>
+                  <Label htmlFor="edit-spu-name">SPU Name *</Label>
                   <Input
-                    id="edit-dept-name"
-                    value={editingDept?.name || ""}
-                    onChange={(e) => setEditingDept(editingDept ? { ...editingDept, name: e.target.value } : null)}
+                    id="edit-spu-name"
+                    value={editingSpu?.name || ""}
+                    onChange={(e) => setEditingSpu(editingSpu ? { ...editingSpu, name: e.target.value } : null)}
                     placeholder="e.g., Academic Affairs"
-                    data-testid="input-edit-dept-name"
+                    data-testid="input-edit-spu-name"
                   />
                 </div>
               </div>
@@ -565,70 +565,70 @@ export default function Admin() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setEditDeptDialogOpen(false);
-                    setEditingDept(null);
+                    setEditSpuDialogOpen(false);
+                    setEditingSpu(null);
                   }}
-                  data-testid="button-cancel-edit-dept"
+                  data-testid="button-cancel-edit-spu"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={() => {
-                    if (editingDept && editingDept.name) {
-                      updateDeptMutation.mutate({ id: editingDept.id, name: editingDept.name });
+                    if (editingSpu && editingSpu.name) {
+                      updateSpuMutation.mutate({ id: editingSpu.id, name: editingSpu.name });
                     }
                   }}
-                  disabled={!editingDept?.name || updateDeptMutation.isPending}
-                  data-testid="button-save-edit-dept"
+                  disabled={!editingSpu?.name || updateSpuMutation.isPending}
+                  data-testid="button-save-edit-spu"
                 >
-                  {updateDeptMutation.isPending ? "Saving..." : "Save Changes"}
+                  {updateSpuMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </TabsContent>
 
-        <TabsContent value="subdepartments">
+        <TabsContent value="subunits">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Sub-Departments</CardTitle>
-                  <CardDescription>Manage sub-departments within each department</CardDescription>
+                  <CardTitle>Sub-Units</CardTitle>
+                  <CardDescription>Manage sub-units or divisions within each SPU</CardDescription>
                 </div>
-                <Dialog open={subDeptDialogOpen} onOpenChange={setSubDeptDialogOpen}>
+                <Dialog open={subUnitDialogOpen} onOpenChange={setSubUnitDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button data-testid="button-add-subdepartment">
+                    <Button data-testid="button-add-subunit">
                       <Plus className="h-4 w-4 mr-2" />
-                      Add Sub-Department
+                      Add Sub-Unit
                     </Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>Add New Sub-Department</DialogTitle>
-                      <DialogDescription>Create a new sub-department</DialogDescription>
+                      <DialogTitle>Add New Sub-Unit</DialogTitle>
+                      <DialogDescription>Create a new sub-unit or division</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
-                        <Label htmlFor="subdept-name">Sub-Department Name *</Label>
+                        <Label htmlFor="subunit-name">Sub-Unit Name *</Label>
                         <Input
-                          id="subdept-name"
-                          value={newSubDeptName}
-                          onChange={(e) => setNewSubDeptName(e.target.value)}
+                          id="subunit-name"
+                          value={newSubUnitName}
+                          onChange={(e) => setNewSubUnitName(e.target.value)}
                           placeholder="e.g., Undergraduate Studies"
-                          data-testid="input-subdept-name"
+                          data-testid="input-subunit-name"
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="subdept-parent">Parent Department *</Label>
-                        <Select value={newSubDeptParent} onValueChange={setNewSubDeptParent}>
-                          <SelectTrigger data-testid="select-subdept-parent">
-                            <SelectValue placeholder="Select parent department" />
+                        <Label htmlFor="subunit-parent">Parent SPU *</Label>
+                        <Select value={newSubUnitParent} onValueChange={setNewSubUnitParent}>
+                          <SelectTrigger data-testid="select-subunit-parent">
+                            <SelectValue placeholder="Select parent SPU" />
                           </SelectTrigger>
                           <SelectContent>
-                            {departments?.map((dept) => (
-                              <SelectItem key={dept.id} value={dept.id}>
-                                {dept.name}
+                            {spus?.map((spu) => (
+                              <SelectItem key={spu.id} value={spu.id}>
+                                {spu.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -638,17 +638,17 @@ export default function Admin() {
                     <DialogFooter>
                       <Button
                         onClick={() => {
-                          if (newSubDeptName && newSubDeptParent) {
-                            addSubDeptMutation.mutate({
-                              name: newSubDeptName,
-                              departmentId: newSubDeptParent,
+                          if (newSubUnitName && newSubUnitParent) {
+                            addSubUnitMutation.mutate({
+                              name: newSubUnitName,
+                              spuId: newSubUnitParent,
                             });
                           }
                         }}
-                        disabled={!newSubDeptName || !newSubDeptParent || addSubDeptMutation.isPending}
-                        data-testid="button-save-subdepartment"
+                        disabled={!newSubUnitName || !newSubUnitParent || addSubUnitMutation.isPending}
+                        data-testid="button-save-subunit"
                       >
-                        {addSubDeptMutation.isPending ? "Adding..." : "Add Sub-Department"}
+                        {addSubUnitMutation.isPending ? "Adding..." : "Add Sub-Unit"}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -656,7 +656,7 @@ export default function Admin() {
               </div>
             </CardHeader>
             <CardContent>
-              {subDepsLoading ? (
+              {subUnitsLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
@@ -664,41 +664,41 @@ export default function Admin() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Sub-Department Name</TableHead>
-                      <TableHead>Parent Department</TableHead>
+                      <TableHead>Sub-Unit Name</TableHead>
+                      <TableHead>Parent SPU</TableHead>
                       <TableHead className="w-20">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {subDepartments?.length === 0 ? (
+                    {subUnits?.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={3} className="text-center text-muted-foreground">
-                          No sub-departments yet. Add your first sub-department above.
+                          No sub-units yet. Add your first sub-unit above.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      subDepartments?.map((subDept) => (
-                        <TableRow key={subDept.id} data-testid={`row-subdept-${subDept.id}`}>
-                          <TableCell className="font-medium">{subDept.name}</TableCell>
-                          <TableCell>{getDepartmentName(subDept.departmentId)}</TableCell>
+                      subUnits?.map((subUnit) => (
+                        <TableRow key={subUnit.id} data-testid={`row-subunit-${subUnit.id}`}>
+                          <TableCell className="font-medium">{subUnit.name}</TableCell>
+                          <TableCell>{getSpuName(subUnit.spuId)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => {
-                                  setEditingSubDept(subDept);
-                                  setEditSubDeptDialogOpen(true);
+                                  setEditingSubUnit(subUnit);
+                                  setEditSubUnitDialogOpen(true);
                                 }}
-                                data-testid={`button-edit-subdept-${subDept.id}`}
+                                data-testid={`button-edit-subunit-${subUnit.id}`}
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => deleteSubDeptMutation.mutate(subDept.id)}
-                                data-testid={`button-delete-subdept-${subDept.id}`}
+                                onClick={() => deleteSubUnitMutation.mutate(subUnit.id)}
+                                data-testid={`button-delete-subunit-${subUnit.id}`}
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
@@ -713,36 +713,36 @@ export default function Admin() {
             </CardContent>
           </Card>
           
-          <Dialog open={editSubDeptDialogOpen} onOpenChange={setEditSubDeptDialogOpen}>
+          <Dialog open={editSubUnitDialogOpen} onOpenChange={setEditSubUnitDialogOpen}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Edit Sub-Department</DialogTitle>
-                <DialogDescription>Update the sub-department name and parent department</DialogDescription>
+                <DialogTitle>Edit Sub-Unit</DialogTitle>
+                <DialogDescription>Update the sub-unit name and parent SPU</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-subdept-name">Sub-Department Name *</Label>
+                  <Label htmlFor="edit-subunit-name">Sub-Unit Name *</Label>
                   <Input
-                    id="edit-subdept-name"
-                    value={editingSubDept?.name || ""}
-                    onChange={(e) => setEditingSubDept(editingSubDept ? { ...editingSubDept, name: e.target.value } : null)}
+                    id="edit-subunit-name"
+                    value={editingSubUnit?.name || ""}
+                    onChange={(e) => setEditingSubUnit(editingSubUnit ? { ...editingSubUnit, name: e.target.value } : null)}
                     placeholder="e.g., Undergraduate Studies"
-                    data-testid="input-edit-subdept-name"
+                    data-testid="input-edit-subunit-name"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-subdept-parent">Parent Department *</Label>
+                  <Label htmlFor="edit-subunit-parent">Parent SPU *</Label>
                   <Select 
-                    value={editingSubDept?.departmentId || ""} 
-                    onValueChange={(value) => setEditingSubDept(editingSubDept ? { ...editingSubDept, departmentId: value } : null)}
+                    value={editingSubUnit?.spuId || ""} 
+                    onValueChange={(value) => setEditingSubUnit(editingSubUnit ? { ...editingSubUnit, spuId: value } : null)}
                   >
-                    <SelectTrigger data-testid="select-edit-subdept-parent">
-                      <SelectValue placeholder="Select parent department" />
+                    <SelectTrigger data-testid="select-edit-subunit-parent">
+                      <SelectValue placeholder="Select parent SPU" />
                     </SelectTrigger>
                     <SelectContent>
-                      {departments?.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.name}
+                      {spus?.map((spu) => (
+                        <SelectItem key={spu.id} value={spu.id}>
+                          {spu.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -753,27 +753,27 @@ export default function Admin() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setEditSubDeptDialogOpen(false);
-                    setEditingSubDept(null);
+                    setEditSubUnitDialogOpen(false);
+                    setEditingSubUnit(null);
                   }}
-                  data-testid="button-cancel-edit-subdept"
+                  data-testid="button-cancel-edit-subunit"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={() => {
-                    if (editingSubDept && editingSubDept.name && editingSubDept.departmentId) {
-                      updateSubDeptMutation.mutate({ 
-                        id: editingSubDept.id, 
-                        name: editingSubDept.name,
-                        departmentId: editingSubDept.departmentId 
+                    if (editingSubUnit && editingSubUnit.name && editingSubUnit.spuId) {
+                      updateSubUnitMutation.mutate({ 
+                        id: editingSubUnit.id, 
+                        name: editingSubUnit.name,
+                        spuId: editingSubUnit.spuId 
                       });
                     }
                   }}
-                  disabled={!editingSubDept?.name || !editingSubDept?.departmentId || updateSubDeptMutation.isPending}
-                  data-testid="button-save-edit-subdept"
+                  disabled={!editingSubUnit?.name || !editingSubUnit?.spuId || updateSubUnitMutation.isPending}
+                  data-testid="button-save-edit-subunit"
                 >
-                  {updateSubDeptMutation.isPending ? "Saving..." : "Save Changes"}
+                  {updateSubUnitMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
               </DialogFooter>
             </DialogContent>

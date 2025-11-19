@@ -19,6 +19,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 export interface IStorage {
   verifyPassword(password: string): Promise<{ isValid: boolean; isAdmin: boolean }>;
@@ -226,19 +227,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllOkrsWithDetails(): Promise<OkrWithDetails[]> {
+    const collaborationSpu = alias(spus, 'collaborationSpu');
+    
     const result = await db
       .select({
         okr: okrs,
         staff: staff,
         spu: spus,
         subUnit: subUnits,
-        collaborationSpu: spus,
+        collaborationSpu: collaborationSpu,
       })
       .from(okrs)
       .leftJoin(staff, eq(okrs.staffId, staff.id))
       .leftJoin(spus, eq(staff.spuId, spus.id))
       .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
-      .leftJoin(spus as any, eq(okrs.collaborationSpuId, spus.id));
+      .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id));
 
     return result.map((row) => ({
       ...row.okr,
@@ -247,7 +250,7 @@ export class DatabaseStorage implements IStorage {
         spu: row.spu!,
         subUnit: row.subUnit,
       },
-      collaborationSpu: row.collaborationSpu || null,
+      collaborationSpu: row.collaborationSpu || undefined,
     }));
   }
 

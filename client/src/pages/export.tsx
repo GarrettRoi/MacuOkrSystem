@@ -139,7 +139,7 @@ export default function Export() {
           <div className="space-y-3">
             <h4 className="font-medium text-sm">Export will include:</h4>
             <ul className="text-sm text-muted-foreground space-y-1.5 ml-5">
-              <li className="list-disc">Staff name, email, department, and sub-department</li>
+              <li className="list-disc">Staff name, email, primary SPU, and sub-unit</li>
               <li className="list-disc">OKR title, description, and timeline (quarter/year)</li>
               <li className="list-disc">Target values and current progress</li>
               <li className="list-disc">Status and submission dates</li>

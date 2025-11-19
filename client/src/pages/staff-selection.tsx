@@ -23,7 +23,7 @@ export default function StaffSelection({ onStaffSelected }: StaffSelectionProps)
   const filteredStaff = staffList?.filter((staff) =>
     staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     staff.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    staff.department.name.toLowerCase().includes(searchTerm.toLowerCase())
+    staff.spu.name.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
   return (
@@ -39,7 +39,7 @@ export default function StaffSelection({ onStaffSelected }: StaffSelectionProps)
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, email, or department..."
+              placeholder="Search by name, email, or SPU..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -79,12 +79,12 @@ export default function StaffSelection({ onStaffSelected }: StaffSelectionProps)
                               {staff.email}
                             </p>
                             <div className="flex flex-wrap gap-2 mt-2">
-                              <span className="text-xs bg-muted px-2 py-1 rounded-md" data-testid={`text-dept-${staff.id}`}>
-                                {staff.department.name}
+                              <span className="text-xs bg-muted px-2 py-1 rounded-md" data-testid={`text-spu-${staff.id}`}>
+                                {staff.spu.name}
                               </span>
-                              {staff.subDepartment && (
-                                <span className="text-xs bg-muted px-2 py-1 rounded-md" data-testid={`text-subdept-${staff.id}`}>
-                                  {staff.subDepartment.name}
+                              {staff.subUnit && (
+                                <span className="text-xs bg-muted px-2 py-1 rounded-md" data-testid={`text-subunit-${staff.id}`}>
+                                  {staff.subUnit.name}
                                 </span>
                               )}
                             </div>

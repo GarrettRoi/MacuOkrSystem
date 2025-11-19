@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter } from "lucide-react";
-import type { OkrWithDetails, QuarterlyUpdate, Department, StaffWithDetails } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Spu, StaffWithDetails } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const currentYear = new Date().getFullYear();
@@ -21,7 +21,7 @@ const CHART_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--c
 export default function Dashboard() {
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
   const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
-  const [departmentFilter, setDepartmentFilter] = useState<string>("All");
+  const [spuFilter, setSpuFilter] = useState<string>("All");
   const [staffFilter, setStaffFilter] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [keywordSearch, setKeywordSearch] = useState<string>("");
@@ -35,33 +35,33 @@ export default function Dashboard() {
     queryKey: ["/api/quarterly-updates"],
   });
 
-  const { data: departments, isLoading: depsLoading } = useQuery<Department[]>({
-    queryKey: ["/api/departments"],
+  const { data: spus, isLoading: spusLoading } = useQuery<Spu[]>({
+    queryKey: ["/api/spus"],
   });
 
   const { data: staff, isLoading: staffLoading } = useQuery<StaffWithDetails[]>({
     queryKey: ["/api/staff"],
   });
 
-  const isLoading = okrsLoading || updatesLoading || depsLoading || staffLoading;
+  const isLoading = okrsLoading || updatesLoading || spusLoading || staffLoading;
 
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
-    const departmentMatch = departmentFilter === "All" || String(okr.staff.departmentId) === departmentFilter;
+    const spuMatch = spuFilter === "All" || String(okr.staff.spuId) === spuFilter;
     const staffMatch = staffFilter === "All" || String(okr.staffId) === staffFilter;
     const statusMatch = statusFilter === "All" || okr.status === statusFilter;
     const keywordMatch = !keywordSearch || 
       okr.title.toLowerCase().includes(keywordSearch.toLowerCase()) ||
       okr.description.toLowerCase().includes(keywordSearch.toLowerCase());
     
-    return quarterMatch && yearMatch && departmentMatch && staffMatch && statusMatch && keywordMatch;
+    return quarterMatch && yearMatch && spuMatch && staffMatch && statusMatch && keywordMatch;
   }) || [];
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
     setYearFilter(String(currentYear));
-    setDepartmentFilter("All");
+    setSpuFilter("All");
     setStaffFilter("All");
     setStatusFilter("All");
     setKeywordSearch("");
@@ -70,7 +70,7 @@ export default function Dashboard() {
   const activeFilterCount = [
     quarterFilter !== "All",
     yearFilter !== String(currentYear),
-    departmentFilter !== "All",
+    spuFilter !== "All",
     staffFilter !== "All",
     statusFilter !== "All",
     keywordSearch !== "",
@@ -92,17 +92,17 @@ export default function Dashboard() {
     return !hasRecentUpdate && quarterFilter !== "All";
   }).length;
 
-  const departmentProgress = departments?.map((dept) => {
-    const deptOkrs = filteredOkrs.filter((okr) => okr.staff.departmentId === dept.id);
-    const avgProg = deptOkrs.length > 0
-      ? Math.round(deptOkrs.reduce((sum, okr) => sum + okr.currentValue, 0) / deptOkrs.length)
+  const spuProgress = spus?.map((spu) => {
+    const spuOkrs = filteredOkrs.filter((okr) => okr.staff.spuId === spu.id);
+    const avgProg = spuOkrs.length > 0
+      ? Math.round(spuOkrs.reduce((sum, okr) => sum + okr.currentValue, 0) / spuOkrs.length)
       : 0;
     return {
-      name: dept.name,
+      name: spu.name,
       progress: avgProg,
-      count: deptOkrs.length,
+      count: spuOkrs.length,
     };
-  }).filter((d) => d.count > 0) || [];
+  }).filter((s) => s.count > 0) || [];
 
   const statusDistribution = [
     { name: "Not Started", value: filteredOkrs.filter((o) => o.status === "not_started").length },
@@ -118,7 +118,7 @@ export default function Dashboard() {
           <div>
             <h1 className="text-3xl font-bold">OKR Dashboard</h1>
             <p className="text-muted-foreground mt-1">
-              Track progress and performance across all departments
+              Track progress and performance across all SPUs
             </p>
           </div>
           <div className="flex flex-wrap gap-3 items-center">
@@ -184,16 +184,16 @@ export default function Dashboard() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Department</label>
-                  <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                    <SelectTrigger data-testid="select-filter-department">
-                      <SelectValue placeholder="All Departments" />
+                  <label className="text-sm font-medium">Primary SPU</label>
+                  <Select value={spuFilter} onValueChange={setSpuFilter}>
+                    <SelectTrigger data-testid="select-filter-spu">
+                      <SelectValue placeholder="All SPUs" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="All">All Departments</SelectItem>
-                      {departments?.map((dept) => (
-                        <SelectItem key={dept.id} value={String(dept.id)} data-testid={`option-filter-dept-${dept.id}`}>
-                          {dept.name}
+                      <SelectItem value="All">All SPUs</SelectItem>
+                      {spus?.map((spu) => (
+                        <SelectItem key={spu.id} value={String(spu.id)} data-testid={`option-filter-spu-${spu.id}`}>
+                          {spu.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -323,25 +323,25 @@ export default function Dashboard() {
         </div>
       )}
 
-      <Tabs defaultValue="departments" className="space-y-6">
+      <Tabs defaultValue="spus" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="departments" data-testid="tab-departments">By Department</TabsTrigger>
+          <TabsTrigger value="spus" data-testid="tab-spus">By SPU</TabsTrigger>
           <TabsTrigger value="status" data-testid="tab-status">By Status</TabsTrigger>
           <TabsTrigger value="staff" data-testid="tab-staff">By Staff</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="departments" className="space-y-6">
+        <TabsContent value="spus" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Department Progress</CardTitle>
-              <CardDescription>Average OKR completion by department</CardDescription>
+              <CardTitle>SPU Progress</CardTitle>
+              <CardDescription>Average OKR completion by SPU</CardDescription>
             </CardHeader>
             <CardContent>
-              {departmentProgress.length === 0 ? (
+              {spuProgress.length === 0 ? (
                 <p className="text-center text-muted-foreground py-12">No data available for selected filters</p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={departmentProgress}>
+                  <BarChart data={spuProgress}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="name" className="text-xs" />
                     <YAxis domain={[0, 100]} className="text-xs" />
@@ -354,19 +354,19 @@ export default function Dashboard() {
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {departmentProgress.map((dept, index) => (
-              <Card key={dept.name} data-testid={`card-dept-${dept.name}`}>
+            {spuProgress.map((spu, index) => (
+              <Card key={spu.name} data-testid={`card-spu-${spu.name}`}>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">{dept.name}</CardTitle>
-                  <CardDescription>{dept.count} OKRs</CardDescription>
+                  <CardTitle className="text-base">{spu.name}</CardTitle>
+                  <CardDescription>{spu.count} OKRs</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Progress</span>
-                      <span className="text-2xl font-bold" data-testid={`text-dept-progress-${dept.name}`}>{dept.progress}%</span>
+                      <span className="text-2xl font-bold" data-testid={`text-spu-progress-${spu.name}`}>{spu.progress}%</span>
                     </div>
-                    <Progress value={dept.progress} className="h-2" />
+                    <Progress value={spu.progress} className="h-2" />
                   </div>
                 </CardContent>
               </Card>
@@ -453,7 +453,7 @@ export default function Dashboard() {
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div className="flex-1 min-w-0">
                               <h4 className="font-semibold" data-testid={`text-staff-name-${staffId}`}>{staff?.name}</h4>
-                              <p className="text-sm text-muted-foreground">{staff?.department.name}</p>
+                              <p className="text-sm text-muted-foreground">{staff?.spu.name}</p>
                               <p className="text-xs text-muted-foreground mt-1">{staffOkrs.length} OKRs</p>
                             </div>
                             <div className="flex-1 space-y-2">

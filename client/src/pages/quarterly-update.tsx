@@ -147,8 +147,8 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                       <p className="text-sm text-muted-foreground" data-testid="text-staff-name">{staff.name}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium">Department</p>
-                      <p className="text-sm text-muted-foreground" data-testid="text-staff-dept">{staff.department.name}</p>
+                      <p className="text-sm font-medium">Primary SPU</p>
+                      <p className="text-sm text-muted-foreground" data-testid="text-staff-spu">{staff.spu.name}</p>
                     </div>
                   </div>
                 </div>

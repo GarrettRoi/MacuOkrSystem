@@ -31,7 +31,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
     },
     {
       title: "View Dashboard",
-      description: "Track progress and performance across all departments",
+      description: "Track progress and performance across all SPUs",
       icon: BarChart3,
       path: "/dashboard",
       color: "text-purple-600",
@@ -49,7 +49,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
     },
     {
       title: "Admin Panel",
-      description: "Manage staff, departments, and system settings",
+      description: "Manage staff, SPUs, and system settings",
       icon: Settings,
       path: "/admin",
       color: "text-orange-600",
@@ -110,9 +110,9 @@ export default function Home({ staff, isAdmin }: HomeProps) {
               <div className="text-sm text-muted-foreground space-y-1">
                 <p><span className="font-medium">Name:</span> {staff.name}</p>
                 <p><span className="font-medium">Email:</span> {staff.email}</p>
-                <p><span className="font-medium">Department:</span> {staff.department.name}</p>
-                {staff.subDepartment && (
-                  <p><span className="font-medium">Sub-Department:</span> {staff.subDepartment.name}</p>
+                <p><span className="font-medium">Primary SPU:</span> {staff.spu.name}</p>
+                {staff.subUnit && (
+                  <p><span className="font-medium">Sub-Unit:</span> {staff.subUnit.name}</p>
                 )}
               </div>
             </div>

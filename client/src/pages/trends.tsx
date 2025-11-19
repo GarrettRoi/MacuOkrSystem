@@ -46,13 +46,13 @@ export default function TrendsPage() {
       })
     : [];
 
-  const departmentTrends = okrs
+  const spuTrends = okrs
     ? Object.values(
         okrs.reduce((acc, okr) => {
-          const deptName = okr.staff.department.name;
-          if (!acc[deptName]) {
-            acc[deptName] = {
-              department: deptName,
+          const spuName = okr.staff.spu.name;
+          if (!acc[spuName]) {
+            acc[spuName] = {
+              spu: spuName,
               currentYear: 0,
               comparisonYear: 0,
               currentCount: 0,
@@ -63,19 +63,19 @@ export default function TrendsPage() {
           const progressPercent = Math.min(100, okr.targetValue > 0 ? (okr.currentValue / okr.targetValue) * 100 : 0);
           
           if (okr.year === parseInt(selectedYear)) {
-            acc[deptName].currentYear += progressPercent;
-            acc[deptName].currentCount += 1;
+            acc[spuName].currentYear += progressPercent;
+            acc[spuName].currentCount += 1;
           } else if (okr.year === parseInt(comparisonYear)) {
-            acc[deptName].comparisonYear += progressPercent;
-            acc[deptName].comparisonCount += 1;
+            acc[spuName].comparisonYear += progressPercent;
+            acc[spuName].comparisonCount += 1;
           }
 
           return acc;
         }, {} as Record<string, any>)
-      ).map((dept) => ({
-        department: dept.department,
-        [selectedYear]: dept.currentCount > 0 ? Math.round(dept.currentYear / dept.currentCount) : 0,
-        [comparisonYear]: dept.comparisonCount > 0 ? Math.round(dept.comparisonYear / dept.comparisonCount) : 0,
+      ).map((spu) => ({
+        spu: spu.spu,
+        [selectedYear]: spu.currentCount > 0 ? Math.round(spu.currentYear / spu.currentCount) : 0,
+        [comparisonYear]: spu.comparisonCount > 0 ? Math.round(spu.comparisonYear / spu.comparisonCount) : 0,
       }))
     : [];
 
@@ -262,17 +262,17 @@ export default function TrendsPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Department Performance Comparison</CardTitle>
+                  <CardTitle>SPU Performance Comparison</CardTitle>
                   <CardDescription>
                     Average progress across all quarters: {selectedYear} vs {comparisonYear}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={departmentTrends} layout="vertical">
+                    <BarChart data={spuTrends} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis type="number" label={{ value: "Progress (%)", position: "insideBottom", offset: -5 }} />
-                      <YAxis type="category" dataKey="department" width={150} />
+                      <YAxis type="category" dataKey="spu" width={150} />
                       <Tooltip />
                       <Legend />
                       <Bar dataKey={selectedYear} fill="hsl(var(--primary))" name={`${selectedYear}`} />

@@ -63,7 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (req.session.selectedStaffId) {
         const staff = await storage.getStaffWithDetails(req.session.selectedStaffId);
-        if (staff && staff.department) {
+        if (staff && staff.spu) {
           sessionData.selectedStaff = staff;
         } else {
           delete req.session.selectedStaffId;
@@ -95,8 +95,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Staff not found" });
       }
       
-      if (!staff.department) {
-        return res.status(400).json({ error: "Staff member has invalid department data" });
+      if (!staff.spu) {
+        return res.status(400).json({ error: "Staff member has invalid SPU data" });
       }
       
       req.session.selectedStaffId = staff.id;

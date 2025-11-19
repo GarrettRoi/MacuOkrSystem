@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2 } from "lucide-react";
-import type { StaffWithDetails } from "@shared/schema";
+import type { StaffWithDetails, Spu } from "@shared/schema";
 import { insertOkrSchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -34,6 +34,10 @@ const YEARS = [currentYear - 1, currentYear, currentYear + 1];
 export default function SubmitOkr({ staff }: SubmitOkrProps) {
   const { toast } = useToast();
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const { data: spus } = useQuery<Spu[]>({
+    queryKey: ["/api/spus"],
+  });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -127,13 +131,13 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     <p className="text-sm text-muted-foreground" data-testid="text-staff-email">{staff.email}</p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium">Department</p>
-                    <p className="text-sm text-muted-foreground" data-testid="text-staff-dept">{staff.department.name}</p>
+                    <p className="text-sm font-medium">Primary SPU (School, Department, Unit)</p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-staff-spu">{staff.spu.name}</p>
                   </div>
-                  {staff.subDepartment && (
+                  {staff.subUnit && (
                     <div>
-                      <p className="text-sm font-medium">Sub-Department</p>
-                      <p className="text-sm text-muted-foreground" data-testid="text-staff-subdept">{staff.subDepartment.name}</p>
+                      <p className="text-sm font-medium">Sub-Unit or Division</p>
+                      <p className="text-sm text-muted-foreground" data-testid="text-staff-subunit">{staff.subUnit.name}</p>
                     </div>
                   )}
                 </div>
@@ -256,6 +260,34 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="collaborationSpuId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Collaboration SPU (Optional)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-collaboration-spu">
+                          <SelectValue placeholder="None (Optional)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {spus?.filter((s) => s.id !== staff.spuId).map((spu) => (
+                          <SelectItem key={spu.id} value={spu.id}>
+                            {spu.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      If you collaborated with another Primary SPU, please select them here
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className="flex justify-end gap-4 pt-4">
                 <Button
