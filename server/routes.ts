@@ -68,6 +68,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/staff/:id", requireAdmin, async (req, res) => {
+    try {
+      const parsed = insertStaffSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      }
+      
+      const updatedStaff = await storage.updateStaff(req.params.id, parsed.data);
+      res.json(updatedStaff);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update staff" });
+    }
+  });
+
   app.delete("/api/staff/:id", requireAdmin, async (req, res) => {
     try {
       await storage.deleteStaff(req.params.id);
@@ -100,6 +114,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/departments/:id", requireAdmin, async (req, res) => {
+    try {
+      const parsed = insertDepartmentSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      }
+      
+      const updatedDept = await storage.updateDepartment(req.params.id, parsed.data);
+      res.json(updatedDept);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update department" });
+    }
+  });
+
   app.delete("/api/departments/:id", requireAdmin, async (req, res) => {
     try {
       await storage.deleteDepartment(req.params.id);
@@ -129,6 +157,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(subDepartment);
     } catch (error) {
       res.status(500).json({ error: "Failed to create sub-department" });
+    }
+  });
+
+  app.put("/api/sub-departments/:id", requireAdmin, async (req, res) => {
+    try {
+      const parsed = insertSubDepartmentSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      }
+      
+      const updatedSubDept = await storage.updateSubDepartment(req.params.id, parsed.data);
+      res.json(updatedSubDept);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update sub-department" });
     }
   });
 

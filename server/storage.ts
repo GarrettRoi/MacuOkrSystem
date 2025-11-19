@@ -28,16 +28,19 @@ export interface IStorage {
   getStaff(id: string): Promise<Staff | undefined>;
   getStaffWithDetails(id: string): Promise<StaffWithDetails | undefined>;
   createStaff(staff: InsertStaff): Promise<Staff>;
+  updateStaff(id: string, updates: Partial<InsertStaff>): Promise<Staff>;
   deleteStaff(id: string): Promise<void>;
   
   getAllDepartments(): Promise<Department[]>;
   getDepartment(id: string): Promise<Department | undefined>;
   createDepartment(dept: InsertDepartment): Promise<Department>;
+  updateDepartment(id: string, updates: Partial<InsertDepartment>): Promise<Department>;
   deleteDepartment(id: string): Promise<void>;
   
   getAllSubDepartments(): Promise<SubDepartment[]>;
   getSubDepartment(id: string): Promise<SubDepartment | undefined>;
   createSubDepartment(subDept: InsertSubDepartment): Promise<SubDepartment>;
+  updateSubDepartment(id: string, updates: Partial<InsertSubDepartment>): Promise<SubDepartment>;
   deleteSubDepartment(id: string): Promise<void>;
   
   getAllOkrs(): Promise<Okr[]>;
@@ -141,6 +144,15 @@ export class DatabaseStorage implements IStorage {
     return staffMember;
   }
 
+  async updateStaff(id: string, updates: Partial<InsertStaff>): Promise<Staff> {
+    const [updatedStaff] = await db
+      .update(staff)
+      .set(updates)
+      .where(eq(staff.id, id))
+      .returning();
+    return updatedStaff;
+  }
+
   async deleteStaff(id: string): Promise<void> {
     await db.delete(staff).where(eq(staff.id, id));
   }
@@ -162,6 +174,15 @@ export class DatabaseStorage implements IStorage {
     return department;
   }
 
+  async updateDepartment(id: string, updates: Partial<InsertDepartment>): Promise<Department> {
+    const [updatedDept] = await db
+      .update(departments)
+      .set(updates)
+      .where(eq(departments.id, id))
+      .returning();
+    return updatedDept;
+  }
+
   async deleteDepartment(id: string): Promise<void> {
     await db.delete(departments).where(eq(departments.id, id));
   }
@@ -181,6 +202,15 @@ export class DatabaseStorage implements IStorage {
       .values(subDept)
       .returning();
     return subDepartment;
+  }
+
+  async updateSubDepartment(id: string, updates: Partial<InsertSubDepartment>): Promise<SubDepartment> {
+    const [updatedSubDept] = await db
+      .update(subDepartments)
+      .set(updates)
+      .where(eq(subDepartments.id, id))
+      .returning();
+    return updatedSubDept;
   }
 
   async deleteSubDepartment(id: string): Promise<void> {
