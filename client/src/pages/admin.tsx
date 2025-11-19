@@ -201,10 +201,9 @@ export default function Admin() {
                         <Label htmlFor="staff-subdept">Sub-Department (Optional)</Label>
                         <Select value={newStaffSubDept} onValueChange={setNewStaffSubDept}>
                           <SelectTrigger data-testid="select-staff-subdept">
-                            <SelectValue placeholder="Select sub-department" />
+                            <SelectValue placeholder="None (Optional)" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
                             {subDepartments?.filter((sd) => sd.departmentId === newStaffDept).map((subDept) => (
                               <SelectItem key={subDept.id} value={subDept.id}>
                                 {subDept.name}
