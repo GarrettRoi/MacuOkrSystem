@@ -3,8 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import {
   insertStaffSchema,
-  insertDepartmentSchema,
-  insertSubDepartmentSchema,
+  insertSpuSchema,
+  insertSubUnitSchema,
   insertOkrSchema,
   insertQuarterlyUpdateSchema,
 } from "@shared/schema";
@@ -185,95 +185,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/departments", async (_req, res) => {
+  app.get("/api/spus", async (_req, res) => {
     try {
-      const departments = await storage.getAllDepartments();
-      res.json(departments);
+      const spus = await storage.getAllSpus();
+      res.json(spus);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch departments" });
+      res.status(500).json({ error: "Failed to fetch SPUs" });
     }
   });
 
-  app.post("/api/departments", requireAdmin, async (req, res) => {
+  app.post("/api/spus", requireAdmin, async (req, res) => {
     try {
-      const parsed = insertDepartmentSchema.safeParse(req.body);
+      const parsed = insertSpuSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
       
-      const department = await storage.createDepartment(parsed.data);
-      res.status(201).json(department);
+      const spu = await storage.createSpu(parsed.data);
+      res.status(201).json(spu);
     } catch (error) {
-      res.status(500).json({ error: "Failed to create department" });
+      res.status(500).json({ error: "Failed to create SPU" });
     }
   });
 
-  app.put("/api/departments/:id", requireAdmin, async (req, res) => {
+  app.put("/api/spus/:id", requireAdmin, async (req, res) => {
     try {
-      const parsed = insertDepartmentSchema.partial().safeParse(req.body);
+      const parsed = insertSpuSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
       
-      const updatedDept = await storage.updateDepartment(req.params.id, parsed.data);
-      res.json(updatedDept);
+      const updatedSpu = await storage.updateSpu(req.params.id, parsed.data);
+      res.json(updatedSpu);
     } catch (error) {
-      res.status(500).json({ error: "Failed to update department" });
+      res.status(500).json({ error: "Failed to update SPU" });
     }
   });
 
-  app.delete("/api/departments/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/spus/:id", requireAdmin, async (req, res) => {
     try {
-      await storage.deleteDepartment(req.params.id);
+      await storage.deleteSpu(req.params.id);
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ error: "Failed to delete department" });
+      res.status(500).json({ error: "Failed to delete SPU" });
     }
   });
 
-  app.get("/api/sub-departments", async (_req, res) => {
+  app.get("/api/sub-units", async (_req, res) => {
     try {
-      const subDepartments = await storage.getAllSubDepartments();
-      res.json(subDepartments);
+      const subUnits = await storage.getAllSubUnits();
+      res.json(subUnits);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch sub-departments" });
+      res.status(500).json({ error: "Failed to fetch sub-units" });
     }
   });
 
-  app.post("/api/sub-departments", requireAdmin, async (req, res) => {
+  app.post("/api/sub-units", requireAdmin, async (req, res) => {
     try {
-      const parsed = insertSubDepartmentSchema.safeParse(req.body);
+      const parsed = insertSubUnitSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
       
-      const subDepartment = await storage.createSubDepartment(parsed.data);
-      res.status(201).json(subDepartment);
+      const subUnit = await storage.createSubUnit(parsed.data);
+      res.status(201).json(subUnit);
     } catch (error) {
-      res.status(500).json({ error: "Failed to create sub-department" });
+      res.status(500).json({ error: "Failed to create sub-unit" });
     }
   });
 
-  app.put("/api/sub-departments/:id", requireAdmin, async (req, res) => {
+  app.put("/api/sub-units/:id", requireAdmin, async (req, res) => {
     try {
-      const parsed = insertSubDepartmentSchema.partial().safeParse(req.body);
+      const parsed = insertSubUnitSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
       
-      const updatedSubDept = await storage.updateSubDepartment(req.params.id, parsed.data);
-      res.json(updatedSubDept);
+      const updatedSubUnit = await storage.updateSubUnit(req.params.id, parsed.data);
+      res.json(updatedSubUnit);
     } catch (error) {
-      res.status(500).json({ error: "Failed to update sub-department" });
+      res.status(500).json({ error: "Failed to update sub-unit" });
     }
   });
 
-  app.delete("/api/sub-departments/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/sub-units/:id", requireAdmin, async (req, res) => {
     try {
-      await storage.deleteSubDepartment(req.params.id);
+      await storage.deleteSubUnit(req.params.id);
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ error: "Failed to delete sub-department" });
+      res.status(500).json({ error: "Failed to delete sub-unit" });
     }
   });
 
@@ -360,8 +360,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       csvRows.push([
         "Staff Name",
         "Email",
-        "Department",
-        "Sub-Department",
+        "Primary SPU",
+        "Sub-Unit",
         "OKR Title",
         "Description",
         "Quarter",
@@ -383,8 +383,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const row = [
           `"${okr.staff.name}"`,
           `"${okr.staff.email}"`,
-          `"${okr.staff.department.name}"`,
-          `"${okr.staff.subDepartment?.name || "N/A"}"`,
+          `"${okr.staff.spu.name}"`,
+          `"${okr.staff.subUnit?.name || "N/A"}"`,
           `"${okr.title.replace(/"/g, '""')}"`,
           `"${okr.description.replace(/"/g, '""')}"`,
           okr.quarter,

@@ -3,23 +3,23 @@ import { pgTable, text, varchar, integer, timestamp, boolean } from "drizzle-orm
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const departments = pgTable("departments", {
+export const spus = pgTable("spus", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
 });
 
-export const subDepartments = pgTable("sub_departments", {
+export const subUnits = pgTable("sub_units", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  departmentId: varchar("department_id").notNull().references(() => departments.id, { onDelete: "cascade" }),
+  spuId: varchar("spu_id").notNull().references(() => spus.id, { onDelete: "cascade" }),
 });
 
 export const staff = pgTable("staff", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  departmentId: varchar("department_id").notNull().references(() => departments.id),
-  subDepartmentId: varchar("sub_department_id").references(() => subDepartments.id),
+  spuId: varchar("spu_id").notNull().references(() => spus.id),
+  subUnitId: varchar("sub_unit_id").references(() => subUnits.id),
   isAdmin: boolean("is_admin").notNull().default(false),
 });
 
@@ -33,6 +33,7 @@ export const okrs = pgTable("okrs", {
   targetValue: integer("target_value").notNull(),
   currentValue: integer("current_value").notNull().default(0),
   status: text("status").notNull().default("not_started"),
+  collaborationSpuId: varchar("collaboration_spu_id").references(() => spus.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -47,31 +48,32 @@ export const quarterlyUpdates = pgTable("quarterly_updates", {
   submittedAt: timestamp("submitted_at").notNull().defaultNow(),
 });
 
-export const insertDepartmentSchema = createInsertSchema(departments).omit({ id: true });
-export const insertSubDepartmentSchema = createInsertSchema(subDepartments).omit({ id: true });
+export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });
+export const insertSubUnitSchema = createInsertSchema(subUnits).omit({ id: true });
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
 export const insertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true });
 export const insertQuarterlyUpdateSchema = createInsertSchema(quarterlyUpdates).omit({ id: true, submittedAt: true });
 
-export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
-export type InsertSubDepartment = z.infer<typeof insertSubDepartmentSchema>;
+export type InsertSpu = z.infer<typeof insertSpuSchema>;
+export type InsertSubUnit = z.infer<typeof insertSubUnitSchema>;
 export type InsertStaff = z.infer<typeof insertStaffSchema>;
 export type InsertOkr = z.infer<typeof insertOkrSchema>;
 export type InsertQuarterlyUpdate = z.infer<typeof insertQuarterlyUpdateSchema>;
 
-export type Department = typeof departments.$inferSelect;
-export type SubDepartment = typeof subDepartments.$inferSelect;
+export type Spu = typeof spus.$inferSelect;
+export type SubUnit = typeof subUnits.$inferSelect;
 export type Staff = typeof staff.$inferSelect;
 export type Okr = typeof okrs.$inferSelect;
 export type QuarterlyUpdate = typeof quarterlyUpdates.$inferSelect;
 
 export type StaffWithDetails = Staff & {
-  department: Department;
-  subDepartment?: SubDepartment | null;
+  spu: Spu;
+  subUnit?: SubUnit | null;
 };
 
 export type OkrWithDetails = Okr & {
   staff: StaffWithDetails;
+  collaborationSpu?: Spu | null;
 };
 
 export type QuarterUpdateWithDetails = QuarterlyUpdate & {

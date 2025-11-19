@@ -1,49 +1,57 @@
 import { db } from "./db";
-import { departments, subDepartments, staff } from "@shared/schema";
+import { spus, subUnits, staff } from "@shared/schema";
 
 async function seed() {
   console.log("Seeding database...");
 
-  const deptCount = await db.select().from(departments);
-  if (deptCount.length > 0) {
+  const spuCount = await db.select().from(spus);
+  if (spuCount.length > 0) {
     console.log("Database already seeded. Skipping...");
     return;
   }
 
-  const [dept1] = await db.insert(departments).values({ name: "Academic Affairs" }).returning();
-  const [dept2] = await db.insert(departments).values({ name: "Student Services" }).returning();
-  const [dept3] = await db.insert(departments).values({ name: "Administration" }).returning();
+  const [spu1] = await db.insert(spus).values({ name: "Academic Affairs" }).returning();
+  const [spu2] = await db.insert(spus).values({ name: "Student Services" }).returning();
+  const [spu3] = await db.insert(spus).values({ name: "Administration" }).returning();
+  const [spu4] = await db.insert(spus).values({ name: "Information Technology" }).returning();
 
-  const [subDept1] = await db.insert(subDepartments).values({ 
+  const [subUnit1] = await db.insert(subUnits).values({ 
     name: "Undergraduate Studies", 
-    departmentId: dept1.id 
+    spuId: spu1.id 
   }).returning();
   
-  const [subDept2] = await db.insert(subDepartments).values({ 
+  const [subUnit2] = await db.insert(subUnits).values({ 
     name: "Graduate Programs", 
-    departmentId: dept1.id 
+    spuId: spu1.id 
   }).returning();
 
   await db.insert(staff).values({
     name: "Dr. Sarah Johnson",
     email: "sarah.johnson@macu.edu",
-    departmentId: dept1.id,
-    subDepartmentId: subDept1.id,
+    spuId: spu1.id,
+    subUnitId: subUnit1.id,
     isAdmin: true,
   });
 
   await db.insert(staff).values({
-    name: "Michael Chen",
+    name: "Michael Chen - Updated",
     email: "michael.chen@macu.edu",
-    departmentId: dept2.id,
-    subDepartmentId: null,
+    spuId: spu2.id,
+    subUnitId: null,
   });
 
   await db.insert(staff).values({
     name: "Emily Rodriguez",
     email: "emily.rodriguez@macu.edu",
-    departmentId: dept3.id,
-    subDepartmentId: null,
+    spuId: spu3.id,
+    subUnitId: null,
+  });
+
+  await db.insert(staff).values({
+    name: "Jody Allen",
+    email: "jody.allen@macu.edu",
+    spuId: spu4.id,
+    subUnitId: null,
   });
 
   console.log("✓ Database seeded successfully!");

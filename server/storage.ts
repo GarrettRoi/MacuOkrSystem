@@ -1,18 +1,18 @@
 import {
   type Staff,
-  type Department,
-  type SubDepartment,
+  type Spu,
+  type SubUnit,
   type Okr,
   type QuarterlyUpdate,
   type InsertStaff,
-  type InsertDepartment,
-  type InsertSubDepartment,
+  type InsertSpu,
+  type InsertSubUnit,
   type InsertOkr,
   type InsertQuarterlyUpdate,
   type StaffWithDetails,
   type OkrWithDetails,
-  departments,
-  subDepartments,
+  spus,
+  subUnits,
   staff,
   okrs,
   quarterlyUpdates,
@@ -31,17 +31,17 @@ export interface IStorage {
   updateStaff(id: string, updates: Partial<InsertStaff>): Promise<Staff>;
   deleteStaff(id: string): Promise<void>;
   
-  getAllDepartments(): Promise<Department[]>;
-  getDepartment(id: string): Promise<Department | undefined>;
-  createDepartment(dept: InsertDepartment): Promise<Department>;
-  updateDepartment(id: string, updates: Partial<InsertDepartment>): Promise<Department>;
-  deleteDepartment(id: string): Promise<void>;
+  getAllSpus(): Promise<Spu[]>;
+  getSpu(id: string): Promise<Spu | undefined>;
+  createSpu(spu: InsertSpu): Promise<Spu>;
+  updateSpu(id: string, updates: Partial<InsertSpu>): Promise<Spu>;
+  deleteSpu(id: string): Promise<void>;
   
-  getAllSubDepartments(): Promise<SubDepartment[]>;
-  getSubDepartment(id: string): Promise<SubDepartment | undefined>;
-  createSubDepartment(subDept: InsertSubDepartment): Promise<SubDepartment>;
-  updateSubDepartment(id: string, updates: Partial<InsertSubDepartment>): Promise<SubDepartment>;
-  deleteSubDepartment(id: string): Promise<void>;
+  getAllSubUnits(): Promise<SubUnit[]>;
+  getSubUnit(id: string): Promise<SubUnit | undefined>;
+  createSubUnit(subUnit: InsertSubUnit): Promise<SubUnit>;
+  updateSubUnit(id: string, updates: Partial<InsertSubUnit>): Promise<SubUnit>;
+  deleteSubUnit(id: string): Promise<void>;
   
   getAllOkrs(): Promise<Okr[]>;
   getAllOkrsWithDetails(): Promise<OkrWithDetails[]>;
@@ -81,23 +81,25 @@ export class DatabaseStorage implements IStorage {
         id: staff.id,
         name: staff.name,
         email: staff.email,
-        departmentId: staff.departmentId,
-        subDepartmentId: staff.subDepartmentId,
-        department: departments,
-        subDepartment: subDepartments,
+        isAdmin: staff.isAdmin,
+        spuId: staff.spuId,
+        subUnitId: staff.subUnitId,
+        spu: spus,
+        subUnit: subUnits,
       })
       .from(staff)
-      .leftJoin(departments, eq(staff.departmentId, departments.id))
-      .leftJoin(subDepartments, eq(staff.subDepartmentId, subDepartments.id));
+      .leftJoin(spus, eq(staff.spuId, spus.id))
+      .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id));
 
     return result.map((row) => ({
       id: row.id,
       name: row.name,
       email: row.email,
-      departmentId: row.departmentId,
-      subDepartmentId: row.subDepartmentId,
-      department: row.department!,
-      subDepartment: row.subDepartment,
+      isAdmin: row.isAdmin,
+      spuId: row.spuId,
+      subUnitId: row.subUnitId,
+      spu: row.spu!,
+      subUnit: row.subUnit,
     }));
   }
 
@@ -112,14 +114,15 @@ export class DatabaseStorage implements IStorage {
         id: staff.id,
         name: staff.name,
         email: staff.email,
-        departmentId: staff.departmentId,
-        subDepartmentId: staff.subDepartmentId,
-        department: departments,
-        subDepartment: subDepartments,
+        isAdmin: staff.isAdmin,
+        spuId: staff.spuId,
+        subUnitId: staff.subUnitId,
+        spu: spus,
+        subUnit: subUnits,
       })
       .from(staff)
-      .leftJoin(departments, eq(staff.departmentId, departments.id))
-      .leftJoin(subDepartments, eq(staff.subDepartmentId, subDepartments.id))
+      .leftJoin(spus, eq(staff.spuId, spus.id))
+      .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
       .where(eq(staff.id, id));
 
     if (result.length === 0) return undefined;
@@ -129,10 +132,11 @@ export class DatabaseStorage implements IStorage {
       id: row.id,
       name: row.name,
       email: row.email,
-      departmentId: row.departmentId,
-      subDepartmentId: row.subDepartmentId,
-      department: row.department!,
-      subDepartment: row.subDepartment,
+      isAdmin: row.isAdmin,
+      spuId: row.spuId,
+      subUnitId: row.subUnitId,
+      spu: row.spu!,
+      subUnit: row.subUnit,
     };
   }
 
@@ -157,64 +161,64 @@ export class DatabaseStorage implements IStorage {
     await db.delete(staff).where(eq(staff.id, id));
   }
 
-  async getAllDepartments(): Promise<Department[]> {
-    return await db.select().from(departments);
+  async getAllSpus(): Promise<Spu[]> {
+    return await db.select().from(spus);
   }
 
-  async getDepartment(id: string): Promise<Department | undefined> {
-    const [dept] = await db.select().from(departments).where(eq(departments.id, id));
-    return dept || undefined;
+  async getSpu(id: string): Promise<Spu | undefined> {
+    const [spu] = await db.select().from(spus).where(eq(spus.id, id));
+    return spu || undefined;
   }
 
-  async createDepartment(dept: InsertDepartment): Promise<Department> {
-    const [department] = await db
-      .insert(departments)
-      .values(dept)
+  async createSpu(spu: InsertSpu): Promise<Spu> {
+    const [createdSpu] = await db
+      .insert(spus)
+      .values(spu)
       .returning();
-    return department;
+    return createdSpu;
   }
 
-  async updateDepartment(id: string, updates: Partial<InsertDepartment>): Promise<Department> {
-    const [updatedDept] = await db
-      .update(departments)
+  async updateSpu(id: string, updates: Partial<InsertSpu>): Promise<Spu> {
+    const [updatedSpu] = await db
+      .update(spus)
       .set(updates)
-      .where(eq(departments.id, id))
+      .where(eq(spus.id, id))
       .returning();
-    return updatedDept;
+    return updatedSpu;
   }
 
-  async deleteDepartment(id: string): Promise<void> {
-    await db.delete(departments).where(eq(departments.id, id));
+  async deleteSpu(id: string): Promise<void> {
+    await db.delete(spus).where(eq(spus.id, id));
   }
 
-  async getAllSubDepartments(): Promise<SubDepartment[]> {
-    return await db.select().from(subDepartments);
+  async getAllSubUnits(): Promise<SubUnit[]> {
+    return await db.select().from(subUnits);
   }
 
-  async getSubDepartment(id: string): Promise<SubDepartment | undefined> {
-    const [subDept] = await db.select().from(subDepartments).where(eq(subDepartments.id, id));
-    return subDept || undefined;
+  async getSubUnit(id: string): Promise<SubUnit | undefined> {
+    const [subUnit] = await db.select().from(subUnits).where(eq(subUnits.id, id));
+    return subUnit || undefined;
   }
 
-  async createSubDepartment(subDept: InsertSubDepartment): Promise<SubDepartment> {
-    const [subDepartment] = await db
-      .insert(subDepartments)
-      .values(subDept)
+  async createSubUnit(subUnit: InsertSubUnit): Promise<SubUnit> {
+    const [createdSubUnit] = await db
+      .insert(subUnits)
+      .values(subUnit)
       .returning();
-    return subDepartment;
+    return createdSubUnit;
   }
 
-  async updateSubDepartment(id: string, updates: Partial<InsertSubDepartment>): Promise<SubDepartment> {
-    const [updatedSubDept] = await db
-      .update(subDepartments)
+  async updateSubUnit(id: string, updates: Partial<InsertSubUnit>): Promise<SubUnit> {
+    const [updatedSubUnit] = await db
+      .update(subUnits)
       .set(updates)
-      .where(eq(subDepartments.id, id))
+      .where(eq(subUnits.id, id))
       .returning();
-    return updatedSubDept;
+    return updatedSubUnit;
   }
 
-  async deleteSubDepartment(id: string): Promise<void> {
-    await db.delete(subDepartments).where(eq(subDepartments.id, id));
+  async deleteSubUnit(id: string): Promise<void> {
+    await db.delete(subUnits).where(eq(subUnits.id, id));
   }
 
   async getAllOkrs(): Promise<Okr[]> {
@@ -226,21 +230,24 @@ export class DatabaseStorage implements IStorage {
       .select({
         okr: okrs,
         staff: staff,
-        department: departments,
-        subDepartment: subDepartments,
+        spu: spus,
+        subUnit: subUnits,
+        collaborationSpu: spus,
       })
       .from(okrs)
       .leftJoin(staff, eq(okrs.staffId, staff.id))
-      .leftJoin(departments, eq(staff.departmentId, departments.id))
-      .leftJoin(subDepartments, eq(staff.subDepartmentId, subDepartments.id));
+      .leftJoin(spus, eq(staff.spuId, spus.id))
+      .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
+      .leftJoin(spus as any, eq(okrs.collaborationSpuId, spus.id));
 
     return result.map((row) => ({
       ...row.okr,
       staff: {
         ...row.staff!,
-        department: row.department!,
-        subDepartment: row.subDepartment,
+        spu: row.spu!,
+        subUnit: row.subUnit,
       },
+      collaborationSpu: row.collaborationSpu || null,
     }));
   }
 
