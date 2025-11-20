@@ -10,7 +10,7 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
   --background: 0deg 0% 94.12%;
-  --foreground: 0 0% 10.2%;
+  --foreground: 0deg 0% 10.2%;
   --border: 0 0% 90.98%;
   --card: 0 0% 98.82%;
   --card-foreground: 0 0% 0%;
@@ -31,7 +31,7 @@
   --secondary: 0 0% 76.86%;
   --secondary-foreground: 0 0% 10.2%;
   --muted: 0 0% 89.02%;
-  --muted-foreground: 351.78deg 75.26% 38.04%;
+  --muted-foreground: 0deg 0% 10.2%;
   --accent: 0 0% 100%;
   --accent-foreground: 0 0% 10.2%;
   --destructive: 0 0% 0%;
