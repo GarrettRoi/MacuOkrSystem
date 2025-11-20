@@ -56,6 +56,7 @@ export interface IStorage {
   getQuarterlyUpdate(id: string): Promise<QuarterlyUpdate | undefined>;
   getQuarterlyUpdatesByOkr(okrId: string): Promise<QuarterlyUpdate[]>;
   createQuarterlyUpdate(update: InsertQuarterlyUpdate): Promise<QuarterlyUpdate>;
+  updateQuarterlyUpdate(id: string, updates: Partial<InsertQuarterlyUpdate>): Promise<QuarterlyUpdate>;
   deleteQuarterlyUpdate(id: string): Promise<void>;
 }
 
@@ -316,6 +317,15 @@ export class DatabaseStorage implements IStorage {
       .values(insertUpdate)
       .returning();
     
+    return update;
+  }
+
+  async updateQuarterlyUpdate(id: string, updates: Partial<InsertQuarterlyUpdate>): Promise<QuarterlyUpdate> {
+    const [update] = await db
+      .update(quarterlyUpdates)
+      .set(updates)
+      .where(eq(quarterlyUpdates.id, id))
+      .returning();
     return update;
   }
 

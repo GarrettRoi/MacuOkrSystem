@@ -316,12 +316,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/okrs/:id", async (req, res) => {
+    try {
+      // Basic validation for allowed fields
+      const allowedFields = ['objectiveStatement', 'universityObjective', 'universityKeyResult', 'keyResults', 'status'];
+      const updates: Record<string, any> = {};
+      
+      for (const key of allowedFields) {
+        if (key in req.body) {
+          updates[key] = req.body[key];
+        }
+      }
+      
+      // Validate required field lengths if present
+      if (updates.objectiveStatement && updates.objectiveStatement.length < 20) {
+        return res.status(400).json({ error: "Objective statement must be at least 20 characters" });
+      }
+      
+      if (updates.status && !['not_started', 'in_progress', 'at_risk', 'completed'].includes(updates.status)) {
+        return res.status(400).json({ error: "Invalid status value" });
+      }
+      
+      const updatedOkr = await storage.updateOkr(req.params.id, updates);
+      res.json(updatedOkr);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update OKR" });
+    }
+  });
+
   app.delete("/api/okrs/:id", async (req, res) => {
     try {
       await storage.deleteOkr(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete OKR" });
+    }
+  });
+
+  // Aggregated API: OKRs with their quarterly updates and derived progress
+  app.get("/api/okrs-with-updates", async (_req, res) => {
+    try {
+      const okrs = await storage.getAllOkrsWithDetails();
+      const allUpdates = await storage.getAllQuarterlyUpdates();
+      
+      // Aggregate OKRs with their updates and calculate derived progress
+      const aggregated = okrs.map(okr => {
+        const updates = allUpdates.filter(u => u.okrId === okr.id)
+          .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+        
+        // Parse keyResultScores for each update
+        const updatesWithParsedScores = updates.map(update => {
+          let parsedScores = null;
+          if (update.keyResultScores) {
+            try {
+              parsedScores = JSON.parse(update.keyResultScores);
+            } catch (e) {
+              console.error("Failed to parse keyResultScores:", e);
+            }
+          }
+          return {
+            ...update,
+            keyResultScoresParsed: parsedScores,
+          };
+        });
+        
+        // Derive current progress from latest update's averageScore
+        const latestUpdate = updatesWithParsedScores[0];
+        const derivedProgress = latestUpdate?.averageScore ?? okr.currentValue;
+        
+        return {
+          ...okr,
+          derivedProgress,
+          quarterlyUpdates: updatesWithParsedScores,
+        };
+      });
+      
+      res.json(aggregated);
+    } catch (error) {
+      console.error("Failed to fetch aggregated OKRs:", error);
+      res.status(500).json({ error: "Failed to fetch aggregated OKRs" });
     }
   });
 
@@ -345,6 +418,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(update);
     } catch (error) {
       res.status(500).json({ error: "Failed to create quarterly update" });
+    }
+  });
+
+  app.put("/api/quarterly-updates/:id", async (req, res) => {
+    try {
+      // Basic validation for allowed fields
+      const allowedFields = ['keyResultScores', 'averageScore', 'additionalKeyResults', 'notes', 'progress'];
+      const updates: Record<string, any> = {};
+      
+      for (const key of allowedFields) {
+        if (key in req.body) {
+          updates[key] = req.body[key];
+        }
+      }
+      
+      // Validate field constraints
+      if (updates.averageScore !== undefined && (updates.averageScore < 0 || updates.averageScore > 100)) {
+        return res.status(400).json({ error: "Average score must be between 0 and 100" });
+      }
+      
+      if (updates.progress !== undefined && (updates.progress < 0 || updates.progress > 100)) {
+        return res.status(400).json({ error: "Progress must be between 0 and 100" });
+      }
+      
+      if (updates.notes && updates.notes.length < 10) {
+        return res.status(400).json({ error: "Notes must be at least 10 characters" });
+      }
+      
+      // Validate JSON fields if present
+      if (updates.keyResultScores) {
+        try {
+          JSON.parse(updates.keyResultScores);
+        } catch (e) {
+          return res.status(400).json({ error: "Invalid keyResultScores JSON format" });
+        }
+      }
+      
+      const updatedUpdate = await storage.updateQuarterlyUpdate(req.params.id, updates);
+      res.json(updatedUpdate);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update quarterly update" });
     }
   });
 
