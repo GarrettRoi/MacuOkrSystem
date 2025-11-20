@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
@@ -10,15 +10,32 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Plus, Trash2 } from "lucide-react";
 import type { StaffWithDetails, Spu } from "@shared/schema";
-import { insertOkrSchema } from "@shared/schema";
+import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, OKR_NUMBERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
-const formSchema = insertOkrSchema.extend({
-  title: z.string().min(5, "Title must be at least 5 characters"),
-  description: z.string().min(20, "Description must be at least 20 characters"),
-  targetValue: z.coerce.number().min(1, "Target value must be at least 1").max(100, "Target value cannot exceed 100"),
+const keyResultSchema = z.object({
+  description: z.string().min(10, "Key result description must be at least 10 characters"),
+  percentage: z.coerce.number().min(1, "Percentage must be at least 1").max(100, "Percentage cannot exceed 100"),
+});
+
+const formSchema = z.object({
+  staffId: z.string(),
+  okrNumber: z.string().min(1, "Please select an OKR number"),
+  quarter: z.string().min(1, "Please select a quarter"),
+  year: z.number(),
+  collaborationSpuId: z.string().optional(),
+  universityObjective: z.string().min(1, "Please select a university objective"),
+  universityKeyResult: z.string().min(1, "Please select a university key result"),
+  objectiveStatement: z.string().min(20, "Objective statement must be at least 20 characters"),
+  keyResults: z.array(keyResultSchema).min(1, "At least one key result is required"),
+}).refine((data) => {
+  const total = data.keyResults.reduce((sum, kr) => sum + kr.percentage, 0);
+  return total === 100;
+}, {
+  message: "Key result percentages must add up to exactly 100%",
+  path: ["keyResults"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -43,17 +60,29 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       staffId: staff.id,
-      title: "",
-      description: "",
+      okrNumber: "",
       quarter: "",
       year: currentYear,
-      targetValue: 100,
+      collaborationSpuId: undefined,
+      universityObjective: "",
+      universityKeyResult: "",
+      objectiveStatement: "",
+      keyResults: [{ description: "", percentage: 100 }],
     },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "keyResults",
   });
 
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
-      return await apiRequest("POST", "/api/okrs", data);
+      const payload = {
+        ...data,
+        keyResults: JSON.stringify(data.keyResults),
+      };
+      return await apiRequest("POST", "/api/okrs", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
@@ -76,15 +105,23 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     mutation.mutate(data);
   };
 
+  const calculateTotalPercentage = () => {
+    const values = form.getValues("keyResults");
+    return values.reduce((sum, kr) => sum + (kr.percentage || 0), 0);
+  };
+
   const handleSubmitAnother = () => {
     setIsSubmitted(false);
     form.reset({
       staffId: staff.id,
-      title: "",
-      description: "",
+      okrNumber: "",
       quarter: "",
       year: currentYear,
-      targetValue: 100,
+      collaborationSpuId: undefined,
+      universityObjective: "",
+      universityKeyResult: "",
+      objectiveStatement: "",
+      keyResults: [{ description: "", percentage: 100 }],
     });
   };
 
@@ -143,49 +180,6 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                 </div>
               </div>
 
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>OKR Title *</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="e.g., Increase student enrollment by 15%"
-                        {...field}
-                        data-testid="input-title"
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      A clear, concise objective statement
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description *</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Describe the objective, key results, and success metrics in detail..."
-                        className="min-h-32 resize-none"
-                        {...field}
-                        data-testid="input-description"
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Provide detailed information about what you aim to achieve
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <FormField
                   control={form.control}
@@ -207,6 +201,9 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                           ))}
                         </SelectContent>
                       </Select>
+                      <FormDescription className="text-xs">
+                        Select the quarter to which this OKR will apply
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -232,6 +229,9 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                           ))}
                         </SelectContent>
                       </Select>
+                      <FormDescription className="text-xs">
+                        Select the year to which this OKR will apply
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -239,21 +239,26 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
 
                 <FormField
                   control={form.control}
-                  name="targetValue"
+                  name="okrNumber"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Target % *</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="100"
-                          {...field}
-                          data-testid="input-target"
-                        />
-                      </FormControl>
+                      <FormLabel>OKR Number *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-okr-number">
+                            <SelectValue placeholder="Select OKR #" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {OKR_NUMBERS.map((num) => (
+                            <SelectItem key={num} value={num} data-testid={`option-okr-${num}`}>
+                              {num}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormDescription className="text-xs">
-                        1-100%
+                        Which numbered OKR are you submitting?
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -270,7 +275,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-collaboration-spu">
-                          <SelectValue placeholder="None (Optional)" />
+                          <SelectValue placeholder="Not Applicable" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -282,12 +287,175 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      If you collaborated with another Primary SPU, please select them here
+                      If you are collaborating with another Primary SPU, please select them here
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="universityObjective"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>University Level Strategic Objective *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-university-objective">
+                          <SelectValue placeholder="Select a strategic objective" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {UNIVERSITY_OBJECTIVES.map((obj) => (
+                          <SelectItem key={obj} value={obj}>
+                            {obj}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Select the University Level Strategic Objective for your OKR
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="universityKeyResult"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>University-Level Key Result *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-university-key-result">
+                          <SelectValue placeholder="Select a key result" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {UNIVERSITY_KEY_RESULTS.map((kr) => (
+                          <SelectItem key={kr} value={kr}>
+                            {kr}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Select the appropriate University-Level Key Result for your OKR
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="objectiveStatement"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Objective Statement *</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Write your objective statement..."
+                        className="min-h-24 resize-none"
+                        {...field}
+                        data-testid="input-objective-statement"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Describe what you aim to achieve with this OKR
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <FormLabel>Key Results *</FormLabel>
+                  <div className="text-sm text-muted-foreground">
+                    Total: <span className={calculateTotalPercentage() === 100 ? "text-green-600 font-semibold" : "text-destructive font-semibold"}>
+                      {calculateTotalPercentage()}%
+                    </span>
+                  </div>
+                </div>
+                <FormDescription className="text-xs">
+                  Add your key results with percentage allocation. Total must equal 100%.
+                </FormDescription>
+                
+                {fields.map((field, index) => (
+                  <div key={field.id} className="flex gap-4 items-start">
+                    <div className="flex-1 space-y-4">
+                      <FormField
+                        control={form.control}
+                        name={`keyResults.${index}.description`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Textarea
+                                placeholder={`Key Result ${index + 1} description...`}
+                                className="min-h-20 resize-none"
+                                {...field}
+                                data-testid={`input-key-result-${index}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name={`keyResults.${index}.percentage`}
+                      render={({ field }) => (
+                        <FormItem className="w-24">
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="100"
+                              placeholder="%"
+                              {...field}
+                              data-testid={`input-percentage-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {fields.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => remove(index)}
+                        data-testid={`button-remove-key-result-${index}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => append({ description: "", percentage: 0 })}
+                  className="w-full"
+                  data-testid="button-add-key-result"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Key Result
+                </Button>
+                
+                {form.formState.errors.keyResults?.root && (
+                  <p className="text-sm font-medium text-destructive">
+                    {form.formState.errors.keyResults.root.message}
+                  </p>
+                )}
+              </div>
 
               <div className="flex justify-end gap-4 pt-4">
                 <Button
