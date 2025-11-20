@@ -8,6 +8,8 @@ import {
   insertOkrSchema,
   insertQuarterlyUpdateSchema,
 } from "@shared/schema";
+import type { Okr, OkrWithDetails } from "@shared/schema";
+
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.isAdmin) {

@@ -197,8 +197,13 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                         <div>
                           <p className="text-xs font-medium text-muted-foreground">Key Results</p>
                           {(() => {
-                            try {
-                              const keyResults = JSON.parse(selectedOkr.keyResults);
+                            const { keyResults } = selectedOkr;
+                            
+                            if (!keyResults) {
+                              return <p className="text-sm text-muted-foreground mt-1">No key results available</p>;
+                            }
+                            
+                            if (Array.isArray(keyResults)) {
                               return (
                                 <ul className="text-sm space-y-1 mt-1">
                                   {keyResults.map((kr: any, idx: number) => (
@@ -206,9 +211,27 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                                   ))}
                                 </ul>
                               );
-                            } catch {
-                              return <p className="text-sm">{selectedOkr.keyResults}</p>;
                             }
+                            
+                            if (typeof keyResults === 'string') {
+                              try {
+                                const parsed = JSON.parse(keyResults);
+                                if (Array.isArray(parsed)) {
+                                  return (
+                                    <ul className="text-sm space-y-1 mt-1">
+                                      {parsed.map((kr: any, idx: number) => (
+                                        <li key={idx}>• {kr.description} ({kr.percentage}%)</li>
+                                      ))}
+                                    </ul>
+                                  );
+                                }
+                              } catch {
+                                // Not valid JSON, display as plain text
+                              }
+                              return <p className="text-sm mt-1">{keyResults}</p>;
+                            }
+                            
+                            return <p className="text-sm text-muted-foreground mt-1">Invalid key results format</p>;
                           })()}
                         </div>
                         <div className="flex items-center gap-4 text-sm">

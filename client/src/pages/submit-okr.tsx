@@ -32,9 +32,9 @@ const formSchema = z.object({
   keyResults: z.array(keyResultSchema).min(1, "At least one key result is required"),
 }).refine((data) => {
   const total = data.keyResults.reduce((sum, kr) => sum + kr.percentage, 0);
-  return total === 100;
+  return Math.abs(total - 100) < 0.01;
 }, {
-  message: "Key result percentages must add up to exactly 100%",
+  message: "Key result percentages must add up to 100%",
   path: ["keyResults"],
 });
 
@@ -76,11 +76,17 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     name: "keyResults",
   });
 
+  const watchedKeyResults = form.watch("keyResults");
+
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
+      const normalizedKeyResults = data.keyResults.map(kr => ({
+        description: kr.description,
+        percentage: Number(kr.percentage),
+      }));
       const payload = {
         ...data,
-        keyResults: JSON.stringify(data.keyResults),
+        keyResults: JSON.stringify(normalizedKeyResults),
       };
       return await apiRequest("POST", "/api/okrs", payload);
     },
@@ -105,10 +111,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     mutation.mutate(data);
   };
 
-  const calculateTotalPercentage = () => {
-    const values = form.getValues("keyResults");
-    return values.reduce((sum, kr) => sum + (kr.percentage || 0), 0);
-  };
+  const totalPercentage = watchedKeyResults.reduce((sum, kr) => sum + (Number(kr.percentage) || 0), 0);
 
   const handleSubmitAnother = () => {
     setIsSubmitted(false);
@@ -376,8 +379,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                 <div className="flex items-center justify-between">
                   <FormLabel>Key Results *</FormLabel>
                   <div className="text-sm text-muted-foreground">
-                    Total: <span className={calculateTotalPercentage() === 100 ? "text-green-600 font-semibold" : "text-destructive font-semibold"}>
-                      {calculateTotalPercentage()}%
+                    Total: <span className={Math.abs(totalPercentage - 100) < 0.01 ? "text-green-600 font-semibold" : "text-destructive font-semibold"}>
+                      {totalPercentage}%
                     </span>
                   </div>
                 </div>
@@ -416,6 +419,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                               type="number"
                               min="1"
                               max="100"
+                              step="0.1"
                               placeholder="%"
                               {...field}
                               data-testid={`input-percentage-${index}`}

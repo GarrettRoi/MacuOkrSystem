@@ -76,7 +76,36 @@ export const OKR_NUMBERS = ["OKR 1", "OKR 2", "OKR 3", "OKR 4", "OKR 5"] as cons
 export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });
 export const insertSubUnitSchema = createInsertSchema(subUnits).omit({ id: true });
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
-export const insertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true });
+
+const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true });
+
+export const insertOkrSchema = baseInsertOkrSchema.refine(
+  (data) => {
+    try {
+      const keyResults = JSON.parse(data.keyResults);
+      if (!Array.isArray(keyResults)) return false;
+      
+      const hasValidFields = keyResults.every(kr =>
+        typeof kr.description === 'string' &&
+        kr.description.length >= 10 &&
+        typeof kr.percentage === 'number' &&
+        kr.percentage >= 1 &&
+        kr.percentage <= 100
+      );
+      
+      if (!hasValidFields) return false;
+      
+      const total = keyResults.reduce((sum, kr) => sum + kr.percentage, 0);
+      return Math.abs(total - 100) < 0.01;
+    } catch {
+      return false;
+    }
+  },
+  {
+    message: "keyResults must be valid JSON with percentage total of 100%",
+  }
+);
+
 export const insertQuarterlyUpdateSchema = createInsertSchema(quarterlyUpdates).omit({ id: true, submittedAt: true });
 
 export type InsertSpu = z.infer<typeof insertSpuSchema>;
