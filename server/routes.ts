@@ -299,15 +299,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/okrs", async (req, res) => {
     try {
+      console.log("[POST /api/okrs] Request body:", JSON.stringify(req.body, null, 2));
       const parsed = insertOkrSchema.safeParse(req.body);
       if (!parsed.success) {
+        console.log("[POST /api/okrs] Validation error:", JSON.stringify(parsed.error, null, 2));
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
       
+      console.log("[POST /api/okrs] Parsed data:", JSON.stringify(parsed.data, null, 2));
       const okr = await storage.createOkr(parsed.data);
+      console.log("[POST /api/okrs] Created OKR:", JSON.stringify(okr, null, 2));
       res.status(201).json(okr);
     } catch (error) {
-      res.status(500).json({ error: "Failed to create OKR" });
+      console.error("[POST /api/okrs] Error:", error);
+      res.status(500).json({ error: "Failed to create OKR", details: error instanceof Error ? error.message : String(error) });
     }
   });
 
