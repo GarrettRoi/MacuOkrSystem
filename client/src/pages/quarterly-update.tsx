@@ -1,24 +1,39 @@
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useState, useEffect } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StaffWithDetails, OkrWithDetails } from "@shared/schema";
 import { insertQuarterlyUpdateSchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Progress } from "@/components/ui/progress";
 
-const formSchema = insertQuarterlyUpdateSchema.extend({
-  notes: z.string().min(10, "Update notes must be at least 10 characters"),
-  progress: z.coerce.number().min(0, "Progress must be at least 0").max(100, "Progress cannot exceed 100"),
+// Schema for individual key result score
+const keyResultScoreSchema = z.object({
+  keyResultNumber: z.number(),
+  description: z.string(),
+  score: z.coerce.number().min(0, "Score must be at least 0").max(100, "Score cannot exceed 100"),
+});
+
+const formSchema = z.object({
+  okrId: z.string().min(1, "Please select an OKR"),
+  staffId: z.string(),
+  quarter: z.string().min(1, "Please select a quarter"),
+  year: z.number(),
+  progress: z.coerce.number().min(0).max(100),
+  keyResultScores: z.array(keyResultScoreSchema).min(1, "At least one key result score is required"),
+  averageScore: z.number().min(0).max(100),
+  additionalKeyResults: z.string().optional(),
+  notes: z.string().min(10, "Please summarize outcomes, challenges, or accomplishments (minimum 10 characters)"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -35,12 +50,20 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   const { toast } = useToast();
   const [selectedOkr, setSelectedOkr] = useState<OkrWithDetails | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [selectedQuarter, setSelectedQuarter] = useState("");
+  const [selectedYear, setSelectedYear] = useState(currentYear);
 
   const { data: okrs, isLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs", staff.id],
   });
 
   const staffOkrs = okrs?.filter((okr) => okr.staffId === staff.id) || [];
+  
+  // Filter OKRs by selected quarter and year
+  const filteredOkrs = staffOkrs.filter((okr) => {
+    if (!selectedQuarter || !selectedYear) return false;
+    return okr.quarter === selectedQuarter && okr.year === selectedYear;
+  });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -50,13 +73,68 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
       quarter: "",
       year: currentYear,
       progress: 0,
+      keyResultScores: [],
+      averageScore: 0,
+      additionalKeyResults: "",
       notes: "",
     },
   });
 
+  // Watch key result scores to calculate average
+  const keyResultScores = useWatch({
+    control: form.control,
+    name: "keyResultScores",
+  });
+
+  // Auto-calculate average score
+  useEffect(() => {
+    if (keyResultScores && keyResultScores.length > 0) {
+      const validScores = keyResultScores.filter(kr => typeof kr.score === 'number' && !isNaN(kr.score));
+      if (validScores.length > 0) {
+        const sum = validScores.reduce((acc, kr) => acc + Number(kr.score), 0);
+        const average = Math.round(sum / validScores.length);
+        form.setValue("averageScore", average);
+        form.setValue("progress", average);
+      }
+    }
+  }, [keyResultScores, form]);
+
+  // When OKR is selected, populate key result scores
+  const handleOkrSelection = (okrId: string) => {
+    const okr = filteredOkrs.find((o) => o.id === okrId);
+    setSelectedOkr(okr || null);
+    
+    if (okr) {
+      // Parse key results from the OKR
+      let keyResults: any[] = [];
+      try {
+        if (typeof okr.keyResults === 'string') {
+          keyResults = JSON.parse(okr.keyResults);
+        } else if (Array.isArray(okr.keyResults)) {
+          keyResults = okr.keyResults;
+        }
+      } catch (e) {
+        console.error("Failed to parse key results:", e);
+      }
+
+      // Initialize form with key result scores
+      const initialScores = keyResults.map((kr, index) => ({
+        keyResultNumber: index + 1,
+        description: kr.description || `Key Result ${index + 1}`,
+        score: 0,
+      }));
+
+      form.setValue("keyResultScores", initialScores);
+    }
+  };
+
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
-      return await apiRequest("POST", "/api/quarterly-updates", data);
+      const payload = {
+        ...data,
+        keyResultScores: JSON.stringify(data.keyResultScores),
+      };
+      return await apiRequest("POST", "/api/quarterly-updates", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
@@ -83,12 +161,17 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   const handleSubmitAnother = () => {
     setIsSubmitted(false);
     setSelectedOkr(null);
+    setSelectedQuarter("");
+    setSelectedYear(currentYear);
     form.reset({
       okrId: "",
       staffId: staff.id,
       quarter: "",
       year: currentYear,
       progress: 0,
+      keyResultScores: [],
+      averageScore: 0,
+      additionalKeyResults: "",
       notes: "",
     });
   };
@@ -118,27 +201,20 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
         <CardHeader>
           <CardTitle className="text-2xl font-semibold">Submit Quarterly Update</CardTitle>
           <CardDescription>
-            Update progress on your existing OKRs
+            Score each key result for your OKR and provide a summary of outcomes
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="space-y-4">
               <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-32 w-full" />
               <Skeleton className="h-12 w-full" />
-            </div>
-          ) : staffOkrs.length === 0 ? (
-            <div className="text-center py-12">
-              <AlertCircle className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-20" />
-              <h3 className="text-lg font-semibold mb-2">No OKRs Found</h3>
-              <p className="text-muted-foreground mb-6">
-                You haven't submitted any OKRs yet. Please submit an OKR first before adding updates.
-              </p>
+              <Skeleton className="h-32 w-full" />
             </div>
           ) : (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                {/* Staff Information */}
                 <div className="bg-muted/50 p-4 rounded-md space-y-2">
                   <h3 className="font-medium text-sm text-muted-foreground">Staff Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -163,118 +239,23 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                   </div>
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="okrId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Select OKR *</FormLabel>
-                      <Select
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          const okr = staffOkrs.find((o) => o.id === value);
-                          setSelectedOkr(okr || null);
-                        }}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger data-testid="select-okr">
-                            <SelectValue placeholder="Choose an OKR to update" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {staffOkrs.map((okr) => (
-                            <SelectItem key={okr.id} value={okr.id} data-testid={`option-okr-${okr.id}`}>
-                              {okr.okrNumber} - {okr.objectiveStatement.substring(0, 60)}{okr.objectiveStatement.length > 60 ? '...' : ''} ({okr.quarter} {okr.year})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {selectedOkr && (
-                  <Card className="bg-muted/30">
-                    <CardContent className="pt-4">
-                      <h4 className="font-semibold mb-2">OKR Details</h4>
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-2 border-b">
-                          <div>
-                            <p className="text-xs font-medium text-muted-foreground">Submitted for SPU</p>
-                            <p className="text-sm">{selectedOkr.spu?.name || 'N/A'}</p>
-                          </div>
-                          {selectedOkr.subUnit && (
-                            <div>
-                              <p className="text-xs font-medium text-muted-foreground">Sub-Unit</p>
-                              <p className="text-sm">{selectedOkr.subUnit.name}</p>
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground">Objective Statement</p>
-                          <p className="text-sm">{selectedOkr.objectiveStatement}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground">Key Results</p>
-                          {(() => {
-                            const { keyResults } = selectedOkr;
-                            
-                            if (!keyResults) {
-                              return <p className="text-sm text-muted-foreground mt-1">No key results available</p>;
-                            }
-                            
-                            if (Array.isArray(keyResults)) {
-                              return (
-                                <ul className="text-sm space-y-1 mt-1">
-                                  {keyResults.map((kr: any, idx: number) => (
-                                    <li key={idx}>• {kr.description} ({kr.percentage}%)</li>
-                                  ))}
-                                </ul>
-                              );
-                            }
-                            
-                            if (typeof keyResults === 'string') {
-                              try {
-                                const parsed = JSON.parse(keyResults);
-                                if (Array.isArray(parsed)) {
-                                  return (
-                                    <ul className="text-sm space-y-1 mt-1">
-                                      {parsed.map((kr: any, idx: number) => (
-                                        <li key={idx}>• {kr.description} ({kr.percentage}%)</li>
-                                      ))}
-                                    </ul>
-                                  );
-                                }
-                              } catch {
-                                // Not valid JSON, display as plain text
-                              }
-                              return <p className="text-sm mt-1">{keyResults}</p>;
-                            }
-                            
-                            return <p className="text-sm text-muted-foreground mt-1">Invalid key results format</p>;
-                          })()}
-                        </div>
-                        <div className="flex items-center gap-4 text-sm">
-                          <span className="text-muted-foreground">Current Progress: {selectedOkr.currentValue}%</span>
-                        </div>
-                        <div>
-                          <Progress value={selectedOkr.currentValue} className="h-2" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
+                {/* Quarter and Year Selection */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}
                     name="quarter"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Update Quarter *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <FormLabel>Select Year and Quarter *</FormLabel>
+                        <Select 
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            setSelectedQuarter(value);
+                            setSelectedOkr(null);
+                            form.setValue("okrId", "");
+                          }} 
+                          value={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger data-testid="select-update-quarter">
                               <SelectValue placeholder="Select quarter" />
@@ -288,6 +269,9 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                             ))}
                           </SelectContent>
                         </Select>
+                        <FormDescription>
+                          Choose the quarter you are scoring
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -298,8 +282,17 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                     name="year"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Update Year *</FormLabel>
-                        <Select onValueChange={(val) => field.onChange(Number(val))} value={String(field.value)}>
+                        <FormLabel>Year *</FormLabel>
+                        <Select 
+                          onValueChange={(val) => {
+                            const yearNum = Number(val);
+                            field.onChange(yearNum);
+                            setSelectedYear(yearNum);
+                            setSelectedOkr(null);
+                            form.setValue("okrId", "");
+                          }} 
+                          value={String(field.value)}
+                        >
                           <FormControl>
                             <SelectTrigger data-testid="select-update-year">
                               <SelectValue />
@@ -319,78 +312,164 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="progress"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Current Progress % *</FormLabel>
-                      <FormControl>
-                        <div className="space-y-2">
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="5"
-                            {...field}
-                            className="w-full"
-                            data-testid="input-progress-slider"
+                {/* OKR Selection - only shown after quarter/year selected */}
+                {selectedQuarter && selectedYear && (
+                  <FormField
+                    control={form.control}
+                    name="okrId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Which numbered OKR are you scoring? *</FormLabel>
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleOkrSelection(value);
+                          }}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-okr">
+                              <SelectValue placeholder="Choose an OKR to score" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {filteredOkrs.length === 0 ? (
+                              <div className="p-2 text-sm text-muted-foreground">
+                                No OKRs found for {selectedQuarter} {selectedYear}
+                              </div>
+                            ) : (
+                              filteredOkrs.map((okr) => (
+                                <SelectItem key={okr.id} value={okr.id} data-testid={`option-okr-${okr.id}`}>
+                                  {okr.okrNumber} - {okr.objectiveStatement.substring(0, 60)}{okr.objectiveStatement.length > 60 ? '...' : ''}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Select which OKR you want to score for this quarter
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {/* Key Result Scores - shown after OKR selected */}
+                {selectedOkr && keyResultScores && keyResultScores.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">Score Each Key Result</h3>
+                      <Badge variant="secondary" className="text-lg px-4 py-1">
+                        Average: {form.watch("averageScore")}%
+                      </Badge>
+                    </div>
+
+                    <Card className="bg-muted/30">
+                      <CardContent className="pt-4 space-y-4">
+                        {keyResultScores.map((_, index) => (
+                          <FormField
+                            key={index}
+                            control={form.control}
+                            name={`keyResultScores.${index}.score`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>
+                                  Key Result {index + 1}: {keyResultScores[index].description}
+                                </FormLabel>
+                                <FormControl>
+                                  <div className="flex items-center gap-4">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="100"
+                                      placeholder="Enter score 0-100"
+                                      {...field}
+                                      onChange={(e) => field.onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+                                      className="max-w-xs"
+                                      data-testid={`input-kr-${index + 1}-score`}
+                                    />
+                                    <span className="text-sm text-muted-foreground">/ 100</span>
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                          <div className="flex items-center justify-between">
-                            <span className="text-2xl font-semibold" data-testid="text-progress-value">
-                              {field.value}%
-                            </span>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
+                        ))}
+                      </CardContent>
+                    </Card>
+
+                    {/* Additional Key Results */}
+                    <FormField
+                      control={form.control}
+                      name="additionalKeyResults"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Additional Key Results (Optional)</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="If you have more than 4 Key Results, enter additional scores here (e.g., KR5: 50, KR6: 90, etc.)"
+                              className="min-h-20 resize-none"
                               {...field}
-                              className="w-20 text-right border rounded px-2 py-1"
-                              data-testid="input-progress-number"
+                              data-testid="input-additional-krs"
                             />
-                          </div>
-                        </div>
-                      </FormControl>
-                      <FormDescription>
-                        Your current progress toward the target
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                          </FormControl>
+                          <FormDescription>
+                            Enter any additional key result scores beyond the first 4
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Update Notes *</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Describe your progress, challenges, and next steps..."
-                          className="min-h-32 resize-none"
-                          {...field}
-                          data-testid="input-notes"
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Provide details about your progress this quarter
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    {/* Summary Notes */}
+                    <FormField
+                      control={form.control}
+                      name="notes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Summary *</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Please summarize any outcomes, challenges, accomplishments, or achievements for this OKR..."
+                              className="min-h-32 resize-none"
+                              {...field}
+                              data-testid="input-notes"
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Describe outcomes, challenges, accomplishments, or achievements (minimum 10 characters)
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <div className="flex justify-end gap-4 pt-4">
-                  <Button
-                    type="submit"
-                    size="lg"
-                    disabled={mutation.isPending}
-                    data-testid="button-submit-update"
-                  >
-                    {mutation.isPending ? "Submitting..." : "Submit Update"}
-                  </Button>
-                </div>
+                    <div className="flex justify-end gap-4 pt-4">
+                      <Button
+                        type="submit"
+                        size="lg"
+                        disabled={mutation.isPending}
+                        data-testid="button-submit-update"
+                      >
+                        {mutation.isPending ? "Submitting..." : "Submit Quarterly Update"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {selectedQuarter && selectedYear && !selectedOkr && filteredOkrs.length === 0 && (
+                  <Card className="border-destructive/50">
+                    <CardContent className="pt-6 pb-6 text-center">
+                      <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-3" />
+                      <p className="text-sm text-muted-foreground">
+                        You don't have any OKRs for {selectedQuarter} {selectedYear}.
+                        Please select a different quarter/year or submit a new OKR first.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </form>
             </Form>
           )}
