@@ -26,6 +26,8 @@ export const staff = pgTable("staff", {
 export const okrs = pgTable("okrs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
+  spuId: varchar("spu_id").notNull().references(() => spus.id),
+  subUnitId: varchar("sub_unit_id").references(() => subUnits.id),
   okrNumber: text("okr_number").notNull(),
   quarter: text("quarter").notNull(),
   year: integer("year").notNull(),
