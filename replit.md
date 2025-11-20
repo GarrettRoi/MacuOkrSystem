@@ -60,10 +60,10 @@ Preferred communication style: Simple, everyday language.
 **Database**: PostgreSQL (configured via `drizzle.config.ts`), using Neon Database serverless driver (`@neondatabase/serverless`).
 
 **Schema Design**:
-- **departments**: ID, name (unique)
-- **sub_departments**: ID, name, departmentId (foreign key with cascade delete)
-- **staff**: ID, name, email (unique), departmentId, optional subDepartmentId, isAdmin (boolean, default false)
-- **okrs**: ID, staffId (foreign key with cascade delete), okrNumber, quarter, year, collaborationSpuId (optional), universityObjective, universityKeyResult, objectiveStatement, keyResults (JSON text), currentValue, status, createdAt timestamp. Legacy optional fields: title, description, targetValue
+- **departments**: ID, name (unique). Also referred to as "SPU (School, Department, Unit)" in the UI.
+- **sub_departments**: ID, name, departmentId/spuId (foreign key with cascade delete). Also referred to as "Sub-Unit" or "Division" in the UI.
+- **staff**: ID, name, email (unique), spuId (primary department/SPU), optional subUnitId (primary sub-unit), isAdmin (boolean, default false)
+- **okrs**: ID, staffId (foreign key with cascade delete), spuId (required - which SPU the OKR is submitted for), subUnitId (optional - which sub-unit the OKR is submitted for), okrNumber, quarter, year, collaborationSpuId (optional), universityObjective, universityKeyResult, objectiveStatement, keyResults (JSON text), currentValue, status, createdAt timestamp. Legacy optional fields: title, description, targetValue (nullable for backward compatibility)
 - **quarterly_updates**: ID, okrId (foreign key with cascade delete), staffId, quarter, year, progress, notes, submittedAt timestamp
 
 **OKR Structure**:
@@ -77,6 +77,22 @@ Preferred communication style: Simple, everyday language.
 **Data Validation**: Zod schemas generated from Drizzle table definitions using `drizzle-zod`, ensuring type safety between database schema and API validation.
 
 **Migrations**: Drizzle Kit for schema migrations, output to `./migrations` directory.
+
+### SPU Selection Feature
+
+**Purpose**: Allows staff members to submit OKRs for departments/SPUs other than their primary assignment, supporting cross-departmental work.
+
+**Key Distinction**: The system maintains a clear separation between:
+- **Staff Primary SPU/Sub-Unit**: The department where the staff member is primarily assigned (stored in staff table)
+- **OKR Submission SPU/Sub-Unit**: The department for which a specific OKR is being submitted (stored in okrs table)
+
+**Implementation**:
+- **Submit OKR Form**: Displays staff's primary SPU/sub-unit as read-only information, then provides clearly labeled dropdowns to select which SPU/sub-unit the OKR is being submitted for
+- **Quarterly Update Form**: Shows both the staff's primary department and the OKR's submission department for clarity
+- **Dashboard**: Filters and groups OKRs by submission SPU, allowing views of departmental progress
+- **CSV Export**: Includes separate columns for "Staff Primary SPU", "Staff Sub-Unit", "OKR Submitted for SPU", and "OKR Submitted for Sub-Unit"
+
+**User Experience**: Staff can select any SPU when submitting an OKR (defaults to their primary SPU). The sub-unit dropdown dynamically filters to show only sub-units belonging to the selected SPU.
 
 ### Authentication and Authorization
 
