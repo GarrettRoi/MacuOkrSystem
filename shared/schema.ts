@@ -129,6 +129,8 @@ export type StaffWithDetails = Staff & {
 
 export type OkrWithDetails = Okr & {
   staff: StaffWithDetails;
+  spu?: Spu | null;
+  subUnit?: SubUnit | null;
   collaborationSpu?: Spu | null;
 };
 

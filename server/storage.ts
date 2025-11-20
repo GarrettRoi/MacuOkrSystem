@@ -227,30 +227,40 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllOkrsWithDetails(): Promise<OkrWithDetails[]> {
+    const okrSpu = alias(spus, 'okrSpu');
+    const okrSubUnit = alias(subUnits, 'okrSubUnit');
+    const staffSpu = alias(spus, 'staffSpu');
+    const staffSubUnit = alias(subUnits, 'staffSubUnit');
     const collaborationSpu = alias(spus, 'collaborationSpu');
     
     const result = await db
       .select({
         okr: okrs,
         staff: staff,
-        spu: spus,
-        subUnit: subUnits,
+        okrSpu: okrSpu,
+        okrSubUnit: okrSubUnit,
+        staffSpu: staffSpu,
+        staffSubUnit: staffSubUnit,
         collaborationSpu: collaborationSpu,
       })
       .from(okrs)
       .leftJoin(staff, eq(okrs.staffId, staff.id))
-      .leftJoin(spus, eq(staff.spuId, spus.id))
-      .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
+      .leftJoin(okrSpu, eq(okrs.spuId, okrSpu.id))
+      .leftJoin(okrSubUnit, eq(okrs.subUnitId, okrSubUnit.id))
+      .leftJoin(staffSpu, eq(staff.spuId, staffSpu.id))
+      .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
       .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id));
 
     return result.map((row) => ({
       ...row.okr,
       staff: {
         ...row.staff!,
-        spu: row.spu!,
-        subUnit: row.subUnit,
+        spu: row.staffSpu!,
+        subUnit: row.staffSubUnit || null,
       },
-      collaborationSpu: row.collaborationSpu || undefined,
+      spu: row.okrSpu || null,
+      subUnit: row.okrSubUnit || null,
+      collaborationSpu: row.collaborationSpu || null,
     }));
   }
 
