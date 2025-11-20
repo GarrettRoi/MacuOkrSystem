@@ -51,6 +51,9 @@ export const quarterlyUpdates = pgTable("quarterly_updates", {
   quarter: text("quarter").notNull(),
   year: integer("year").notNull(),
   progress: integer("progress").notNull(),
+  keyResultScores: text("key_result_scores"),
+  averageScore: integer("average_score"),
+  additionalKeyResults: text("additional_key_results"),
   notes: text("notes").notNull(),
   submittedAt: timestamp("submitted_at").notNull().defaultNow(),
 });
