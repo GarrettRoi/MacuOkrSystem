@@ -139,10 +139,12 @@ export default function Export() {
           <div className="space-y-3">
             <h4 className="font-medium text-sm">Export will include:</h4>
             <ul className="text-sm text-muted-foreground space-y-1.5 ml-5">
-              <li className="list-disc">Staff name, email, primary SPU, and sub-unit</li>
-              <li className="list-disc">OKR title, description, and timeline (quarter/year)</li>
-              <li className="list-disc">Target values and current progress</li>
+              <li className="list-disc">Staff name, email, and primary SPU</li>
+              <li className="list-disc">OKR submitted for SPU and sub-unit</li>
+              <li className="list-disc">OKR number, university objectives, key results, and timeline (quarter/year)</li>
+              <li className="list-disc">Objective statement and progress</li>
               <li className="list-disc">Status and submission dates</li>
+              <li className="list-disc">Collaboration SPU information (if applicable)</li>
               <li className="list-disc">All quarterly update notes and timestamps</li>
             </ul>
           </div>

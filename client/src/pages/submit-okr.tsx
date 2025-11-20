@@ -279,38 +279,46 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="spuId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Primary SPU (School, Department, Unit) *</FormLabel>
-                      <Select 
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          form.setValue("subUnitId", undefined);
-                        }} 
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger data-testid="select-spu">
-                            <SelectValue placeholder="Select SPU" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {spus?.map((spu) => (
-                            <SelectItem key={spu.id} value={spu.id}>
-                              {spu.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        Select which SPU this OKR is being submitted for
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
+              <div className="space-y-4">
+                <div className="border-b pb-2">
+                  <h3 className="font-semibold text-base">OKR Submission Department</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Select which SPU and sub-unit this OKR is being submitted for. This may differ from your primary department if you work across multiple areas.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="spuId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Submit OKR for SPU *</FormLabel>
+                        <Select 
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            form.setValue("subUnitId", undefined);
+                          }} 
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-spu">
+                              <SelectValue placeholder="Select SPU" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {spus?.map((spu) => (
+                              <SelectItem key={spu.id} value={spu.id}>
+                                {spu.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">
+                          Choose the department this OKR targets
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
                   )}
                 />
 
@@ -350,6 +358,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     );
                   }}
                 />
+                </div>
               </div>
 
               <FormField

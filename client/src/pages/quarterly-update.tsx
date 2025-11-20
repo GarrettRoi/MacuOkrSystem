@@ -147,9 +147,19 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                       <p className="text-sm text-muted-foreground" data-testid="text-staff-name">{staff.name}</p>
                     </div>
                     <div>
+                      <p className="text-sm font-medium">Email</p>
+                      <p className="text-sm text-muted-foreground" data-testid="text-staff-email">{staff.email}</p>
+                    </div>
+                    <div>
                       <p className="text-sm font-medium">Primary SPU</p>
                       <p className="text-sm text-muted-foreground" data-testid="text-staff-spu">{staff.spu.name}</p>
                     </div>
+                    {staff.subUnit && (
+                      <div>
+                        <p className="text-sm font-medium">Primary Sub-Unit</p>
+                        <p className="text-sm text-muted-foreground" data-testid="text-staff-subunit">{staff.subUnit.name}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -190,6 +200,18 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                     <CardContent className="pt-4">
                       <h4 className="font-semibold mb-2">OKR Details</h4>
                       <div className="space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-2 border-b">
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground">Submitted for SPU</p>
+                            <p className="text-sm">{selectedOkr.spu?.name || 'N/A'}</p>
+                          </div>
+                          {selectedOkr.subUnit && (
+                            <div>
+                              <p className="text-xs font-medium text-muted-foreground">Sub-Unit</p>
+                              <p className="text-sm">{selectedOkr.subUnit.name}</p>
+                            </div>
+                          )}
+                        </div>
                         <div>
                           <p className="text-xs font-medium text-muted-foreground">Objective Statement</p>
                           <p className="text-sm">{selectedOkr.objectiveStatement}</p>
