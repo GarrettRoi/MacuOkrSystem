@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
+import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Plus, Trash2, Sparkles } from "lucide-react";
 import type { StaffWithDetails, Spu, SubUnit } from "@shared/schema";
 import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, OKR_NUMBERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -139,37 +140,133 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   };
 
   if (isSubmitted) {
+    const confettiParticles = Array.from({ length: 30 }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      delay: Math.random() * 0.5,
+      duration: 2 + Math.random() * 2,
+    }));
+
     return (
       <div className="max-w-3xl mx-auto p-6">
-        <Card>
-          <CardContent className="pt-12 pb-12 text-center">
-            <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-semibold mb-2">OKR Submitted Successfully!</h2>
-            <p className="text-muted-foreground mb-6">
-              Your OKR has been recorded and is now being tracked in the system.
-            </p>
-            <Button onClick={handleSubmitAnother} data-testid="button-submit-another">
-              Submit Another OKR
-            </Button>
-          </CardContent>
-        </Card>
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          >
+            <Card className="relative overflow-hidden">
+              <CardContent className="pt-12 pb-12 text-center relative">
+                {confettiParticles.map((particle) => (
+                  <motion.div
+                    key={particle.id}
+                    className="absolute top-0 w-2 h-2 rounded-full"
+                    style={{
+                      left: `${particle.x}%`,
+                      background: `hsl(${Math.random() * 360}, 70%, 60%)`,
+                    }}
+                    initial={{ y: -20, opacity: 1, scale: 1 }}
+                    animate={{
+                      y: 400,
+                      opacity: 0,
+                      scale: 0,
+                      rotate: 360,
+                    }}
+                    transition={{
+                      duration: particle.duration,
+                      delay: particle.delay,
+                      ease: "easeIn",
+                    }}
+                  />
+                ))}
+
+                <motion.div
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 200,
+                    damping: 15,
+                    delay: 0.2,
+                  }}
+                >
+                  <div className="relative inline-block">
+                    <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
+                    <motion.div
+                      className="absolute -top-1 -right-1"
+                      animate={{
+                        scale: [1, 1.2, 1],
+                        rotate: [0, 10, -10, 0],
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    >
+                      <Sparkles className="h-6 w-6 text-yellow-500" />
+                    </motion.div>
+                  </div>
+                </motion.div>
+
+                <motion.h2
+                  className="text-2xl font-semibold mb-2"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3, duration: 0.5 }}
+                >
+                  OKR Submitted Successfully!
+                </motion.h2>
+
+                <motion.p
+                  className="text-muted-foreground mb-6"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4, duration: 0.5 }}
+                >
+                  Your OKR has been recorded and is now being tracked in the system.
+                </motion.p>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5, duration: 0.5 }}
+                >
+                  <Button 
+                    onClick={handleSubmitAnother} 
+                    data-testid="button-submit-another"
+                    className="relative"
+                  >
+                    Submit Another OKR
+                  </Button>
+                </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </AnimatePresence>
       </div>
     );
   }
 
   return (
     <div className="max-w-3xl mx-auto p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold">Submit New OKR</CardTitle>
-          <CardDescription>
-            Create a new Objective and Key Result for tracking
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="bg-muted/50 p-4 rounded-md space-y-2">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        key="form"
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl font-semibold">Submit New OKR</CardTitle>
+            <CardDescription>
+              Create a new Objective and Key Result for tracking
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <div className="bg-muted/50 p-4 rounded-md space-y-2">
                 <h3 className="font-medium text-sm text-muted-foreground">Staff Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -570,6 +667,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
           </Form>
         </CardContent>
       </Card>
+      </motion.div>
     </div>
   );
 }
