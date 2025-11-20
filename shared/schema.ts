@@ -82,7 +82,20 @@ export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });
 export const insertSubUnitSchema = createInsertSchema(subUnits).omit({ id: true });
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
 
-const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true });
+export const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true });
+
+export const updateOkrSchema = z.object({
+  objectiveStatement: z.string().min(20, "Objective must be at least 20 characters").optional(),
+  status: z.enum(["not_started", "in_progress", "at_risk", "completed"]).optional(),
+}).refine(
+  (data) => {
+    // At least one field must be provided
+    return data.objectiveStatement !== undefined || data.status !== undefined;
+  },
+  {
+    message: "At least one field (objectiveStatement or status) must be provided",
+  }
+);
 
 export const insertOkrSchema = baseInsertOkrSchema.refine(
   (data) => {
@@ -112,6 +125,19 @@ export const insertOkrSchema = baseInsertOkrSchema.refine(
 );
 
 export const insertQuarterlyUpdateSchema = createInsertSchema(quarterlyUpdates).omit({ id: true, submittedAt: true });
+
+export const updateQuarterlyUpdateSchema = z.object({
+  averageScore: z.number().min(0).max(100).optional(),
+  additionalKeyResults: z.string().optional(),
+  notes: z.string().min(10, "Notes must be at least 10 characters").optional(),
+}).refine(
+  (data) => {
+    return data.averageScore !== undefined || data.additionalKeyResults !== undefined || data.notes !== undefined;
+  },
+  {
+    message: "At least one field must be provided",
+  }
+);
 
 export type InsertSpu = z.infer<typeof insertSpuSchema>;
 export type InsertSubUnit = z.infer<typeof insertSubUnitSchema>;

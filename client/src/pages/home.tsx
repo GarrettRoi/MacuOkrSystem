@@ -54,7 +54,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       path: "/data",
       color: "text-cyan-600",
       bg: "bg-cyan-50",
-      adminOnly: false,
+      adminOnly: true,
     },
     {
       title: "Admin Panel",

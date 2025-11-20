@@ -25,14 +25,10 @@ interface AggregatedOkr extends OkrWithDetails {
 // Form schemas for editing
 const editOkrSchema = z.object({
   objectiveStatement: z.string().min(20, "Objective must be at least 20 characters"),
-  universityObjective: z.string(),
-  universityKeyResult: z.string(),
-  keyResults: z.string(),
   status: z.enum(["not_started", "in_progress", "at_risk", "completed"]),
 });
 
 const editQuarterlyUpdateSchema = z.object({
-  keyResultScores: z.string(),
   averageScore: z.coerce.number().min(0).max(100),
   additionalKeyResults: z.string().optional(),
   notes: z.string().min(10, "Notes must be at least 10 characters"),
@@ -117,9 +113,6 @@ export default function Data() {
     setEditingOkr(okr);
     okrForm.reset({
       objectiveStatement: okr.objectiveStatement,
-      universityObjective: okr.universityObjective,
-      universityKeyResult: okr.universityKeyResult,
-      keyResults: okr.keyResults,
       status: okr.status as "not_started" | "in_progress" | "at_risk" | "completed",
     });
   };
@@ -127,7 +120,6 @@ export default function Data() {
   const handleEditUpdate = (update: QuarterlyUpdate & { keyResultScoresParsed: any }) => {
     setEditingUpdate(update);
     updateForm.reset({
-      keyResultScores: update.keyResultScores || "[]",
       averageScore: update.averageScore || 0,
       additionalKeyResults: update.additionalKeyResults || "",
       notes: update.notes,
@@ -352,19 +344,10 @@ export default function Data() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={okrForm.control}
-                name="universityObjective"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>University Objective</FormLabel>
-                    <FormControl>
-                      <Input {...field} disabled data-testid="input-university-objective" />
-                    </FormControl>
-                    <FormDescription>Read-only field</FormDescription>
-                  </FormItem>
-                )}
-              />
+              <div className="space-y-2">
+                <p className="text-sm font-medium">University Objective (Read-only)</p>
+                <p className="text-sm text-muted-foreground">{editingOkr?.universityObjective}</p>
+              </div>
               <FormField
                 control={okrForm.control}
                 name="status"

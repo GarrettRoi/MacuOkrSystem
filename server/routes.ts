@@ -6,7 +6,9 @@ import {
   insertSpuSchema,
   insertSubUnitSchema,
   insertOkrSchema,
+  updateOkrSchema,
   insertQuarterlyUpdateSchema,
+  updateQuarterlyUpdateSchema,
 } from "@shared/schema";
 import type { Okr, OkrWithDetails } from "@shared/schema";
 
@@ -316,35 +318,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/okrs/:id", async (req, res) => {
+  app.put("/api/okrs/:id", requireAdmin, async (req, res) => {
     try {
-      // Basic validation for allowed fields
-      const allowedFields = ['objectiveStatement', 'universityObjective', 'universityKeyResult', 'keyResults', 'status'];
-      const updates: Record<string, any> = {};
+      // Check if OKR exists
+      const existingOkr = await storage.getOkr(req.params.id);
+      if (!existingOkr) {
+        return res.status(404).json({ error: "OKR not found" });
+      }
       
-      for (const key of allowedFields) {
-        if (key in req.body) {
-          updates[key] = req.body[key];
+      // Validate using dedicated update schema (already allows partial updates)
+      const parsed = updateOkrSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      }
+      
+      // Filter out undefined values to prevent overwriting existing data
+      const updates: Record<string, any> = {};
+      for (const [key, value] of Object.entries(parsed.data)) {
+        if (value !== undefined) {
+          updates[key] = value;
         }
       }
       
-      // Validate required field lengths if present
-      if (updates.objectiveStatement && updates.objectiveStatement.length < 20) {
-        return res.status(400).json({ error: "Objective statement must be at least 20 characters" });
+      // Reject empty updates
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
       }
       
-      if (updates.status && !['not_started', 'in_progress', 'at_risk', 'completed'].includes(updates.status)) {
-        return res.status(400).json({ error: "Invalid status value" });
-      }
-      
+      console.log("PUT /api/okrs/:id - Updates:", updates);
       const updatedOkr = await storage.updateOkr(req.params.id, updates);
       res.json(updatedOkr);
     } catch (error) {
-      res.status(500).json({ error: "Failed to update OKR" });
+      console.error("PUT /api/okrs/:id - Error:", error);
+      res.status(500).json({ error: "Failed to update OKR", details: error instanceof Error ? error.message : String(error) });
     }
   });
 
-  app.delete("/api/okrs/:id", async (req, res) => {
+  app.delete("/api/okrs/:id", requireAdmin, async (req, res) => {
     try {
       await storage.deleteOkr(req.params.id);
       res.status(204).send();
@@ -353,8 +363,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Aggregated API: OKRs with their quarterly updates and derived progress
-  app.get("/api/okrs-with-updates", async (_req, res) => {
+  // Aggregated API: OKRs with their quarterly updates and derived progress (admin-only)
+  app.get("/api/okrs-with-updates", requireAdmin, async (_req, res) => {
     try {
       const okrs = await storage.getAllOkrsWithDetails();
       const allUpdates = await storage.getAllQuarterlyUpdates();
@@ -421,38 +431,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/quarterly-updates/:id", async (req, res) => {
+  app.put("/api/quarterly-updates/:id", requireAdmin, async (req, res) => {
     try {
-      // Basic validation for allowed fields
-      const allowedFields = ['keyResultScores', 'averageScore', 'additionalKeyResults', 'notes', 'progress'];
+      // Check if update exists
+      const existingUpdate = await storage.getQuarterlyUpdate(req.params.id);
+      if (!existingUpdate) {
+        return res.status(404).json({ error: "Quarterly update not found" });
+      }
+      
+      // Validate using dedicated update schema
+      const parsed = updateQuarterlyUpdateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      }
+      
+      // Filter out undefined values to prevent overwriting existing data
       const updates: Record<string, any> = {};
-      
-      for (const key of allowedFields) {
-        if (key in req.body) {
-          updates[key] = req.body[key];
+      for (const [key, value] of Object.entries(parsed.data)) {
+        if (value !== undefined) {
+          updates[key] = value;
         }
       }
       
-      // Validate field constraints
-      if (updates.averageScore !== undefined && (updates.averageScore < 0 || updates.averageScore > 100)) {
-        return res.status(400).json({ error: "Average score must be between 0 and 100" });
-      }
-      
-      if (updates.progress !== undefined && (updates.progress < 0 || updates.progress > 100)) {
-        return res.status(400).json({ error: "Progress must be between 0 and 100" });
-      }
-      
-      if (updates.notes && updates.notes.length < 10) {
-        return res.status(400).json({ error: "Notes must be at least 10 characters" });
-      }
-      
-      // Validate JSON fields if present
-      if (updates.keyResultScores) {
-        try {
-          JSON.parse(updates.keyResultScores);
-        } catch (e) {
-          return res.status(400).json({ error: "Invalid keyResultScores JSON format" });
-        }
+      // Reject empty updates
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
       }
       
       const updatedUpdate = await storage.updateQuarterlyUpdate(req.params.id, updates);
