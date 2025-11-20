@@ -382,6 +382,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "Current %",
         "Status",
         "Created Date",
+        "Latest Update Quarter",
+        "Latest Update Year",
+        "Latest Update Average Score",
+        "Latest Update Key Result Scores (Readable)",
+        "Latest Update Key Result Scores (JSON)",
+        "Latest Update Additional Key Results",
         "Latest Update Notes",
         "Latest Update Date",
       ].join(","));
@@ -392,6 +398,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
         )[0];
         
+        // Parse key result scores from latest update if available
+        let keyResultScoresReadable = "N/A";
+        let keyResultScoresJson = "N/A";
+        if (latestUpdate?.keyResultScores) {
+          try {
+            const scores = JSON.parse(latestUpdate.keyResultScores);
+            keyResultScoresReadable = scores.map((kr: any) => 
+              `KR${kr.keyResultNumber}: ${kr.score}%`
+            ).join("; ");
+            keyResultScoresJson = latestUpdate.keyResultScores.replace(/"/g, '""');
+          } catch (e) {
+            keyResultScoresReadable = latestUpdate.keyResultScores;
+            keyResultScoresJson = latestUpdate.keyResultScores;
+          }
+        }
+
         const row = [
           `"${okr.staff.name}"`,
           `"${okr.staff.email}"`,
@@ -410,6 +432,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           okr.currentValue,
           okr.status,
           new Date(okr.createdAt).toISOString().split("T")[0],
+          latestUpdate?.quarter || "N/A",
+          latestUpdate ? String(latestUpdate.year) : "N/A",
+          latestUpdate?.averageScore !== null && latestUpdate?.averageScore !== undefined ? String(latestUpdate.averageScore) : "N/A",
+          `"${keyResultScoresReadable}"`,
+          `"${keyResultScoresJson}"`,
+          latestUpdate?.additionalKeyResults ? `"${latestUpdate.additionalKeyResults.replace(/"/g, '""')}"` : "",
           latestUpdate ? `"${latestUpdate.notes.replace(/"/g, '""')}"` : "N/A",
           latestUpdate ? new Date(latestUpdate.submittedAt).toISOString().split("T")[0] : "N/A",
         ].join(",");

@@ -308,29 +308,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createQuarterlyUpdate(insertUpdate: InsertQuarterlyUpdate): Promise<QuarterlyUpdate> {
+    // Simply create the quarterly update without modifying the parent OKR
+    // The dashboard and other consumers should calculate current progress
+    // from the latest quarterly update's averageScore when needed
     const [update] = await db
       .insert(quarterlyUpdates)
       .values(insertUpdate)
       .returning();
-    
-    const okr = await this.getOkr(insertUpdate.okrId);
-    if (okr) {
-      const updates: Partial<Okr> = {
-        currentValue: insertUpdate.progress,
-      };
-
-      if (insertUpdate.progress === 0) {
-        updates.status = "not_started";
-      } else if (insertUpdate.progress >= okr.targetValue) {
-        updates.status = "completed";
-      } else if (insertUpdate.progress < okr.targetValue * 0.5) {
-        updates.status = "at_risk";
-      } else {
-        updates.status = "in_progress";
-      }
-
-      await this.updateOkr(okr.id, updates);
-    }
     
     return update;
   }

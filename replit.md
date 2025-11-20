@@ -64,7 +64,7 @@ Preferred communication style: Simple, everyday language.
 - **sub_departments**: ID, name, departmentId/spuId (foreign key with cascade delete). Also referred to as "Sub-Unit" or "Division" in the UI.
 - **staff**: ID, name, email (unique), spuId (primary department/SPU), optional subUnitId (primary sub-unit), isAdmin (boolean, default false)
 - **okrs**: ID, staffId (foreign key with cascade delete), spuId (required - which SPU the OKR is submitted for), subUnitId (optional - which sub-unit the OKR is submitted for), okrNumber, quarter, year, collaborationSpuId (optional), universityObjective, universityKeyResult, objectiveStatement, keyResults (JSON text), currentValue, status, createdAt timestamp. Legacy optional fields: title, description, targetValue (nullable for backward compatibility)
-- **quarterly_updates**: ID, okrId (foreign key with cascade delete), staffId, quarter, year, progress, notes, submittedAt timestamp
+- **quarterly_updates**: ID, okrId (foreign key with cascade delete), staffId, quarter, year, progress (integer, legacy field maintained for backward compatibility), keyResultScores (text/JSON array of {keyResultNumber, description, score} objects), averageScore (integer, nullable, auto-calculated from keyResultScores), additionalKeyResults (text, nullable), notes (text), submittedAt timestamp
 
 **OKR Structure**:
 - **okrNumber**: One of "OKR 1" through "OKR 5"
@@ -124,7 +124,7 @@ Password verification endpoint at `/api/auth/verify` returns authentication resu
 
 **Submit OKR**: Form for creating new OKRs with OKR number selection, quarter/year selection, collaboration SPU (optional), university-level strategic objective, university-level key result, objective statement, and dynamic key results with percentage allocation. Supports decimal percentages with 0.01 tolerance for floating-point precision.
 
-**Quarterly Update**: Interface for updating progress on existing OKRs with notes and progress percentage.
+**Quarterly Update**: Interface for updating progress on existing OKRs. Staff select quarter/year to filter available OKRs, then score each key result individually (0-100). System auto-calculates average score. Includes optional field for additional key results beyond the original 4, and summary notes field for outcomes/challenges/accomplishments.
 
 **Dashboard**: Analytics view with filtering by quarter/year, displaying:
 - Summary metrics (total OKRs, average progress, active staff, OKRs needing updates)

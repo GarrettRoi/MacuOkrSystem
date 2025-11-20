@@ -134,6 +134,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
       const payload = {
         ...data,
         keyResultScores: JSON.stringify(data.keyResultScores),
+        additionalKeyResults: data.additionalKeyResults?.trim() || null,
       };
       return await apiRequest("POST", "/api/quarterly-updates", payload);
     },
