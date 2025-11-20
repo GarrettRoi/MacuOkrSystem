@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2 } from "lucide-react";
-import type { StaffWithDetails, Spu } from "@shared/schema";
+import type { StaffWithDetails, Spu, SubUnit } from "@shared/schema";
 import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, OKR_NUMBERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -22,6 +22,8 @@ const keyResultSchema = z.object({
 
 const formSchema = z.object({
   staffId: z.string(),
+  spuId: z.string().min(1, "Please select a primary SPU"),
+  subUnitId: z.string().optional(),
   okrNumber: z.string().min(1, "Please select an OKR number"),
   quarter: z.string().min(1, "Please select a quarter"),
   year: z.number(),
@@ -56,10 +58,16 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     queryKey: ["/api/spus"],
   });
 
+  const { data: subUnits } = useQuery<SubUnit[]>({
+    queryKey: ["/api/sub-units"],
+  });
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       staffId: staff.id,
+      spuId: staff.spuId,
+      subUnitId: staff.subUnitId || undefined,
       okrNumber: "",
       quarter: "",
       year: currentYear,
@@ -117,6 +125,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     setIsSubmitted(false);
     form.reset({
       staffId: staff.id,
+      spuId: staff.spuId,
+      subUnitId: staff.subUnitId || undefined,
       okrNumber: "",
       quarter: "",
       year: currentYear,
@@ -269,32 +279,108 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                 />
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="spuId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Primary SPU (School, Department, Unit) *</FormLabel>
+                      <Select 
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          form.setValue("subUnitId", undefined);
+                        }} 
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-spu">
+                            <SelectValue placeholder="Select SPU" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {spus?.map((spu) => (
+                            <SelectItem key={spu.id} value={spu.id}>
+                              {spu.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        Select which SPU this OKR is being submitted for
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="subUnitId"
+                  render={({ field }) => {
+                    const selectedSpuId = form.watch("spuId");
+                    const filteredSubUnits = subUnits?.filter(su => su.spuId === selectedSpuId) || [];
+                    
+                    return (
+                      <FormItem>
+                        <FormLabel>Sub-Unit or Division (Optional)</FormLabel>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          value={field.value}
+                          disabled={!selectedSpuId || filteredSubUnits.length === 0}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-sub-unit">
+                              <SelectValue placeholder={filteredSubUnits.length === 0 ? "No sub-units available" : "Select sub-unit"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {filteredSubUnits.map((subUnit) => (
+                              <SelectItem key={subUnit.id} value={subUnit.id}>
+                                {subUnit.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Select a specific sub-unit if applicable
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              </div>
+
               <FormField
                 control={form.control}
                 name="collaborationSpuId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Collaboration SPU (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-collaboration-spu">
-                          <SelectValue placeholder="Not Applicable" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {spus?.filter((s) => s.id !== staff.spuId).map((spu) => (
-                          <SelectItem key={spu.id} value={spu.id}>
-                            {spu.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      If you are collaborating with another Primary SPU, please select them here
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const selectedSpuId = form.watch("spuId");
+                  return (
+                    <FormItem>
+                      <FormLabel>Collaboration SPU (Optional)</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-collaboration-spu">
+                            <SelectValue placeholder="Not Applicable" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {spus?.filter((s) => s.id !== selectedSpuId).map((spu) => (
+                            <SelectItem key={spu.id} value={spu.id}>
+                              {spu.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        If you are collaborating with another Primary SPU, please select them here
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
               <FormField
