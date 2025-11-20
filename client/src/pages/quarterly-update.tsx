@@ -17,21 +17,22 @@ import type { StaffWithDetails, OkrWithDetails } from "@shared/schema";
 import { insertQuarterlyUpdateSchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
-// Schema for individual key result score
+// Schema for individual key result score (for internal form use)
 const keyResultScoreSchema = z.object({
   keyResultNumber: z.number(),
   description: z.string(),
   score: z.coerce.number().min(0, "Score must be at least 0").max(100, "Score cannot exceed 100"),
 });
 
+// Form schema matches what we need for the UI
 const formSchema = z.object({
   okrId: z.string().min(1, "Please select an OKR"),
   staffId: z.string(),
   quarter: z.string().min(1, "Please select a quarter"),
-  year: z.number(),
+  year: z.coerce.number(),
   progress: z.coerce.number().min(0).max(100),
   keyResultScores: z.array(keyResultScoreSchema).min(1, "At least one key result score is required"),
-  averageScore: z.number().min(0).max(100),
+  averageScore: z.coerce.number().min(0).max(100),
   additionalKeyResults: z.string().optional(),
   notes: z.string().min(10, "Please summarize outcomes, challenges, or accomplishments (minimum 10 characters)"),
 });
