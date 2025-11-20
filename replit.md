@@ -63,8 +63,16 @@ Preferred communication style: Simple, everyday language.
 - **departments**: ID, name (unique)
 - **sub_departments**: ID, name, departmentId (foreign key with cascade delete)
 - **staff**: ID, name, email (unique), departmentId, optional subDepartmentId, isAdmin (boolean, default false)
-- **okrs**: ID, staffId (foreign key with cascade delete), title, description, quarter, year, targetValue, currentValue, status, createdAt timestamp
+- **okrs**: ID, staffId (foreign key with cascade delete), okrNumber, quarter, year, collaborationSpuId (optional), universityObjective, universityKeyResult, objectiveStatement, keyResults (JSON text), currentValue, status, createdAt timestamp. Legacy optional fields: title, description, targetValue
 - **quarterly_updates**: ID, okrId (foreign key with cascade delete), staffId, quarter, year, progress, notes, submittedAt timestamp
+
+**OKR Structure**:
+- **okrNumber**: One of "OKR 1" through "OKR 5"
+- **universityObjective**: One of 5 strategic objectives (CONNECT, ENCOURAGE, INNOVATE, WITNESS, HONOR)
+- **universityKeyResult**: Selected from predefined university-level key results
+- **objectiveStatement**: Free-text description of the OKR objective (min 20 characters)
+- **keyResults**: JSON array of {description, percentage} objects where percentages sum to 100% (±0.01 tolerance)
+- **collaborationSpuId**: Optional reference to another SPU for collaborative OKRs
 
 **Data Validation**: Zod schemas generated from Drizzle table definitions using `drizzle-zod`, ensuring type safety between database schema and API validation.
 
@@ -98,7 +106,7 @@ Password verification endpoint at `/api/auth/verify` returns authentication resu
 
 **Home**: Dashboard showing available actions (submit OKR, quarterly update, view dashboard, admin, export).
 
-**Submit OKR**: Form for creating new OKRs with title, description, quarter/year selection, and target value.
+**Submit OKR**: Form for creating new OKRs with OKR number selection, quarter/year selection, collaboration SPU (optional), university-level strategic objective, university-level key result, objective statement, and dynamic key results with percentage allocation. Supports decimal percentages with 0.01 tolerance for floating-point precision.
 
 **Quarterly Update**: Interface for updating progress on existing OKRs with notes and progress percentage.
 
