@@ -52,8 +52,10 @@ export default function Dashboard() {
     const staffMatch = staffFilter === "All" || String(okr.staffId) === staffFilter;
     const statusMatch = statusFilter === "All" || okr.status === statusFilter;
     const keywordMatch = !keywordSearch || 
-      okr.title.toLowerCase().includes(keywordSearch.toLowerCase()) ||
-      okr.description.toLowerCase().includes(keywordSearch.toLowerCase());
+      okr.objectiveStatement.toLowerCase().includes(keywordSearch.toLowerCase()) ||
+      okr.universityObjective.toLowerCase().includes(keywordSearch.toLowerCase()) ||
+      okr.universityKeyResult.toLowerCase().includes(keywordSearch.toLowerCase()) ||
+      okr.okrNumber.toLowerCase().includes(keywordSearch.toLowerCase());
     
     return quarterMatch && yearMatch && spuMatch && staffMatch && statusMatch && keywordMatch;
   }) || [];

@@ -175,7 +175,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                         <SelectContent>
                           {staffOkrs.map((okr) => (
                             <SelectItem key={okr.id} value={okr.id} data-testid={`option-okr-${okr.id}`}>
-                              {okr.title} ({okr.quarter} {okr.year})
+                              {okr.okrNumber} - {okr.objectiveStatement.substring(0, 60)}{okr.objectiveStatement.length > 60 ? '...' : ''} ({okr.quarter} {okr.year})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -189,13 +189,34 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                   <Card className="bg-muted/30">
                     <CardContent className="pt-4">
                       <h4 className="font-semibold mb-2">OKR Details</h4>
-                      <p className="text-sm text-muted-foreground mb-2">{selectedOkr.description}</p>
-                      <div className="flex items-center gap-4 text-sm mt-4">
-                        <span className="text-muted-foreground">Target: {selectedOkr.targetValue}%</span>
-                        <span className="text-muted-foreground">Current: {selectedOkr.currentValue}%</span>
-                      </div>
-                      <div className="mt-3">
-                        <Progress value={selectedOkr.currentValue} className="h-2" />
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground">Objective Statement</p>
+                          <p className="text-sm">{selectedOkr.objectiveStatement}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground">Key Results</p>
+                          {(() => {
+                            try {
+                              const keyResults = JSON.parse(selectedOkr.keyResults);
+                              return (
+                                <ul className="text-sm space-y-1 mt-1">
+                                  {keyResults.map((kr: any, idx: number) => (
+                                    <li key={idx}>• {kr.description} ({kr.percentage}%)</li>
+                                  ))}
+                                </ul>
+                              );
+                            } catch {
+                              return <p className="text-sm">{selectedOkr.keyResults}</p>;
+                            }
+                          })()}
+                        </div>
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="text-muted-foreground">Current Progress: {selectedOkr.currentValue}%</span>
+                        </div>
+                        <div>
+                          <Progress value={selectedOkr.currentValue} className="h-2" />
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
