@@ -453,6 +453,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Auto-calculate averageScore from keyResultScores if provided
+      if (updates.keyResultScores) {
+        try {
+          const scores = JSON.parse(updates.keyResultScores as string);
+          if (Array.isArray(scores) && scores.length > 0) {
+            const total = scores.reduce((sum: number, kr: any) => sum + (kr.score || 0), 0);
+            updates.averageScore = Math.round(total / scores.length);
+          }
+        } catch (e) {
+          console.error("Failed to calculate average score:", e);
+        }
+      }
+      
       // Reject empty updates
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });

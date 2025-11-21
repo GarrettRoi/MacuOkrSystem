@@ -126,13 +126,33 @@ export const insertOkrSchema = baseInsertOkrSchema.refine(
 
 export const insertQuarterlyUpdateSchema = createInsertSchema(quarterlyUpdates).omit({ id: true, submittedAt: true });
 
+// Schema for individual key result score
+const keyResultScoreSchema = z.object({
+  keyResultNumber: z.number().int().min(1).max(4),
+  description: z.string(),
+  score: z.number().min(0).max(100),
+});
+
 export const updateQuarterlyUpdateSchema = z.object({
-  averageScore: z.number().min(0).max(100).optional(),
+  keyResultScores: z.string().optional().transform((val, ctx) => {
+    if (!val) return undefined;
+    try {
+      const parsed = JSON.parse(val);
+      const validated = z.array(keyResultScoreSchema).parse(parsed);
+      return JSON.stringify(validated);
+    } catch (e) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "keyResultScores must be valid JSON array of {keyResultNumber, description, score}",
+      });
+      return z.NEVER;
+    }
+  }),
   additionalKeyResults: z.string().optional(),
   notes: z.string().min(10, "Notes must be at least 10 characters").optional(),
 }).refine(
   (data) => {
-    return data.averageScore !== undefined || data.additionalKeyResults !== undefined || data.notes !== undefined;
+    return data.keyResultScores !== undefined || data.additionalKeyResults !== undefined || data.notes !== undefined;
   },
   {
     message: "At least one field must be provided",
