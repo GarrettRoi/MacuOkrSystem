@@ -42,6 +42,8 @@ Preferred communication style: Simple, everyday language.
 - Sub-departments: `/api/sub-departments`
 - OKRs: `/api/okrs`
 - Quarterly updates: `/api/quarterly-updates`
+- OKR responsibilities: `/api/okr-responsibilities` (POST - admin only), `/api/okr-responsibilities/:okrId` (GET)
+- Employee progress: `/api/employee-progress` (GET with query params: year, quarter, staffId, spuId, status)
 - Data export: `/api/export/csv`
 
 **Server Architecture**: 
@@ -65,6 +67,7 @@ Preferred communication style: Simple, everyday language.
 - **staff**: ID, name, email (unique), spuId (primary department/SPU), optional subUnitId (primary sub-unit), isAdmin (boolean, default false)
 - **okrs**: ID, staffId (foreign key with cascade delete), spuId (required - which SPU the OKR is submitted for), subUnitId (optional - which sub-unit the OKR is submitted for), okrNumber, quarter, year, collaborationSpuId (optional), universityObjective, universityKeyResult, objectiveStatement, keyResults (JSON text), currentValue, status, createdAt timestamp. Legacy optional fields: title, description, targetValue (nullable for backward compatibility)
 - **quarterly_updates**: ID, okrId (foreign key with cascade delete), staffId, quarter, year, progress (integer, legacy field maintained for backward compatibility), keyResultScores (text/JSON array of {keyResultNumber, description, score} objects), averageScore (integer, nullable, auto-calculated from keyResultScores), additionalKeyResults (text, nullable), notes (text), submittedAt timestamp
+- **okr_responsibilities**: ID (serial), okrId (foreign key to okrs with cascade delete), staffId (foreign key to staff with cascade delete), role (enum: 'owner' or 'collaborator'). Tracks responsible parties for OKRs beyond the original staffId field, supporting multi-person accountability.
 
 **OKR Structure**:
 - **okrNumber**: One of "OKR 1" through "OKR 5"
@@ -131,6 +134,14 @@ Password verification endpoint at `/api/auth/verify` returns authentication resu
 - Department performance bar chart
 - Status distribution pie chart
 - OKRs needing attention list
+
+**Employee Progress**: Comprehensive view for analyzing OKR progress by employee with multi-dimensional filtering. Features include:
+- Filter panel: Filter by year, quarter, employee, SPU, and status
+- Tabbed interface: OKR Summary grid and Timeline view
+- OKR Summary: Card-based grid displaying objectives, key result counts, latest scores, status badges, and last update dates
+- Detail drawer: Full OKR information including objective statement, university alignment, all key results with descriptions, departments (SPU, sub-unit, collaboration SPU), responsible parties (owner + collaborators), and latest quarterly update with individual key result scores
+- Timeline view: Chronological display of quarterly updates across filtered OKRs
+- Clear all filters functionality with active filter count badge
 
 **Admin**: Management interface for creating/deleting staff, departments, and sub-departments with tabbed organization.
 

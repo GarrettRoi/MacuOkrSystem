@@ -160,7 +160,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All years" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="" data-testid="option-filter-year-all">All years</SelectItem>
                       {years && years.length > 0 && years.sort((a, b) => b.year - a.year).map((year) => (
                         <SelectItem key={year.id} value={String(year.year)} data-testid={`option-filter-year-${year.year}`}>
                           {year.year}
@@ -178,7 +177,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All quarters" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="" data-testid="option-filter-quarter-all">All quarters</SelectItem>
                       {QUARTERS.map((q) => (
                         <SelectItem key={q} value={q} data-testid={`option-filter-quarter-${q}`}>
                           {q}
@@ -196,7 +194,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All employees" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="" data-testid="option-filter-staff-all">All employees</SelectItem>
                       {allStaff && allStaff.map((s) => (
                         <SelectItem key={s.id} value={s.id} data-testid={`option-filter-staff-${s.id}`}>
                           {s.name}
@@ -214,7 +211,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All SPUs" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="" data-testid="option-filter-spu-all">All SPUs</SelectItem>
                       {spus && spus.map((spu) => (
                         <SelectItem key={spu.id} value={spu.id} data-testid={`option-filter-spu-${spu.id}`}>
                           {spu.name}
@@ -232,7 +228,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All statuses" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="" data-testid="option-filter-status-all">All statuses</SelectItem>
                       {STATUSES.map((status) => (
                         <SelectItem key={status} value={status} data-testid={`option-filter-status-${status}`}>
                           {statusLabels[status as keyof typeof statusLabels]}
