@@ -10,8 +10,9 @@ import {
   updateOkrSchema,
   insertQuarterlyUpdateSchema,
   updateQuarterlyUpdateSchema,
+  insertOkrResponsibilitySchema,
 } from "@shared/schema";
-import type { Okr, OkrWithDetails } from "@shared/schema";
+import type { Okr, OkrWithDetails, EmployeeProgressRecord } from "@shared/schema";
 
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -624,6 +625,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(csv);
     } catch (error) {
       res.status(500).json({ error: "Failed to export data" });
+    }
+  });
+
+  // Employee Progress API
+  app.get("/api/employee-progress", async (req, res) => {
+    try {
+      const filters = {
+        year: req.query.year ? Number(req.query.year) : undefined,
+        quarter: req.query.quarter as string | undefined,
+        staffId: req.query.staffId as string | undefined,
+        spuId: req.query.spuId as string | undefined,
+        status: req.query.status as string | undefined,
+      };
+      
+      const progressRecords = await storage.getEmployeeProgress(filters);
+      res.json(progressRecords);
+    } catch (error) {
+      console.error("Error fetching employee progress:", error);
+      res.status(500).json({ error: "Failed to fetch employee progress" });
+    }
+  });
+
+  // OKR Responsibilities API
+  app.post("/api/okr-responsibilities", requireAdmin, async (req, res) => {
+    try {
+      const validated = insertOkrResponsibilitySchema.parse(req.body);
+      const responsibility = await storage.createOkrResponsibility(validated);
+      res.status(201).json(responsibility);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Validation failed", details: error.errors });
+      }
+      console.error("Error creating responsibility:", error);
+      res.status(500).json({ error: "Failed to create responsibility" });
+    }
+  });
+
+  app.get("/api/okr-responsibilities/:okrId", async (req, res) => {
+    try {
+      const responsibilities = await storage.getOkrResponsibilities(req.params.okrId);
+      res.json(responsibilities);
+    } catch (error) {
+      console.error("Error fetching responsibilities:", error);
+      res.status(500).json({ error: "Failed to fetch responsibilities" });
+    }
+  });
+
+  app.delete("/api/okr-responsibilities/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteOkrResponsibility(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting responsibility:", error);
+      res.status(500).json({ error: "Failed to delete responsibility" });
     }
   });
 
