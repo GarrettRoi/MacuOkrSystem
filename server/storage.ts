@@ -423,8 +423,8 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(okrs.status, filters.status));
     }
 
-    // Query OKRs with all joins
-    const okrResults = await db
+    // Build the base query with all joins
+    let query = db
       .select()
       .from(okrs)
       .leftJoin(staff, eq(okrs.staffId, staff.id))
@@ -432,8 +432,12 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(subUnits, eq(okrs.subUnitId, subUnits.id))
       .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id))
       .leftJoin(staffSpu, eq(staff.spuId, staffSpu.id))
-      .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined);
+      .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id));
+
+    // Apply filters if any
+    const okrResults = conditions.length > 0 
+      ? await query.where(and(...conditions))
+      : await query;
 
     // For each OKR, get quarterly updates and responsibilities
     const progressRecords: EmployeeProgressRecord[] = [];
