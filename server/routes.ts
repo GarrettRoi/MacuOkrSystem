@@ -5,6 +5,7 @@ import {
   insertStaffSchema,
   insertSpuSchema,
   insertSubUnitSchema,
+  insertYearSchema,
   insertOkrSchema,
   updateOkrSchema,
   insertQuarterlyUpdateSchema,
@@ -278,6 +279,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete sub-unit" });
+    }
+  });
+
+  app.get("/api/years", async (_req, res) => {
+    try {
+      const years = await storage.getAllYears();
+      res.json(years);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch years" });
+    }
+  });
+
+  app.post("/api/years", requireAdmin, async (req, res) => {
+    try {
+      const parsed = insertYearSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      }
+      
+      const year = await storage.createYear(parsed.data);
+      res.status(201).json(year);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create year" });
+    }
+  });
+
+  app.delete("/api/years/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteYear(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete year" });
     }
   });
 

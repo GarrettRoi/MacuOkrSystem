@@ -2,17 +2,20 @@ import {
   type Staff,
   type Spu,
   type SubUnit,
+  type Year,
   type Okr,
   type QuarterlyUpdate,
   type InsertStaff,
   type InsertSpu,
   type InsertSubUnit,
+  type InsertYear,
   type InsertOkr,
   type InsertQuarterlyUpdate,
   type StaffWithDetails,
   type OkrWithDetails,
   spus,
   subUnits,
+  years,
   staff,
   okrs,
   quarterlyUpdates,
@@ -43,6 +46,11 @@ export interface IStorage {
   createSubUnit(subUnit: InsertSubUnit): Promise<SubUnit>;
   updateSubUnit(id: string, updates: Partial<InsertSubUnit>): Promise<SubUnit>;
   deleteSubUnit(id: string): Promise<void>;
+  
+  getAllYears(): Promise<Year[]>;
+  getYear(id: string): Promise<Year | undefined>;
+  createYear(year: InsertYear): Promise<Year>;
+  deleteYear(id: string): Promise<void>;
   
   getAllOkrs(): Promise<Okr[]>;
   getAllOkrsWithDetails(): Promise<OkrWithDetails[]>;
@@ -221,6 +229,27 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSubUnit(id: string): Promise<void> {
     await db.delete(subUnits).where(eq(subUnits.id, id));
+  }
+
+  async getAllYears(): Promise<Year[]> {
+    return await db.select().from(years);
+  }
+
+  async getYear(id: string): Promise<Year | undefined> {
+    const [year] = await db.select().from(years).where(eq(years.id, id));
+    return year || undefined;
+  }
+
+  async createYear(year: InsertYear): Promise<Year> {
+    const [createdYear] = await db
+      .insert(years)
+      .values(year)
+      .returning();
+    return createdYear;
+  }
+
+  async deleteYear(id: string): Promise<void> {
+    await db.delete(years).where(eq(years.id, id));
   }
 
   async getAllOkrs(): Promise<Okr[]> {

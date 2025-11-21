@@ -14,6 +14,11 @@ export const subUnits = pgTable("sub_units", {
   spuId: varchar("spu_id").notNull().references(() => spus.id, { onDelete: "cascade" }),
 });
 
+export const years = pgTable("years", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  year: integer("year").notNull().unique(),
+});
+
 export const staff = pgTable("staff", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -80,6 +85,7 @@ export const OKR_NUMBERS = ["OKR 1", "OKR 2", "OKR 3", "OKR 4", "OKR 5"] as cons
 
 export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });
 export const insertSubUnitSchema = createInsertSchema(subUnits).omit({ id: true });
+export const insertYearSchema = createInsertSchema(years).omit({ id: true });
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
 
 export const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true });
@@ -161,12 +167,14 @@ export const updateQuarterlyUpdateSchema = z.object({
 
 export type InsertSpu = z.infer<typeof insertSpuSchema>;
 export type InsertSubUnit = z.infer<typeof insertSubUnitSchema>;
+export type InsertYear = z.infer<typeof insertYearSchema>;
 export type InsertStaff = z.infer<typeof insertStaffSchema>;
 export type InsertOkr = z.infer<typeof insertOkrSchema>;
 export type InsertQuarterlyUpdate = z.infer<typeof insertQuarterlyUpdateSchema>;
 
 export type Spu = typeof spus.$inferSelect;
 export type SubUnit = typeof subUnits.$inferSelect;
+export type Year = typeof years.$inferSelect;
 export type Staff = typeof staff.$inferSelect;
 export type Okr = typeof okrs.$inferSelect;
 export type QuarterlyUpdate = typeof quarterlyUpdates.$inferSelect;

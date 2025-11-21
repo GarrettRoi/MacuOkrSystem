@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2, Sparkles } from "lucide-react";
-import type { StaffWithDetails, Spu, SubUnit } from "@shared/schema";
+import type { StaffWithDetails, Spu, SubUnit, Year } from "@shared/schema";
 import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, OKR_NUMBERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -42,7 +42,6 @@ interface SubmitOkrProps {
 
 const QUARTERS = ["Q1", "Q2", "Q3", "Q4"];
 const currentYear = new Date().getFullYear();
-const YEARS = [currentYear - 1, currentYear, currentYear + 1];
 
 export default function SubmitOkr({ staff }: SubmitOkrProps) {
   const { toast } = useToast();
@@ -54,6 +53,10 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
 
   const { data: subUnits } = useQuery<SubUnit[]>({
     queryKey: ["/api/sub-units"],
+  });
+
+  const { data: years } = useQuery<Year[]>({
+    queryKey: ["/api/years"],
   });
 
   const form = useForm<FormValues>({
@@ -324,11 +327,15 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {YEARS.map((year) => (
-                            <SelectItem key={year} value={String(year)} data-testid={`option-year-${year}`}>
-                              {year}
-                            </SelectItem>
-                          ))}
+                          {years && years.length > 0 ? (
+                            years.sort((a, b) => b.year - a.year).map((year) => (
+                              <SelectItem key={year.id} value={String(year.year)} data-testid={`option-year-${year.year}`}>
+                                {year.year}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="" disabled>No years available</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormDescription className="text-xs">

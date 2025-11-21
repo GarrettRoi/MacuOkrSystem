@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { StaffWithDetails, OkrWithDetails } from "@shared/schema";
+import type { StaffWithDetails, OkrWithDetails, Year } from "@shared/schema";
 import { insertQuarterlyUpdateSchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -45,7 +45,6 @@ interface QuarterlyUpdateProps {
 
 const QUARTERS = ["Q1", "Q2", "Q3", "Q4"];
 const currentYear = new Date().getFullYear();
-const YEARS = [currentYear - 1, currentYear, currentYear + 1];
 
 export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   const { toast } = useToast();
@@ -56,6 +55,10 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
 
   const { data: okrs, isLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs", staff.id],
+  });
+
+  const { data: years } = useQuery<Year[]>({
+    queryKey: ["/api/years"],
   });
 
   const staffOkrs = okrs?.filter((okr) => okr.staffId === staff.id) || [];
@@ -301,11 +304,15 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {YEARS.map((year) => (
-                              <SelectItem key={year} value={String(year)} data-testid={`option-update-year-${year}`}>
-                                {year}
-                              </SelectItem>
-                            ))}
+                            {years && years.length > 0 ? (
+                              years.sort((a, b) => b.year - a.year).map((year) => (
+                                <SelectItem key={year.id} value={String(year.year)} data-testid={`option-update-year-${year.year}`}>
+                                  {year.year}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="" disabled>No years available</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />

@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Settings, Pencil } from "lucide-react";
-import type { Staff, Spu, SubUnit } from "@shared/schema";
+import type { Staff, Spu, SubUnit, Year } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Admin() {
@@ -20,6 +20,7 @@ export default function Admin() {
   const [spuDialogOpen, setSpuDialogOpen] = useState(false);
   const [subUnitDialogOpen, setSubUnitDialogOpen] = useState(false);
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
+  const [yearDialogOpen, setYearDialogOpen] = useState(false);
   
   const [editSpuDialogOpen, setEditSpuDialogOpen] = useState(false);
   const [editSubUnitDialogOpen, setEditSubUnitDialogOpen] = useState(false);
@@ -33,6 +34,7 @@ export default function Admin() {
   const [newStaffEmail, setNewStaffEmail] = useState("");
   const [newStaffSpu, setNewStaffSpu] = useState("");
   const [newStaffSubUnit, setNewStaffSubUnit] = useState("");
+  const [newYear, setNewYear] = useState("");
   
   const [editingSpu, setEditingSpu] = useState<Spu | null>(null);
   const [editingSubUnit, setEditingSubUnit] = useState<SubUnit | null>(null);
@@ -48,6 +50,10 @@ export default function Admin() {
 
   const { data: staff, isLoading: staffLoading } = useQuery<Staff[]>({
     queryKey: ["/api/staff"],
+  });
+
+  const { data: years, isLoading: yearsLoading } = useQuery<Year[]>({
+    queryKey: ["/api/years"],
   });
 
   const addSpuMutation = useMutation({
@@ -92,6 +98,28 @@ export default function Admin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
       toast({ title: "Sub-Unit Deleted", description: "The sub-unit has been removed." });
+    },
+  });
+
+  const addYearMutation = useMutation({
+    mutationFn: async (year: number) => {
+      return await apiRequest("POST", "/api/years", { year });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/years"] });
+      setYearDialogOpen(false);
+      setNewYear("");
+      toast({ title: "Year Added", description: "The year has been added successfully." });
+    },
+  });
+
+  const deleteYearMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/years/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/years"] });
+      toast({ title: "Year Deleted", description: "The year has been removed." });
     },
   });
 
@@ -185,6 +213,7 @@ export default function Admin() {
           <TabsTrigger value="staff" data-testid="tab-staff">Staff Management</TabsTrigger>
           <TabsTrigger value="spus" data-testid="tab-spus">SPUs</TabsTrigger>
           <TabsTrigger value="subunits" data-testid="tab-subunits">Sub-Units</TabsTrigger>
+          <TabsTrigger value="years" data-testid="tab-years">Years</TabsTrigger>
         </TabsList>
 
         <TabsContent value="staff">
@@ -778,6 +807,111 @@ export default function Admin() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+        </TabsContent>
+
+        <TabsContent value="years">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Years</CardTitle>
+                  <CardDescription>Manage available years for OKR submission</CardDescription>
+                </div>
+                <Dialog open={yearDialogOpen} onOpenChange={setYearDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button data-testid="button-add-year">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Year
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add New Year</DialogTitle>
+                      <DialogDescription>
+                        Add a year that will be available for OKR submission
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2">
+                      <Label htmlFor="year">Year *</Label>
+                      <Input
+                        id="year"
+                        type="number"
+                        value={newYear}
+                        onChange={(e) => setNewYear(e.target.value)}
+                        placeholder="e.g., 2025"
+                        data-testid="input-year"
+                      />
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setYearDialogOpen(false);
+                          setNewYear("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          if (newYear) {
+                            addYearMutation.mutate(Number(newYear));
+                          }
+                        }}
+                        disabled={!newYear || addYearMutation.isPending}
+                        data-testid="button-save-year"
+                      >
+                        {addYearMutation.isPending ? "Adding..." : "Add Year"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {yearsLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Year</TableHead>
+                      <TableHead className="w-24">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {years && years.length > 0 ? (
+                      years.sort((a, b) => b.year - a.year).map((year) => (
+                        <TableRow key={year.id}>
+                          <TableCell className="font-medium">{year.year}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deleteYearMutation.mutate(year.id)}
+                              disabled={deleteYearMutation.isPending}
+                              data-testid={`button-delete-year-${year.year}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={2} className="text-center text-muted-foreground">
+                          No years added yet. Click "Add Year" to create one.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
