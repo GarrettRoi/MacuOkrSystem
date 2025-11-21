@@ -5,23 +5,27 @@ import {
   type Year,
   type Okr,
   type QuarterlyUpdate,
+  type OkrResponsibility,
   type InsertStaff,
   type InsertSpu,
   type InsertSubUnit,
   type InsertYear,
   type InsertOkr,
   type InsertQuarterlyUpdate,
+  type InsertOkrResponsibility,
   type StaffWithDetails,
   type OkrWithDetails,
+  type EmployeeProgressRecord,
   spus,
   subUnits,
   years,
   staff,
   okrs,
   quarterlyUpdates,
+  okrResponsibilities,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 export interface IStorage {
@@ -66,6 +70,18 @@ export interface IStorage {
   createQuarterlyUpdate(update: InsertQuarterlyUpdate): Promise<QuarterlyUpdate>;
   updateQuarterlyUpdate(id: string, updates: Partial<InsertQuarterlyUpdate>): Promise<QuarterlyUpdate>;
   deleteQuarterlyUpdate(id: string): Promise<void>;
+  
+  createOkrResponsibility(responsibility: InsertOkrResponsibility): Promise<OkrResponsibility>;
+  getOkrResponsibilities(okrId: string): Promise<OkrResponsibility[]>;
+  deleteOkrResponsibility(id: string): Promise<void>;
+  
+  getEmployeeProgress(filters: {
+    year?: number;
+    quarter?: string;
+    staffId?: string;
+    spuId?: string;
+    status?: string;
+  }): Promise<EmployeeProgressRecord[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -360,6 +376,127 @@ export class DatabaseStorage implements IStorage {
 
   async deleteQuarterlyUpdate(id: string): Promise<void> {
     await db.delete(quarterlyUpdates).where(eq(quarterlyUpdates.id, id));
+  }
+
+  async createOkrResponsibility(responsibility: InsertOkrResponsibility): Promise<OkrResponsibility> {
+    const [result] = await db
+      .insert(okrResponsibilities)
+      .values(responsibility)
+      .returning();
+    return result;
+  }
+
+  async getOkrResponsibilities(okrId: string): Promise<OkrResponsibility[]> {
+    return await db.select().from(okrResponsibilities).where(eq(okrResponsibilities.okrId, okrId));
+  }
+
+  async deleteOkrResponsibility(id: string): Promise<void> {
+    await db.delete(okrResponsibilities).where(eq(okrResponsibilities.id, id));
+  }
+
+  async getEmployeeProgress(filters: {
+    year?: number;
+    quarter?: string;
+    staffId?: string;
+    spuId?: string;
+    status?: string;
+  }): Promise<EmployeeProgressRecord[]> {
+    const collaborationSpu = alias(spus, "collaboration_spu");
+    const staffSpu = alias(spus, "staff_spu");
+    const staffSubUnit = alias(subUnits, "staff_sub_unit");
+
+    // Build filter conditions
+    const conditions = [];
+    if (filters.year !== undefined) {
+      conditions.push(eq(okrs.year, filters.year));
+    }
+    if (filters.quarter) {
+      conditions.push(eq(okrs.quarter, filters.quarter));
+    }
+    if (filters.staffId) {
+      conditions.push(eq(okrs.staffId, filters.staffId));
+    }
+    if (filters.spuId) {
+      conditions.push(eq(okrs.spuId, filters.spuId));
+    }
+    if (filters.status) {
+      conditions.push(eq(okrs.status, filters.status));
+    }
+
+    // Query OKRs with all joins
+    const okrResults = await db
+      .select()
+      .from(okrs)
+      .leftJoin(staff, eq(okrs.staffId, staff.id))
+      .leftJoin(spus, eq(okrs.spuId, spus.id))
+      .leftJoin(subUnits, eq(okrs.subUnitId, subUnits.id))
+      .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id))
+      .leftJoin(staffSpu, eq(staff.spuId, staffSpu.id))
+      .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+    // For each OKR, get quarterly updates and responsibilities
+    const progressRecords: EmployeeProgressRecord[] = [];
+    
+    for (const row of okrResults) {
+      const okrId = row.okrs.id;
+      
+      // Get all quarterly updates for this OKR, ordered by date
+      const updates = await db
+        .select()
+        .from(quarterlyUpdates)
+        .where(eq(quarterlyUpdates.okrId, okrId))
+        .orderBy(desc(quarterlyUpdates.submittedAt));
+      
+      // Get latest update (first one after descending order)
+      const latestUpdate = updates.length > 0 ? updates[0] : null;
+      
+      // Get responsibilities
+      const responsibilities = await db
+        .select({
+          id: okrResponsibilities.id,
+          okrId: okrResponsibilities.okrId,
+          staffId: okrResponsibilities.staffId,
+          role: okrResponsibilities.role,
+          staff: staff,
+          spu: spus,
+          subUnit: subUnits,
+        })
+        .from(okrResponsibilities)
+        .leftJoin(staff, eq(okrResponsibilities.staffId, staff.id))
+        .leftJoin(spus, eq(staff.spuId, spus.id))
+        .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
+        .where(eq(okrResponsibilities.okrId, okrId));
+      
+      progressRecords.push({
+        okr: {
+          ...row.okrs,
+          staff: {
+            ...row.staff!,
+            spu: row.staff_spu!,
+            subUnit: row.staff_sub_unit,
+          },
+          spu: row.spus,
+          subUnit: row.sub_units,
+          collaborationSpu: row.collaboration_spu,
+        },
+        latestUpdate,
+        responsibilities: responsibilities.map(r => ({
+          id: r.id,
+          okrId: r.okrId,
+          staffId: r.staffId,
+          role: r.role,
+          staff: {
+            ...r.staff!,
+            spu: r.spu!,
+            subUnit: r.subUnit,
+          },
+        })),
+        quarterlyUpdates: updates,
+      });
+    }
+    
+    return progressRecords;
   }
 }
 

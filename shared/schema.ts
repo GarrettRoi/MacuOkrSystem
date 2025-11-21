@@ -63,6 +63,13 @@ export const quarterlyUpdates = pgTable("quarterly_updates", {
   submittedAt: timestamp("submitted_at").notNull().defaultNow(),
 });
 
+export const okrResponsibilities = pgTable("okr_responsibilities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  okrId: varchar("okr_id").notNull().references(() => okrs.id, { onDelete: "cascade" }),
+  staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+});
+
 export const UNIVERSITY_OBJECTIVES = [
   "Objective 1: We will fully EMBRACE our calling to be a Wesleyan-Holiness Christ-centered university.",
   "Objective 2: We will prioritize BELONGING to foster a connected community for students, faculty, staff, and alumni.",
@@ -83,10 +90,15 @@ export const UNIVERSITY_KEY_RESULTS = [
 
 export const OKR_NUMBERS = ["OKR 1", "OKR 2", "OKR 3", "OKR 4", "OKR 5"] as const;
 
+export const RESPONSIBILITY_ROLES = ["owner", "collaborator"] as const;
+
 export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });
 export const insertSubUnitSchema = createInsertSchema(subUnits).omit({ id: true });
 export const insertYearSchema = createInsertSchema(years).omit({ id: true });
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
+export const insertOkrResponsibilitySchema = createInsertSchema(okrResponsibilities).omit({ id: true }).extend({
+  role: z.enum(RESPONSIBILITY_ROLES),
+});
 
 export const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true });
 
@@ -171,6 +183,7 @@ export type InsertYear = z.infer<typeof insertYearSchema>;
 export type InsertStaff = z.infer<typeof insertStaffSchema>;
 export type InsertOkr = z.infer<typeof insertOkrSchema>;
 export type InsertQuarterlyUpdate = z.infer<typeof insertQuarterlyUpdateSchema>;
+export type InsertOkrResponsibility = z.infer<typeof insertOkrResponsibilitySchema>;
 
 export type Spu = typeof spus.$inferSelect;
 export type SubUnit = typeof subUnits.$inferSelect;
@@ -178,6 +191,7 @@ export type Year = typeof years.$inferSelect;
 export type Staff = typeof staff.$inferSelect;
 export type Okr = typeof okrs.$inferSelect;
 export type QuarterlyUpdate = typeof quarterlyUpdates.$inferSelect;
+export type OkrResponsibility = typeof okrResponsibilities.$inferSelect;
 
 export type StaffWithDetails = Staff & {
   spu: Spu;
@@ -193,4 +207,15 @@ export type OkrWithDetails = Okr & {
 
 export type QuarterUpdateWithDetails = QuarterlyUpdate & {
   okr: OkrWithDetails;
+};
+
+export type OkrResponsibilityWithDetails = OkrResponsibility & {
+  staff: StaffWithDetails;
+};
+
+export type EmployeeProgressRecord = {
+  okr: OkrWithDetails;
+  latestUpdate?: QuarterlyUpdate | null;
+  responsibilities: OkrResponsibilityWithDetails[];
+  quarterlyUpdates: QuarterlyUpdate[];
 };
