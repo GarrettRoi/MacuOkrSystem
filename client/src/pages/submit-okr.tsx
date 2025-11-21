@@ -601,26 +601,6 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         )}
                       />
                     </div>
-                    <FormField
-                      control={form.control}
-                      name={`keyResults.${index}.percentage`}
-                      render={({ field }) => (
-                        <FormItem className="w-24">
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="1"
-                              max="100"
-                              step="0.1"
-                              placeholder="%"
-                              {...field}
-                              data-testid={`input-percentage-${index}`}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
                     {fields.length > 1 && (
                       <Button
                         type="button"
