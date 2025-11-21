@@ -454,15 +454,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Auto-calculate averageScore from keyResultScores if provided
-      if (updates.keyResultScores) {
+      if (updates.keyResultScores && typeof updates.keyResultScores === 'string') {
         try {
-          const scores = JSON.parse(updates.keyResultScores as string);
+          const scores = JSON.parse(updates.keyResultScores);
           if (Array.isArray(scores) && scores.length > 0) {
-            const total = scores.reduce((sum: number, kr: any) => sum + (kr.score || 0), 0);
+            // Validate each score object has required fields
+            const validScores = scores.every(
+              (kr) => typeof kr.score === 'number' && kr.score >= 0 && kr.score <= 100
+            );
+            if (!validScores) {
+              return res.status(400).json({ error: "Invalid key result scores: each score must be 0-100" });
+            }
+            // Calculate average
+            const total = scores.reduce((sum: number, kr: any) => sum + kr.score, 0);
             updates.averageScore = Math.round(total / scores.length);
           }
         } catch (e) {
-          console.error("Failed to calculate average score:", e);
+          console.error("Failed to parse or calculate average score:", e);
+          return res.status(400).json({ error: "Invalid keyResultScores format" });
         }
       }
       

@@ -92,7 +92,7 @@ export default function Data() {
   });
 
   const updateQuarterlyUpdateMutation = useMutation({
-    mutationFn: async (data: { id: string; updates: any }) => {
+    mutationFn: async (data: { id: string; updates: { keyResultScores?: string; additionalKeyResults?: string; notes?: string } }) => {
       return await apiRequest("PUT", `/api/quarterly-updates/${data.id}`, data.updates);
     },
     onSuccess: () => {
@@ -424,9 +424,9 @@ export default function Data() {
                     %
                   </div>
                 </div>
-                {updateForm.watch("keyResultScores")?.map((_, index) => (
+                {updateForm.watch("keyResultScores")?.map((kr, index) => (
                   <FormField
-                    key={index}
+                    key={`kr-${kr.keyResultNumber}-${index}`}
                     control={updateForm.control}
                     name={`keyResultScores.${index}.score`}
                     render={({ field }) => (
