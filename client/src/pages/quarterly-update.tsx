@@ -402,29 +402,6 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                       </CardContent>
                     </Card>
 
-                    {/* Additional Key Results */}
-                    <FormField
-                      control={form.control}
-                      name="additionalKeyResults"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Additional Key Results (Optional)</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="If you have more than 4 Key Results, enter additional scores here (e.g., KR5: 50, KR6: 90, etc.)"
-                              className="min-h-20 resize-none"
-                              {...field}
-                              data-testid="input-additional-krs"
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Enter any additional key result scores beyond the first 4
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
                     {/* Summary Notes */}
                     <FormField
                       control={form.control}
