@@ -311,7 +311,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                                 </SelectItem>
                               ))
                             ) : (
-                              <SelectItem value="" disabled>No years available</SelectItem>
+                              <SelectItem value="no-years" disabled>No years available</SelectItem>
                             )}
                           </SelectContent>
                         </Select>
