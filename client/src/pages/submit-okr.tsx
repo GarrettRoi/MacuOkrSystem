@@ -18,7 +18,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 const keyResultSchema = z.object({
   description: z.string().min(10, "Key result description must be at least 10 characters"),
-  percentage: z.coerce.number().min(1, "Percentage must be at least 1").max(100, "Percentage cannot exceed 100"),
 });
 
 const formSchema = z.object({
@@ -33,12 +32,6 @@ const formSchema = z.object({
   universityKeyResult: z.string().min(1, "Please select a university key result"),
   objectiveStatement: z.string().min(20, "Objective statement must be at least 20 characters"),
   keyResults: z.array(keyResultSchema).min(1, "At least one key result is required"),
-}).refine((data) => {
-  const total = data.keyResults.reduce((sum, kr) => sum + kr.percentage, 0);
-  return Math.abs(total - 100) < 0.01;
-}, {
-  message: "Key result percentages must add up to 100%",
-  path: ["keyResults"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -76,7 +69,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       universityObjective: "",
       universityKeyResult: "",
       objectiveStatement: "",
-      keyResults: [{ description: "", percentage: 100 }],
+      keyResults: [{ description: "" }],
     },
   });
 
@@ -91,7 +84,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     mutationFn: async (data: FormValues) => {
       const normalizedKeyResults = data.keyResults.map(kr => ({
         description: kr.description,
-        percentage: Number(kr.percentage),
+        percentage: 25, // Default equal weighting for all key results
       }));
       const payload = {
         ...data,
@@ -120,7 +113,6 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     mutation.mutate(data);
   };
 
-  const totalPercentage = watchedKeyResults.reduce((sum, kr) => sum + (Number(kr.percentage) || 0), 0);
 
   const handleSubmitAnother = () => {
     setIsSubmitted(false);
@@ -135,7 +127,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       universityObjective: "",
       universityKeyResult: "",
       objectiveStatement: "",
-      keyResults: [{ description: "", percentage: 100 }],
+      keyResults: [{ description: "" }],
     });
   };
 
@@ -568,11 +560,9 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
               />
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <FormLabel>Key Results *</FormLabel>
-                </div>
+                <FormLabel>Key Results *</FormLabel>
                 <FormDescription className="text-xs">
-                  Add your key results with percentage allocation. Total must equal 100%.
+                  Add your key results (measurable outcomes that indicate success).
                 </FormDescription>
                 
                 {fields.map((field, index) => (
@@ -613,7 +603,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => append({ description: "", percentage: 0 })}
+                  onClick={() => append({ description: "" })}
                   className="w-full"
                   data-testid="button-add-key-result"
                 >
