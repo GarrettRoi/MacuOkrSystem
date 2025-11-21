@@ -135,12 +135,27 @@ Password verification endpoint at `/api/auth/verify` returns authentication resu
 - Status distribution pie chart
 - OKRs needing attention list
 
-**Employee Progress**: Comprehensive view for analyzing OKR progress by employee with multi-dimensional filtering. Features include:
-- Filter panel: Filter by year, quarter, employee, SPU, and status
-- Tabbed interface: OKR Summary grid and Timeline view
-- OKR Summary: Card-based grid displaying objectives, key result counts, latest scores, status badges, and last update dates
-- Detail drawer: Full OKR information including objective statement, university alignment, all key results with descriptions, departments (SPU, sub-unit, collaboration SPU), responsible parties (owner + collaborators), and latest quarterly update with individual key result scores
-- Timeline view: Chronological display of quarterly updates across filtered OKRs
+**Employee Progress**: Comprehensive spreadsheet-style view for analyzing OKR progress by employee with multi-dimensional filtering. Features include:
+- Total Quarterly Progress Header: Primary-colored gradient banner showing overall progress percentage and date range across all filtered OKRs
+- Filter panel: Collapsible card with filters for year, quarter, employee, SPU, and status
+- Employee Sections: Accordion-based grouping with each employee's header showing name, OKR count badge, and overall progress percentage
+- Spreadsheet Table Layout: Proper HTML table structure with 8 columns:
+  1. OKR # (spans 4 rows)
+  2. Activity (labels: Strategic, Owner, Aligned)
+  3. Strategic/Universal alignment
+  4. Sub-Unit
+  5. Collaborating SPU(s)
+  6. Responsible Parties
+  7. Objective/Details
+  8. Progress % (spans 4 rows)
+- Four Rows Per OKR:
+  - Row 1: Objective statement with destructive/pink background spanning 6 columns
+  - Row 2 (Strategic): University objective, sub-unit, collaboration SPU, **collaborators only** (comma-separated), university key result
+  - Row 3 (Owner): SPU, sub-unit, **owner name**, key results count, with alternating muted background
+  - Row 4 (Aligned): Quarter/year, status, last updated date
+- Role Separation: Collaborators displayed in Strategic row, owner in Owner row (using okr_responsibilities table)
+- Safe Progress Calculations: Treats OKRs without updates as 0% for overall averaging, prevents division-by-zero errors
+- Color Coding: All colors use design tokens (primary, accent, destructive, muted) for theme consistency
 - Clear all filters functionality with active filter count badge
 
 **Admin**: Management interface for creating/deleting staff, departments, and sub-departments with tabbed organization.
