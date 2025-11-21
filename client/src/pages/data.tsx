@@ -29,7 +29,11 @@ const editOkrSchema = z.object({
 });
 
 const editQuarterlyUpdateSchema = z.object({
-  averageScore: z.coerce.number().min(0).max(100),
+  keyResultScores: z.array(z.object({
+    keyResultNumber: z.number(),
+    description: z.string(),
+    score: z.number().min(0).max(100),
+  })),
   additionalKeyResults: z.string().optional(),
   notes: z.string().min(10, "Notes must be at least 10 characters"),
 });
@@ -88,7 +92,7 @@ export default function Data() {
   });
 
   const updateQuarterlyUpdateMutation = useMutation({
-    mutationFn: async (data: { id: string; updates: EditQuarterlyUpdateFormValues }) => {
+    mutationFn: async (data: { id: string; updates: any }) => {
       return await apiRequest("PUT", `/api/quarterly-updates/${data.id}`, data.updates);
     },
     onSuccess: () => {
@@ -120,7 +124,7 @@ export default function Data() {
   const handleEditUpdate = (update: QuarterlyUpdate & { keyResultScoresParsed: any }) => {
     setEditingUpdate(update);
     updateForm.reset({
-      averageScore: update.averageScore || 0,
+      keyResultScores: update.keyResultScoresParsed || [],
       additionalKeyResults: update.additionalKeyResults || "",
       notes: update.notes,
     });
@@ -133,9 +137,19 @@ export default function Data() {
   };
 
   const onSubmitUpdate = (data: EditQuarterlyUpdateFormValues) => {
-    if (editingUpdate) {
-      updateQuarterlyUpdateMutation.mutate({ id: editingUpdate.id, updates: data });
-    }
+    if (!editingUpdate) return;
+    
+    // Convert keyResultScores array to JSON string for API
+    const updates = {
+      keyResultScores: JSON.stringify(data.keyResultScores),
+      additionalKeyResults: data.additionalKeyResults,
+      notes: data.notes,
+    };
+    
+    updateQuarterlyUpdateMutation.mutate({
+      id: editingUpdate.id,
+      updates,
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -395,19 +409,48 @@ export default function Data() {
           </DialogHeader>
           <Form {...updateForm}>
             <form onSubmit={updateForm.handleSubmit(onSubmitUpdate)} className="space-y-4">
-              <FormField
-                control={updateForm.control}
-                name="averageScore"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Average Score</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={0} max={100} {...field} data-testid="input-average-score" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Individual Key Result Scores */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <FormLabel>Key Result Scores (0-100)</FormLabel>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    Average:{" "}
+                    {updateForm.watch("keyResultScores")?.length > 0
+                      ? Math.round(
+                          updateForm.watch("keyResultScores").reduce((sum, kr) => sum + kr.score, 0) /
+                            updateForm.watch("keyResultScores").length
+                        )
+                      : 0}
+                    %
+                  </div>
+                </div>
+                {updateForm.watch("keyResultScores")?.map((_, index) => (
+                  <FormField
+                    key={index}
+                    control={updateForm.control}
+                    name={`keyResultScores.${index}.score`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm">
+                          KR{updateForm.watch(`keyResultScores.${index}.keyResultNumber`)}: {updateForm.watch(`keyResultScores.${index}.description`)}
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            {...field}
+                            onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                            data-testid={`input-kr-score-${index}`}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ))}
+              </div>
+              
               <FormField
                 control={updateForm.control}
                 name="notes"
