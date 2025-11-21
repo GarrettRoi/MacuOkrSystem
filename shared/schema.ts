@@ -121,24 +121,19 @@ export const insertOkrSchema = baseInsertOkrSchema.refine(
       const keyResults = JSON.parse(data.keyResults);
       if (!Array.isArray(keyResults)) return false;
       
+      // Validate that each key result has a valid description
       const hasValidFields = keyResults.every(kr =>
         typeof kr.description === 'string' &&
-        kr.description.length >= 10 &&
-        typeof kr.percentage === 'number' &&
-        kr.percentage >= 1 &&
-        kr.percentage <= 100
+        kr.description.length >= 10
       );
       
-      if (!hasValidFields) return false;
-      
-      const total = keyResults.reduce((sum, kr) => sum + kr.percentage, 0);
-      return Math.abs(total - 100) < 0.01;
+      return hasValidFields;
     } catch {
       return false;
     }
   },
   {
-    message: "keyResults must be valid JSON with percentage total of 100%",
+    message: "keyResults must be valid JSON with descriptions of at least 10 characters",
   }
 );
 
