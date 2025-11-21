@@ -219,3 +219,10 @@ export type EmployeeProgressRecord = {
   responsibilities: OkrResponsibilityWithDetails[];
   quarterlyUpdates: QuarterlyUpdate[];
 };
+
+export type EmployeeProgressSummary = {
+  staff: StaffWithDetails;
+  overallProgress: number;
+  okrCount: number;
+  okrs: EmployeeProgressRecord[];
+};

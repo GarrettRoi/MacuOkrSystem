@@ -16,6 +16,7 @@ import {
   type StaffWithDetails,
   type OkrWithDetails,
   type EmployeeProgressRecord,
+  type EmployeeProgressSummary,
   spus,
   subUnits,
   years,
@@ -82,6 +83,14 @@ export interface IStorage {
     spuId?: string;
     status?: string;
   }): Promise<EmployeeProgressRecord[]>;
+  
+  getEmployeeProgressGrouped(filters: {
+    year?: number;
+    quarter?: string;
+    staffId?: string;
+    spuId?: string;
+    status?: string;
+  }): Promise<EmployeeProgressSummary[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -501,6 +510,58 @@ export class DatabaseStorage implements IStorage {
     }
     
     return progressRecords;
+  }
+
+  async getEmployeeProgressGrouped(filters: {
+    year?: number;
+    quarter?: string;
+    staffId?: string;
+    spuId?: string;
+    status?: string;
+  }): Promise<EmployeeProgressSummary[]> {
+    // Get all employee progress records
+    const records = await this.getEmployeeProgress(filters);
+    
+    // Group by staff member
+    const staffMap = new Map<string, EmployeeProgressRecord[]>();
+    
+    for (const record of records) {
+      const staffId = record.okr.staff.id;
+      if (!staffMap.has(staffId)) {
+        staffMap.set(staffId, []);
+      }
+      staffMap.get(staffId)!.push(record);
+    }
+    
+    // Calculate summaries for each staff member
+    const summaries: EmployeeProgressSummary[] = [];
+    
+    for (const [staffId, staffRecords] of Array.from(staffMap.entries())) {
+      const staff = staffRecords[0].okr.staff;
+      
+      // Calculate overall progress (average across all OKRs, treating missing updates as 0)
+      const okrsWithProgress = staffRecords.map((r: EmployeeProgressRecord) => {
+        if (!r.latestUpdate || r.latestUpdate.averageScore === null || r.latestUpdate.averageScore === undefined || isNaN(r.latestUpdate.averageScore)) {
+          return 0;
+        }
+        return r.latestUpdate.averageScore;
+      });
+      const overallProgress = okrsWithProgress.length > 0
+        ? Math.round(okrsWithProgress.reduce((sum: number, score: number) => sum + score, 0) / okrsWithProgress.length)
+        : 0;
+      
+      summaries.push({
+        staff,
+        overallProgress,
+        okrCount: staffRecords.length,
+        okrs: staffRecords,
+      });
+    }
+    
+    // Sort by staff name
+    summaries.sort((a, b) => a.staff.name.localeCompare(b.staff.name));
+    
+    return summaries;
   }
 }
 

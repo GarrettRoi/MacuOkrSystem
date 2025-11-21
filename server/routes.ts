@@ -647,6 +647,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Employee Progress Grouped API
+  app.get("/api/employee-progress/grouped", async (req, res) => {
+    try {
+      const filters = {
+        year: req.query.year ? Number(req.query.year) : undefined,
+        quarter: req.query.quarter as string | undefined,
+        staffId: req.query.staffId as string | undefined,
+        spuId: req.query.spuId as string | undefined,
+        status: req.query.status as string | undefined,
+      };
+      
+      const progressSummaries = await storage.getEmployeeProgressGrouped(filters);
+      res.json(progressSummaries);
+    } catch (error) {
+      console.error("Error fetching grouped employee progress:", error);
+      res.status(500).json({ error: "Failed to fetch grouped employee progress" });
+    }
+  });
+
   // OKR Responsibilities API
   app.post("/api/okr-responsibilities", requireAdmin, async (req, res) => {
     try {
