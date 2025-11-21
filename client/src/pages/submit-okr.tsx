@@ -570,11 +570,6 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <FormLabel>Key Results *</FormLabel>
-                  <div className="text-sm text-muted-foreground">
-                    Total: <span className={Math.abs(totalPercentage - 100) < 0.01 ? "text-green-600 font-semibold" : "text-destructive font-semibold"}>
-                      {totalPercentage}%
-                    </span>
-                  </div>
                 </div>
                 <FormDescription className="text-xs">
                   Add your key results with percentage allocation. Total must equal 100%.
