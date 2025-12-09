@@ -15,6 +15,7 @@ import Export from "@/pages/export";
 import Trends from "@/pages/trends";
 import Data from "@/pages/data";
 import EmployeeProgress from "@/pages/employee-progress";
+import MyOkrs from "@/pages/my-okrs";
 import AppHeader from "@/components/app-header";
 import type { StaffWithDetails } from "@shared/schema";
 
@@ -26,6 +27,7 @@ function Router({ staff, isAdmin }: { staff: StaffWithDetails; isAdmin: boolean 
       <Route path="/quarterly-update" component={() => <QuarterlyUpdate staff={staff} />} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/employee-progress" component={() => <EmployeeProgress staff={staff} />} />
+      <Route path="/my-okrs" component={() => <MyOkrs staff={staff} />} />
       <Route path="/data" component={Data} />
       <Route path="/trends" component={Trends} />
       {isAdmin && <Route path="/admin" component={Admin} />}

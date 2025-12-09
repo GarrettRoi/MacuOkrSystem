@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, TrendingUp, BarChart3, Settings, Download, LineChart, Database, Users } from "lucide-react";
+import { FileText, TrendingUp, BarChart3, Settings, Download, LineChart, Database, Users, ClipboardList } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
 
 interface HomeProps {
@@ -27,6 +27,15 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       path: "/quarterly-update",
       color: "text-green-600",
       bg: "bg-green-50",
+      adminOnly: false,
+    },
+    {
+      title: "My OKRs",
+      description: "View all your submitted OKRs and Key Results in one place",
+      icon: ClipboardList,
+      path: "/my-okrs",
+      color: "text-amber-600",
+      bg: "bg-amber-50",
       adminOnly: false,
     },
     {
