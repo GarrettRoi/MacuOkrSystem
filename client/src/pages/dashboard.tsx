@@ -26,6 +26,8 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [keywordSearch, setKeywordSearch] = useState<string>("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [spuSearch, setSpuSearch] = useState<string>("");
+  const [staffSearch, setStaffSearch] = useState<string>("");
 
   const { data: okrs, isLoading: okrsLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
@@ -105,6 +107,32 @@ export default function Dashboard() {
       count: spuOkrs.length,
     };
   }).filter((s) => s.count > 0) || [];
+
+  // Filter SPU progress by search term
+  const filteredSpuProgress = spuProgress.filter((spu) =>
+    spu.name.toLowerCase().includes(spuSearch.toLowerCase())
+  );
+
+  // Get unique staff with their OKRs for the staff tab
+  const staffWithOkrs = Array.from(new Set(filteredOkrs.map((o) => o.staffId))).map((staffId) => {
+    const staffOkrs = filteredOkrs.filter((o) => o.staffId === staffId);
+    const staffMember = staffOkrs[0]?.staff;
+    const avgProg = Math.round(staffOkrs.reduce((sum, o) => sum + o.currentValue, 0) / staffOkrs.length);
+    return {
+      staffId,
+      name: staffMember?.name || "",
+      spuName: staffMember?.spu.name || "",
+      okrCount: staffOkrs.length,
+      avgProgress: avgProg,
+      staff: staffMember,
+    };
+  });
+
+  // Filter staff by search term
+  const filteredStaffWithOkrs = staffWithOkrs.filter((s) =>
+    s.name.toLowerCase().includes(staffSearch.toLowerCase()) ||
+    s.spuName.toLowerCase().includes(staffSearch.toLowerCase())
+  );
 
   const statusDistribution = [
     { name: "Not Started", value: filteredOkrs.filter((o) => o.status === "not_started").length },
@@ -333,17 +361,39 @@ export default function Dashboard() {
         </TabsList>
 
         <TabsContent value="spus" className="space-y-6">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search SPUs..."
+              value={spuSearch}
+              onChange={(e) => setSpuSearch(e.target.value)}
+              className="pl-9"
+              data-testid="input-search-spu"
+            />
+            {spuSearch && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                onClick={() => setSpuSearch("")}
+                data-testid="button-clear-spu-search"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
           <Card>
             <CardHeader>
               <CardTitle>SPU Progress</CardTitle>
               <CardDescription>Average OKR completion by SPU</CardDescription>
             </CardHeader>
             <CardContent>
-              {spuProgress.length === 0 ? (
-                <p className="text-center text-muted-foreground py-12">No data available for selected filters</p>
+              {filteredSpuProgress.length === 0 ? (
+                <p className="text-center text-muted-foreground py-12">No SPUs found{spuSearch ? ` matching "${spuSearch}"` : " for selected filters"}</p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={spuProgress}>
+                  <BarChart data={filteredSpuProgress}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="name" className="text-xs" />
                     <YAxis domain={[0, 100]} className="text-xs" />
@@ -356,7 +406,7 @@ export default function Dashboard() {
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {spuProgress.map((spu, index) => (
+            {filteredSpuProgress.map((spu, index) => (
               <Card key={spu.name} data-testid={`card-spu-${spu.name}`}>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">{spu.name}</CardTitle>
@@ -434,42 +484,63 @@ export default function Dashboard() {
         </TabsContent>
 
         <TabsContent value="staff" className="space-y-6">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search staff by name or SPU..."
+              value={staffSearch}
+              onChange={(e) => setStaffSearch(e.target.value)}
+              className="pl-9"
+              data-testid="input-search-staff"
+            />
+            {staffSearch && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                onClick={() => setStaffSearch("")}
+                data-testid="button-clear-staff-search"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
           <Card>
             <CardHeader>
               <CardTitle>Staff OKR Overview</CardTitle>
-              <CardDescription>Individual staff member progress</CardDescription>
+              <CardDescription>
+                Individual staff member progress
+                {staffSearch && ` • Showing results for "${staffSearch}"`}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {filteredOkrs.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-12">No OKRs found for selected filters</p>
+                {filteredStaffWithOkrs.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-12">
+                    No staff found{staffSearch ? ` matching "${staffSearch}"` : " for selected filters"}
+                  </p>
                 ) : (
-                  Array.from(new Set(filteredOkrs.map((o) => o.staffId))).map((staffId) => {
-                    const staffOkrs = filteredOkrs.filter((o) => o.staffId === staffId);
-                    const staff = staffOkrs[0]?.staff;
-                    const avgProg = Math.round(staffOkrs.reduce((sum, o) => sum + o.currentValue, 0) / staffOkrs.length);
-                    
-                    return (
-                      <Card key={staffId} data-testid={`card-staff-${staffId}`}>
-                        <CardContent className="pt-4">
-                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-semibold" data-testid={`text-staff-name-${staffId}`}>{staff?.name}</h4>
-                              <p className="text-sm text-muted-foreground">{staff?.spu.name}</p>
-                              <p className="text-xs text-muted-foreground mt-1">{staffOkrs.length} OKRs</p>
-                            </div>
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Average Progress</span>
-                                <span className="font-semibold" data-testid={`text-staff-progress-${staffId}`}>{avgProg}%</span>
-                              </div>
-                              <Progress value={avgProg} className="h-2" />
-                            </div>
+                  filteredStaffWithOkrs.map((s) => (
+                    <Card key={s.staffId} data-testid={`card-staff-${s.staffId}`}>
+                      <CardContent className="pt-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold" data-testid={`text-staff-name-${s.staffId}`}>{s.name}</h4>
+                            <p className="text-sm text-muted-foreground">{s.spuName}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{s.okrCount} OKRs</p>
                           </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-muted-foreground">Average Progress</span>
+                              <span className="font-semibold" data-testid={`text-staff-progress-${s.staffId}`}>{s.avgProgress}%</span>
+                            </div>
+                            <Progress value={s.avgProgress} className="h-2" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
                 )}
               </div>
             </CardContent>
