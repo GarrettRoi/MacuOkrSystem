@@ -71,10 +71,9 @@ export const okrResponsibilities = pgTable("okr_responsibilities", {
 });
 
 export const UNIVERSITY_OBJECTIVES = [
-  "Objective 1: We will fully EMBRACE our calling to be a Wesleyan-Holiness Christ-centered university.",
-  "Objective 2: We will prioritize BELONGING to foster a connected community for students, faculty, staff, and alumni.",
+  "Objective 1: We will humbly CREATE transformative opportunities for the holistic growth of students, faculty, staff, alums, and our community from a Christ-centered, biblical worldview and Wesleyan perspective.",
+  "Objective 2: We will joyfully COLLABORATE to align our organizational structures, facilities, and resources effectively and efficiently to achieve sustainability and future expansion.",
   "Objective 3: We will boldly INNOVATE to provide relevant, attainable, dynamic opportunities for learning and growth.",
-  "Objective 4: We will demonstrate EXCELLENCE by exceeding expectations through intentional strategy and continuous improvement.",
 ] as const;
 
 export const UNIVERSITY_KEY_RESULTS = [
