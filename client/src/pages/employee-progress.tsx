@@ -309,14 +309,13 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                               {/* Row 1: Objective (destructive background) */}
                               <tr key={`${record.okr.id}-objective`} className="border-b" data-testid={`row-okr-${record.okr.id}`}>
                                 <td rowSpan={4} className="p-2 align-top font-semibold border-r bg-muted/50">{record.okr.okrNumber}</td>
-                                <td colSpan={6} className="p-2 bg-destructive/10 font-semibold">
+                                <td colSpan={6} className="p-2 font-semibold bg-[#db040473]">
                                   {record.okr.objectiveStatement}
                                 </td>
                                 <td rowSpan={4} className="p-2 align-top text-right font-bold text-lg border-l">
                                   {latestScore !== null && latestScore !== undefined ? `${latestScore}%` : "—"}
                                 </td>
                               </tr>
-
                               {/* Row 2: Strategic Alignment */}
                               <tr key={`${record.okr.id}-strategic`} className="border-b">
                                 <td className="p-2 text-xs text-muted-foreground font-medium">Strategic</td>
@@ -330,7 +329,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                 </td>
                                 <td className="p-2">{record.okr.universityKeyResult}</td>
                               </tr>
-
                               {/* Row 3: Owner / SPU */}
                               <tr key={`${record.okr.id}-owner`} className="border-b bg-muted/20">
                                 <td className="p-2 text-xs text-muted-foreground font-medium">Owner</td>
@@ -342,7 +340,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                 </td>
                                 <td className="p-2 text-muted-foreground">{keyResults.length} Key Results</td>
                               </tr>
-
                               {/* Row 4: Aligned / Period */}
                               <tr key={`${record.okr.id}-aligned`} className="border-b">
                                 <td className="p-2 text-xs text-muted-foreground font-medium">Aligned</td>
