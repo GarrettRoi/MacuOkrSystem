@@ -4,8 +4,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { TrendingUp, Calendar, Target } from "lucide-react";
-import { useState } from "react";
-import type { OkrWithDetails } from "@shared/schema";
+import { useState, useEffect } from "react";
+import type { OkrWithDetails, Year } from "@shared/schema";
 
 export default function TrendsPage() {
   const currentYear = new Date().getFullYear();
@@ -16,9 +16,29 @@ export default function TrendsPage() {
     queryKey: ["/api/okrs"],
   });
 
-  const years = okrs
-    ? Array.from(new Set(okrs.map((okr) => okr.year))).sort((a, b) => b - a)
+  // Fetch years from admin-managed years endpoint
+  const { data: yearsData } = useQuery<Year[]>({
+    queryKey: ["/api/years"],
+  });
+
+  // Get sorted years from the admin-managed years
+  const years = yearsData
+    ? yearsData.map(y => y.year).sort((a, b) => b - a)
     : [];
+
+  // Update selected years when years data loads
+  useEffect(() => {
+    if (years.length > 0) {
+      if (!years.includes(parseInt(selectedYear))) {
+        setSelectedYear(years[0].toString());
+      }
+      if (!years.includes(parseInt(comparisonYear)) && years.length > 1) {
+        setComparisonYear(years[1].toString());
+      } else if (!years.includes(parseInt(comparisonYear)) && years.length === 1) {
+        setComparisonYear(years[0].toString());
+      }
+    }
+  }, [years, selectedYear, comparisonYear]);
 
   const quarterlyData = okrs
     ? ["Q1", "Q2", "Q3", "Q4"].map((quarter) => {
