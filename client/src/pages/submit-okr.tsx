@@ -40,7 +40,12 @@ interface SubmitOkrProps {
   staff: StaffWithDetails;
 }
 
-const QUARTERS = ["Q1", "Q2", "Q3", "Q4"];
+const QUARTERS = [
+  { value: "Q1", label: "Q1: June - August" },
+  { value: "Q2", label: "Q2: September - November" },
+  { value: "Q3", label: "Q3: December - February" },
+  { value: "Q4", label: "Q4: March - May" },
+];
 const currentYear = new Date().getFullYear();
 
 export default function SubmitOkr({ staff }: SubmitOkrProps) {
@@ -304,8 +309,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         </FormControl>
                         <SelectContent>
                           {QUARTERS.map((q) => (
-                            <SelectItem key={q} value={q} data-testid={`option-quarter-${q}`}>
-                              {q}
+                            <SelectItem key={q.value} value={q.value} data-testid={`option-quarter-${q.value}`}>
+                              {q.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
