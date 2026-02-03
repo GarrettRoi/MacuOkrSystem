@@ -16,7 +16,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, Year } from "@shared/schema";
 import { getQuarterLabel } from "@shared/schema";
 
 interface AggregatedOkr extends OkrWithDetails {
@@ -42,8 +42,6 @@ const editQuarterlyUpdateSchema = z.object({
 type EditOkrFormValues = z.infer<typeof editOkrSchema>;
 type EditQuarterlyUpdateFormValues = z.infer<typeof editQuarterlyUpdateSchema>;
 
-const currentYear = new Date().getFullYear();
-const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 const okrNumbers = ["OKR 1", "OKR 2", "OKR 3", "OKR 4", "OKR 5"];
 
 export default function Data() {
@@ -78,6 +76,10 @@ export default function Data() {
 
   const { data: spus } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
+  });
+
+  const { data: years } = useQuery<Year[]>({
+    queryKey: ["/api/years"],
   });
 
   // Filter the data
@@ -397,9 +399,9 @@ export default function Data() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Years</SelectItem>
-                      {years.map((year) => (
-                        <SelectItem key={year} value={year.toString()}>
-                          {year}
+                      {years?.sort((a, b) => b.year - a.year).map((yearItem) => (
+                        <SelectItem key={yearItem.id} value={yearItem.year.toString()}>
+                          {yearItem.year}
                         </SelectItem>
                       ))}
                     </SelectContent>
