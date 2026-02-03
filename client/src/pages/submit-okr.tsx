@@ -285,6 +285,10 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                 </div>
               </div>
 
+              <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground border">
+                Each Strategic Planning Unit (SPU) may submit multiple OKRs per quarter. Please select the number that corresponds to this OKR for the Primary SPU. For example, if this is the first OKR you’re submitting for this quarter, select “OKR 1.” If it’s your second for this quarter, select “OKR 2,” and so on. This number will correspond to each unique score you will submit at the end of the quarter.
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <FormField
                   control={form.control}
