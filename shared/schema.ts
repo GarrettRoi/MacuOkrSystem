@@ -77,14 +77,18 @@ export const UNIVERSITY_OBJECTIVES = [
 ] as const;
 
 export const UNIVERSITY_KEY_RESULTS = [
-  "KR 1.A: Faith integration. 65% of students report that their faith has been strengthened during their time at MACU.",
-  "KR 1.B: Chapel engagement. Achieve 75% average chapel attendance across all campuses.",
-  "KR 2.A: Student connections. Increase student participation in campus activities by 20%.",
-  "KR 2.B: Alumni engagement. Grow alumni event participation by 25%.",
-  "KR 3.A: Enrollment growth. Increase total student enrollment by 10%.",
+  "KR 1.A : Wisdom. Identify and develop metrics for measuring wisdom and increase the associated results for each stakeholder group within defined periods.",
+  "KR 1.B : Stature. Ensure a minimum of 20 annual wellness programs, diversifying department engagement in creating mental and physical health initiatives serving all stakeholders to at least 30% in 2025, 50% in 2026, and 80% by May 31 2027.",
+  "KR 1.C : Favor with God. Increase spiritual formation metrics by 2% annually.",
+  "KR 1.D : Favor with man. Double the number of interpersonal training opportunities in 3 years.",
+  "KR 2.A: Stewardship of resources: Implement a resource utilization audit with at least 75% of identified opportunities acted upon.",
+  "KR 2.B: Technology. Replace 50% of manual processes with technology.",
+  "KR 2.C: Processes and procedures. Evaluate and refine 100% of current processes and procedures for optimization and efficiency.",
+  "KR 2.D: People and departments. Increase student and employee satisfaction scores by 2% annually.",
+  "KR 3.A: Strategic Partnerships. Establish 1-2 partnerships per SPU per year.",
   "KR 3.B: Relevant program offerings. Create 9-12 new academic, co-curricular, or administrative program offerings.",
-  "KR 4.A: Academic excellence. Maintain a 90% or higher student satisfaction rate.",
-  "KR 4.B: Operational efficiency. Reduce operational costs by 5% through process improvements.",
+  "KR 3:C: Engage with cutting edge technology. Incorporate technology into academic, co-curricular, and administrative programs.",
+  "KR 3.D: New and expanded financial resources. Increase alternative revenue funding for learning and growth by 10% annually.",
 ] as const;
 
 export const OKR_NUMBERS = ["OKR 1", "OKR 2", "OKR 3", "OKR 4", "OKR 5"] as const;
