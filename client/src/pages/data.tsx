@@ -18,6 +18,7 @@ import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filte
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, Year } from "@shared/schema";
 import { getQuarterLabel } from "@shared/schema";
+import { compareNames } from "@/lib/utils";
 
 interface AggregatedOkr extends OkrWithDetails {
   derivedProgress: number;
@@ -459,7 +460,7 @@ export default function Data() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Staff</SelectItem>
-                      {allStaff?.slice().sort((a, b) => a.name.localeCompare(b.name)).map((staff) => (
+                      {allStaff?.slice().sort((a, b) => compareNames(a.name, b.name)).map((staff) => (
                         <SelectItem key={staff.id} value={staff.id}>
                           {staff.name}
                         </SelectItem>

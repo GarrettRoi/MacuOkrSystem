@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Filter } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, Year } from "@shared/schema";
 import { QUARTERS, getQuarterLabel } from "@shared/schema";
+import { compareNames } from "@/lib/utils";
 
 interface EmployeeProgressProps {
   staff: StaffWithDetails;
@@ -197,7 +198,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" data-testid="option-filter-staff-all">All employees</SelectItem>
-                      {allStaff && allStaff.slice().sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
+                      {allStaff && allStaff.slice().sort((a, b) => compareNames(a.name, b.name)).map((s) => (
                         <SelectItem key={s.id} value={s.id} data-testid={`option-filter-staff-${s.id}`}>
                           {s.name}
                         </SelectItem>

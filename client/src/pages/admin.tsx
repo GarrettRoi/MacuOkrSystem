@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Settings, Pencil } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { compareNames } from "@/lib/utils";
 
 export default function Admin() {
   const { toast } = useToast();
@@ -335,7 +336,7 @@ export default function Admin() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      staff?.slice().sort((a, b) => a.name.localeCompare(b.name)).map((member) => (
+                      staff?.slice().sort((a, b) => compareNames(a.name, b.name)).map((member) => (
                         <TableRow key={member.id} data-testid={`row-staff-${member.id}`}>
                           <TableCell className="font-medium">{member.name}</TableCell>
                           <TableCell>{member.email}</TableCell>

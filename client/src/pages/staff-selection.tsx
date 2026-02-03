@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Search, User } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { compareNames } from "@/lib/utils";
 
 interface StaffSelectionProps {
   onStaffSelected: (staff: StaffWithDetails) => void;
@@ -24,7 +25,7 @@ export default function StaffSelection({ onStaffSelected }: StaffSelectionProps)
     staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     staff.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     staff.spu.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || []).sort((a, b) => a.name.localeCompare(b.name));
+  ) || []).sort((a, b) => compareNames(a.name, b.name));
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
