@@ -10,12 +10,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ArrowLeft, Target, Calendar, Building2, TrendingUp, CheckCircle2, AlertCircle, Clock, Filter, X } from "lucide-react";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
+import { QUARTERS, getQuarterLabel } from "@shared/schema";
 
 interface MyOkrsProps {
   staff: StaffWithDetails;
 }
-
-const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const currentYear = new Date().getFullYear();
 const YEARS = ["All", String(currentYear - 1), String(currentYear), String(currentYear + 1)];
 
@@ -161,12 +160,13 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
               </Select>
 
               <Select value={quarterFilter} onValueChange={setQuarterFilter}>
-                <SelectTrigger className="w-32" data-testid="select-quarter">
+                <SelectTrigger className="w-48" data-testid="select-quarter">
                   <SelectValue placeholder="Quarter" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="All">All Quarters</SelectItem>
                   {QUARTERS.map((q) => (
-                    <SelectItem key={q} value={q}>{q === "All" ? "All Quarters" : q}</SelectItem>
+                    <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

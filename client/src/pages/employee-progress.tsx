@@ -8,12 +8,11 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Filter } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, Year } from "@shared/schema";
+import { QUARTERS, getQuarterLabel } from "@shared/schema";
 
 interface EmployeeProgressProps {
   staff: StaffWithDetails;
 }
-
-const QUARTERS = ["Q1", "Q2", "Q3", "Q4"];
 const STATUSES = ["not_started", "in_progress", "at_risk", "completed"];
 
 const statusLabels = {
@@ -47,13 +46,13 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     queryKey: ["/api/departments"],
   });
 
-  // Build query params
+  // Build query params - "all" values should not be added as filters
   const queryParams = new URLSearchParams();
-  if (selectedYear) queryParams.append("year", selectedYear);
-  if (selectedQuarter) queryParams.append("quarter", selectedQuarter);
-  if (selectedStaffId) queryParams.append("staffId", selectedStaffId);
-  if (selectedSpuId) queryParams.append("spuId", selectedSpuId);
-  if (selectedStatus) queryParams.append("status", selectedStatus);
+  if (selectedYear && selectedYear !== "all") queryParams.append("year", selectedYear);
+  if (selectedQuarter && selectedQuarter !== "all") queryParams.append("quarter", selectedQuarter);
+  if (selectedStaffId && selectedStaffId !== "all") queryParams.append("staffId", selectedStaffId);
+  if (selectedSpuId && selectedSpuId !== "all") queryParams.append("spuId", selectedSpuId);
+  if (selectedStatus && selectedStatus !== "all") queryParams.append("status", selectedStatus);
 
   // Fetch employee progress grouped
   const { data: progressSummaries, isLoading } = useQuery<EmployeeProgressSummary[]>({
@@ -73,7 +72,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     setSelectedStatus("");
   };
 
-  const activeFiltersCount = [selectedYear, selectedQuarter, selectedStaffId, selectedSpuId, selectedStatus].filter(Boolean).length;
+  const activeFiltersCount = [selectedYear, selectedQuarter, selectedStaffId, selectedSpuId, selectedStatus].filter(v => v && v !== "all").length;
 
   const getKeyResults = (keyResultsJson: string) => {
     try {
@@ -89,17 +88,14 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     : 0;
 
   const getDateRange = () => {
-    if (selectedQuarter && selectedYear) {
-      const quarterMonths = {
-        Q1: "Jan - Mar",
-        Q2: "Apr - Jun",
-        Q3: "Jul - Sep",
-        Q4: "Oct - Dec",
-      };
-      return `${quarterMonths[selectedQuarter as keyof typeof quarterMonths]} ${selectedYear}`;
+    if (selectedQuarter && selectedQuarter !== "all" && selectedYear && selectedYear !== "all") {
+      return `${getQuarterLabel(selectedQuarter)} ${selectedYear}`;
     }
-    if (selectedYear) {
+    if (selectedYear && selectedYear !== "all") {
       return `${selectedYear}`;
+    }
+    if (selectedQuarter && selectedQuarter !== "all") {
+      return getQuarterLabel(selectedQuarter);
     }
     return "All Periods";
   };
@@ -164,6 +160,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All years" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all" data-testid="option-filter-year-all">All years</SelectItem>
                       {years && years.length > 0 && years.sort((a, b) => b.year - a.year).map((year) => (
                         <SelectItem key={year.id} value={String(year.year)} data-testid={`option-filter-year-${year.year}`}>
                           {year.year}
@@ -181,9 +178,10 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All quarters" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all" data-testid="option-filter-quarter-all">All quarters</SelectItem>
                       {QUARTERS.map((q) => (
-                        <SelectItem key={q} value={q} data-testid={`option-filter-quarter-${q}`}>
-                          {q}
+                        <SelectItem key={q.value} value={q.value} data-testid={`option-filter-quarter-${q.value}`}>
+                          {q.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -198,6 +196,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All employees" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all" data-testid="option-filter-staff-all">All employees</SelectItem>
                       {allStaff && allStaff.map((s) => (
                         <SelectItem key={s.id} value={s.id} data-testid={`option-filter-staff-${s.id}`}>
                           {s.name}
@@ -215,6 +214,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All SPUs" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all" data-testid="option-filter-spu-all">All SPUs</SelectItem>
                       {spus && spus.map((spu) => (
                         <SelectItem key={spu.id} value={spu.id} data-testid={`option-filter-spu-${spu.id}`}>
                           {spu.name}
@@ -232,6 +232,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       <SelectValue placeholder="All statuses" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all" data-testid="option-filter-status-all">All statuses</SelectItem>
                       {STATUSES.map((status) => (
                         <SelectItem key={status} value={status} data-testid={`option-filter-status-${status}`}>
                           {statusLabels[status as keyof typeof statusLabels]}
