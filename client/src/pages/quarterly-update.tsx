@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle, Sparkles, Star, PartyPopper } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StaffWithDetails, OkrWithDetails, Year } from "@shared/schema";
 import { insertQuarterlyUpdateSchema, QUARTERS, getQuarterLabel } from "@shared/schema";
@@ -183,16 +183,79 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   if (isSubmitted) {
     return (
       <div className="max-w-3xl mx-auto p-6">
-        <Card>
-          <CardContent className="pt-12 pb-12 text-center">
-            <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-semibold mb-2">Update Submitted Successfully!</h2>
-            <p className="text-muted-foreground mb-6">
+        <Card className="overflow-hidden">
+          <CardContent className="pt-12 pb-12 text-center relative">
+            <style>{`
+              @keyframes confetti-fall {
+                0% { transform: translateY(-100%) rotate(0deg); opacity: 1; }
+                100% { transform: translateY(400px) rotate(720deg); opacity: 0; }
+              }
+              @keyframes bounce-in {
+                0% { transform: scale(0); opacity: 0; }
+                50% { transform: scale(1.2); }
+                100% { transform: scale(1); opacity: 1; }
+              }
+              @keyframes float {
+                0%, 100% { transform: translateY(0) rotate(0deg); }
+                50% { transform: translateY(-10px) rotate(5deg); }
+              }
+              @keyframes sparkle {
+                0%, 100% { opacity: 0; transform: scale(0.5); }
+                50% { opacity: 1; transform: scale(1); }
+              }
+              @keyframes slide-up {
+                0% { transform: translateY(20px); opacity: 0; }
+                100% { transform: translateY(0); opacity: 1; }
+              }
+              .confetti {
+                position: absolute;
+                width: 10px;
+                height: 10px;
+                border-radius: 2px;
+                animation: confetti-fall 3s ease-out forwards;
+              }
+              .bounce-in { animation: bounce-in 0.6s ease-out forwards; }
+              .float { animation: float 2s ease-in-out infinite; }
+              .sparkle { animation: sparkle 1.5s ease-in-out infinite; }
+              .slide-up { animation: slide-up 0.5s ease-out forwards; }
+              .slide-up-delay-1 { animation: slide-up 0.5s ease-out 0.2s forwards; opacity: 0; }
+              .slide-up-delay-2 { animation: slide-up 0.5s ease-out 0.4s forwards; opacity: 0; }
+            `}</style>
+            
+            <div className="confetti bg-yellow-400" style={{ left: '10%', animationDelay: '0s' }} />
+            <div className="confetti bg-green-400" style={{ left: '20%', animationDelay: '0.2s' }} />
+            <div className="confetti bg-blue-400" style={{ left: '30%', animationDelay: '0.4s' }} />
+            <div className="confetti bg-pink-400" style={{ left: '40%', animationDelay: '0.1s' }} />
+            <div className="confetti bg-purple-400" style={{ left: '50%', animationDelay: '0.3s' }} />
+            <div className="confetti bg-red-400" style={{ left: '60%', animationDelay: '0.5s' }} />
+            <div className="confetti bg-orange-400" style={{ left: '70%', animationDelay: '0.15s' }} />
+            <div className="confetti bg-teal-400" style={{ left: '80%', animationDelay: '0.35s' }} />
+            <div className="confetti bg-indigo-400" style={{ left: '90%', animationDelay: '0.25s' }} />
+            
+            <div className="relative">
+              <Sparkles className="absolute -top-2 -left-8 h-6 w-6 text-yellow-500 sparkle" style={{ animationDelay: '0s' }} />
+              <Sparkles className="absolute -top-4 -right-6 h-5 w-5 text-yellow-400 sparkle" style={{ animationDelay: '0.5s' }} />
+              <Star className="absolute top-0 right-0 h-4 w-4 text-yellow-500 sparkle" style={{ animationDelay: '0.75s' }} />
+              
+              <div className="inline-block bounce-in">
+                <div className="relative">
+                  <CheckCircle2 className="h-20 w-20 text-green-500 mx-auto float" />
+                  <PartyPopper className="absolute -right-4 -top-2 h-8 w-8 text-amber-500 float" style={{ animationDelay: '0.5s' }} />
+                </div>
+              </div>
+            </div>
+            
+            <h2 className="text-2xl font-semibold mb-2 mt-6 slide-up">
+              Update Submitted Successfully!
+            </h2>
+            <p className="text-muted-foreground mb-6 slide-up-delay-1">
               Your quarterly progress update has been recorded in the system.
             </p>
-            <Button onClick={handleSubmitAnother} data-testid="button-submit-another-update">
-              Submit Another Update
-            </Button>
+            <div className="slide-up-delay-2">
+              <Button onClick={handleSubmitAnother} data-testid="button-submit-another-update">
+                Submit Another Update
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
