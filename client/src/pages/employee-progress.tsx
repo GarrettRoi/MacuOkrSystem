@@ -43,7 +43,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
 
   // Fetch all SPUs
   const { data: spus } = useQuery<Spu[]>({
-    queryKey: ["/api/departments"],
+    queryKey: ["/api/spus"],
   });
 
   // Build query params - "all" values should not be added as filters
