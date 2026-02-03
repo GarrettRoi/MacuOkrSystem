@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, Year } from "@shared/schema";
 import { getQuarterLabel } from "@shared/schema";
@@ -65,6 +65,11 @@ export default function Data() {
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleteMode, setDeleteMode] = useState<"single" | "bulk">("single");
   const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
+
+  // Import states
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<string>("");
 
   const { data: okrsWithUpdates, isLoading } = useQuery<AggregatedOkr[]>({
     queryKey: ["/api/okrs-with-updates"],
@@ -204,6 +209,69 @@ export default function Data() {
     },
   });
 
+  const importCsvMutation = useMutation({
+    mutationFn: async (csvData: string) => {
+      return await apiRequest("POST", "/api/import/csv", { csvData });
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/years"] });
+      setImportDialogOpen(false);
+      setImportFile(null);
+      setImportPreview("");
+      
+      // Show warnings if any
+      const warnings = data.results?.warnings || [];
+      const errors = data.results?.errors || [];
+      if (warnings.length > 0 || errors.length > 0) {
+        toast({
+          title: "Import Completed with Issues",
+          description: `${data.message}${warnings.length > 0 ? ` Check console for ${warnings.length} warning(s).` : ''}`,
+          variant: "default",
+        });
+        if (warnings.length > 0) {
+          console.warn("Import warnings:", warnings);
+        }
+        if (errors.length > 0) {
+          console.error("Import errors:", errors);
+        }
+      } else {
+        toast({
+          title: "Import Successful",
+          description: data.message || "CSV data has been imported successfully.",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Import Failed",
+        description: error?.message || "Failed to import CSV data. Please check the file format.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setImportFile(file);
+    const text = await file.text();
+    // Show first 5 lines as preview
+    const lines = text.split('\n').slice(0, 5);
+    setImportPreview(lines.join('\n'));
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    const csvData = await importFile.text();
+    importCsvMutation.mutate(csvData);
+  };
+
   const handleDeleteSingle = (okrId: string) => {
     setDeleteMode("single");
     setSingleDeleteId(okrId);
@@ -336,16 +404,26 @@ export default function Data() {
                 </CardDescription>
               </div>
             </div>
-            {selectedOkrIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              {selectedOkrIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteBulk}
+                  data-testid="button-bulk-delete"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Selected ({selectedOkrIds.size})
+                </Button>
+              )}
               <Button
-                variant="destructive"
-                onClick={handleDeleteBulk}
-                data-testid="button-bulk-delete"
+                variant="outline"
+                onClick={() => setImportDialogOpen(true)}
+                data-testid="button-import-csv"
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Selected ({selectedOkrIds.size})
+                <Upload className="h-4 w-4 mr-2" />
+                Import CSV
               </Button>
-            )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -854,6 +932,82 @@ export default function Data() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import CSV Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileUp className="h-5 w-5" />
+              Import OKR Data from CSV
+            </DialogTitle>
+            <DialogDescription>
+              Upload a CSV file containing OKR submission data. The system will automatically create staff members, SPUs, sub-units, OKRs, and quarterly updates from the data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleFileSelect}
+                className="hidden"
+                id="csv-file-input"
+                data-testid="input-csv-file"
+              />
+              <label htmlFor="csv-file-input" className="cursor-pointer">
+                <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  {importFile ? (
+                    <span className="text-foreground font-medium">{importFile.name}</span>
+                  ) : (
+                    <>Click to select a CSV file or drag and drop</>
+                  )}
+                </p>
+              </label>
+            </div>
+            
+            {importPreview && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Preview (first 5 lines):</p>
+                <div className="bg-muted rounded-md p-3 overflow-x-auto">
+                  <pre className="text-xs whitespace-pre-wrap">{importPreview}</pre>
+                </div>
+              </div>
+            )}
+            
+            <div className="bg-muted/50 rounded-md p-4 text-sm">
+              <p className="font-medium mb-2">Expected CSV columns:</p>
+              <ul className="list-disc list-inside space-y-1 text-muted-foreground text-xs">
+                <li>Timestamp, Your Name, Quarter/Year</li>
+                <li>Parent SPU, Sub-unit, Collaboration SPU</li>
+                <li>Key Result letters, OKR Number</li>
+                <li>Key Result 1-4 scores, Average score, Notes</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportDialogOpen(false);
+                setImportFile(null);
+                setImportPreview("");
+              }}
+              data-testid="button-cancel-import"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleImport}
+              disabled={!importFile || importCsvMutation.isPending}
+              data-testid="button-confirm-import"
+            >
+              {importCsvMutation.isPending ? "Importing..." : "Import Data"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

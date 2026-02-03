@@ -36,24 +36,32 @@ export interface IStorage {
   getAllStaffWithDetails(): Promise<StaffWithDetails[]>;
   getStaff(id: string): Promise<Staff | undefined>;
   getStaffWithDetails(id: string): Promise<StaffWithDetails | undefined>;
+  getStaffByName(name: string): Promise<Staff | undefined>;
+  findOrCreateStaff(name: string, spuId: string, subUnitId?: string): Promise<Staff>;
   createStaff(staff: InsertStaff): Promise<Staff>;
   updateStaff(id: string, updates: Partial<InsertStaff>): Promise<Staff>;
   deleteStaff(id: string): Promise<void>;
   
   getAllSpus(): Promise<Spu[]>;
   getSpu(id: string): Promise<Spu | undefined>;
+  getSpuByName(name: string): Promise<Spu | undefined>;
+  findOrCreateSpu(name: string): Promise<Spu>;
   createSpu(spu: InsertSpu): Promise<Spu>;
   updateSpu(id: string, updates: Partial<InsertSpu>): Promise<Spu>;
   deleteSpu(id: string): Promise<void>;
   
   getAllSubUnits(): Promise<SubUnit[]>;
   getSubUnit(id: string): Promise<SubUnit | undefined>;
+  getSubUnitByNameAndSpu(name: string, spuId: string): Promise<SubUnit | undefined>;
+  findOrCreateSubUnit(name: string, spuId: string): Promise<SubUnit>;
   createSubUnit(subUnit: InsertSubUnit): Promise<SubUnit>;
   updateSubUnit(id: string, updates: Partial<InsertSubUnit>): Promise<SubUnit>;
   deleteSubUnit(id: string): Promise<void>;
   
   getAllYears(): Promise<Year[]>;
   getYear(id: string): Promise<Year | undefined>;
+  getYearByValue(year: number): Promise<Year | undefined>;
+  findOrCreateYear(year: number): Promise<Year>;
   createYear(year: InsertYear): Promise<Year>;
   deleteYear(id: string): Promise<void>;
   
@@ -196,6 +204,41 @@ export class DatabaseStorage implements IStorage {
     await db.delete(staff).where(eq(staff.id, id));
   }
 
+  async getStaffByName(name: string): Promise<Staff | undefined> {
+    const normalized = name.trim().toLowerCase();
+    const allStaff = await db.select().from(staff);
+    return allStaff.find(s => s.name.toLowerCase() === normalized);
+  }
+
+  async findOrCreateStaff(name: string, spuId: string, subUnitId?: string): Promise<Staff> {
+    const existing = await this.getStaffByName(name);
+    if (existing) return existing;
+    
+    // Normalize name: title case each word
+    const normalizedName = name.trim().split(/\s+/).map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
+    
+    // Check again with normalized name
+    const existingNormalized = await this.getStaffByName(normalizedName);
+    if (existingNormalized) return existingNormalized;
+    
+    const email = normalizedName.toLowerCase().replace(/\s+/g, '.') + '@macu.edu';
+    
+    // Check if email already exists
+    const allStaff = await this.getAllStaff();
+    const emailExists = allStaff.find(s => s.email.toLowerCase() === email.toLowerCase());
+    if (emailExists) return emailExists;
+    
+    return await this.createStaff({
+      name: normalizedName,
+      email,
+      spuId,
+      subUnitId: subUnitId || null,
+      isAdmin: false,
+    });
+  }
+
   async getAllSpus(): Promise<Spu[]> {
     return await db.select().from(spus);
   }
@@ -203,6 +246,18 @@ export class DatabaseStorage implements IStorage {
   async getSpu(id: string): Promise<Spu | undefined> {
     const [spu] = await db.select().from(spus).where(eq(spus.id, id));
     return spu || undefined;
+  }
+
+  async getSpuByName(name: string): Promise<Spu | undefined> {
+    const normalized = name.trim().toLowerCase();
+    const allSpus = await db.select().from(spus);
+    return allSpus.find(s => s.name.toLowerCase() === normalized);
+  }
+
+  async findOrCreateSpu(name: string): Promise<Spu> {
+    const existing = await this.getSpuByName(name);
+    if (existing) return existing;
+    return await this.createSpu({ name: name.trim() });
   }
 
   async createSpu(spu: InsertSpu): Promise<Spu> {
@@ -235,6 +290,18 @@ export class DatabaseStorage implements IStorage {
     return subUnit || undefined;
   }
 
+  async getSubUnitByNameAndSpu(name: string, spuId: string): Promise<SubUnit | undefined> {
+    const normalized = name.trim().toLowerCase();
+    const allSubUnits = await db.select().from(subUnits).where(eq(subUnits.spuId, spuId));
+    return allSubUnits.find(s => s.name.toLowerCase() === normalized);
+  }
+
+  async findOrCreateSubUnit(name: string, spuId: string): Promise<SubUnit> {
+    const existing = await this.getSubUnitByNameAndSpu(name, spuId);
+    if (existing) return existing;
+    return await this.createSubUnit({ name: name.trim(), spuId });
+  }
+
   async createSubUnit(subUnit: InsertSubUnit): Promise<SubUnit> {
     const [createdSubUnit] = await db
       .insert(subUnits)
@@ -263,6 +330,17 @@ export class DatabaseStorage implements IStorage {
   async getYear(id: string): Promise<Year | undefined> {
     const [year] = await db.select().from(years).where(eq(years.id, id));
     return year || undefined;
+  }
+
+  async getYearByValue(yearValue: number): Promise<Year | undefined> {
+    const [year] = await db.select().from(years).where(eq(years.year, yearValue));
+    return year || undefined;
+  }
+
+  async findOrCreateYear(yearValue: number): Promise<Year> {
+    const existing = await this.getYearByValue(yearValue);
+    if (existing) return existing;
+    return await this.createYear({ year: yearValue });
   }
 
   async createYear(year: InsertYear): Promise<Year> {
