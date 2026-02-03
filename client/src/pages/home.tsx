@@ -100,7 +100,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
       <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold">Welcome, {getSortableName(staff.name).split(" ")[0]}!</h1>
+        <h1 className="text-4xl font-bold">Welcome, {staff.name.toLowerCase() === "phil greenwald" ? "PG5" : getSortableName(staff.name).split(" ")[0]}!</h1>
         <p className="text-muted-foreground text-lg">
           What would you like to do today?
         </p>
