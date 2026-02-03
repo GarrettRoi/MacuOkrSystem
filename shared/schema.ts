@@ -93,6 +93,18 @@ export const UNIVERSITY_KEY_RESULTS = [
 
 export const OKR_NUMBERS = ["OKR 1", "OKR 2", "OKR 3", "OKR 4", "OKR 5"] as const;
 
+export const QUARTERS = [
+  { value: "Q1", label: "Q1: June - August" },
+  { value: "Q2", label: "Q2: September - November" },
+  { value: "Q3", label: "Q3: December - February" },
+  { value: "Q4", label: "Q4: March - May" },
+] as const;
+
+export const getQuarterLabel = (value: string): string => {
+  const quarter = QUARTERS.find(q => q.value === value);
+  return quarter?.label || value;
+};
+
 export const RESPONSIBILITY_ROLES = ["owner", "collaborator"] as const;
 
 export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });

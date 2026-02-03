@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StaffWithDetails, OkrWithDetails, Year } from "@shared/schema";
-import { insertQuarterlyUpdateSchema } from "@shared/schema";
+import { insertQuarterlyUpdateSchema, QUARTERS, getQuarterLabel } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 // Schema for individual key result score (for internal form use)
@@ -43,7 +43,6 @@ interface QuarterlyUpdateProps {
   staff: StaffWithDetails;
 }
 
-const QUARTERS = ["Q1", "Q2", "Q3", "Q4"];
 const currentYear = new Date().getFullYear();
 
 export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
@@ -268,8 +267,8 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                           </FormControl>
                           <SelectContent>
                             {QUARTERS.map((q) => (
-                              <SelectItem key={q} value={q} data-testid={`option-update-quarter-${q}`}>
-                                {q}
+                              <SelectItem key={q.value} value={q.value} data-testid={`option-update-quarter-${q.value}`}>
+                                {q.label}
                               </SelectItem>
                             ))}
                           </SelectContent>

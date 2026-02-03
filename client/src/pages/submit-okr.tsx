@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2, Sparkles } from "lucide-react";
 import type { StaffWithDetails, Spu, SubUnit, Year } from "@shared/schema";
-import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, OKR_NUMBERS } from "@shared/schema";
+import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, OKR_NUMBERS, QUARTERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 const keyResultSchema = z.object({
@@ -40,12 +40,6 @@ interface SubmitOkrProps {
   staff: StaffWithDetails;
 }
 
-const QUARTERS = [
-  { value: "Q1", label: "Q1: June - August" },
-  { value: "Q2", label: "Q2: September - November" },
-  { value: "Q3", label: "Q3: December - February" },
-  { value: "Q4", label: "Q4: March - May" },
-];
 const currentYear = new Date().getFullYear();
 
 export default function SubmitOkr({ staff }: SubmitOkrProps) {
