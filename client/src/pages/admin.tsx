@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Settings, Pencil } from "lucide-react";
+import { Plus, Trash2, Settings, Pencil, Merge } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames } from "@/lib/utils";
@@ -40,6 +40,10 @@ export default function Admin() {
   const [editingSpu, setEditingSpu] = useState<Spu | null>(null);
   const [editingSubUnit, setEditingSubUnit] = useState<SubUnit | null>(null);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [mergeTargetId, setMergeTargetId] = useState("");
 
   const { data: spus, isLoading: spusLoading } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
@@ -162,6 +166,31 @@ export default function Admin() {
     },
   });
 
+  const mergeStaffMutation = useMutation({
+    mutationFn: async (data: { sourceId: string; targetId: string }) => {
+      return await apiRequest("POST", "/api/staff/merge", data);
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
+      setMergeDialogOpen(false);
+      setMergeSourceId("");
+      setMergeTargetId("");
+      toast({ 
+        title: "Staff Accounts Merged", 
+        description: data.message || "Staff accounts have been merged successfully." 
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Merge Failed", 
+        description: error?.message || "Failed to merge staff accounts.",
+        variant: "destructive"
+      });
+    },
+  });
+
   const updateSpuMutation = useMutation({
     mutationFn: async (data: { id: string; name: string }) => {
       const { id, ...updates } = data;
@@ -225,13 +254,82 @@ export default function Admin() {
                   <CardTitle>Staff Members</CardTitle>
                   <CardDescription>Manage university staff and their SPU assignments</CardDescription>
                 </div>
-                <Dialog open={staffDialogOpen} onOpenChange={setStaffDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button data-testid="button-add-staff">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Staff
-                    </Button>
-                  </DialogTrigger>
+                <div className="flex gap-2">
+                  <Dialog open={mergeDialogOpen} onOpenChange={setMergeDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" data-testid="button-merge-staff">
+                        <Merge className="h-4 w-4 mr-2" />
+                        Merge Accounts
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Merge Staff Accounts</DialogTitle>
+                        <DialogDescription>
+                          Transfer all OKRs, updates, and responsibilities from one account to another. The source account will be deleted.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Source Account (will be deleted)</Label>
+                          <Select value={mergeSourceId} onValueChange={setMergeSourceId}>
+                            <SelectTrigger data-testid="select-merge-source">
+                              <SelectValue placeholder="Select account to merge from" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {staff?.slice().sort((a, b) => compareNames(a.name, b.name)).map((s) => (
+                                <SelectItem key={s.id} value={s.id} disabled={s.id === mergeTargetId}>
+                                  {s.name} ({s.email})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Target Account (will receive all data)</Label>
+                          <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
+                            <SelectTrigger data-testid="select-merge-target">
+                              <SelectValue placeholder="Select account to merge into" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {staff?.slice().sort((a, b) => compareNames(a.name, b.name)).map((s) => (
+                                <SelectItem key={s.id} value={s.id} disabled={s.id === mergeSourceId}>
+                                  {s.name} ({s.email})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {mergeSourceId && mergeTargetId && (
+                          <div className="p-3 bg-muted rounded-md text-sm">
+                            <strong>Preview:</strong> All OKRs, quarterly updates, and responsibilities from "{staff?.find(s => s.id === mergeSourceId)?.name}" will be transferred to "{staff?.find(s => s.id === mergeTargetId)?.name}". The source account will be permanently deleted.
+                          </div>
+                        )}
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          variant="destructive"
+                          onClick={() => {
+                            if (mergeSourceId && mergeTargetId) {
+                              mergeStaffMutation.mutate({ sourceId: mergeSourceId, targetId: mergeTargetId });
+                            }
+                          }}
+                          disabled={!mergeSourceId || !mergeTargetId || mergeStaffMutation.isPending}
+                          data-testid="button-confirm-merge"
+                        >
+                          {mergeStaffMutation.isPending ? "Merging..." : "Merge Accounts"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                  
+                  <Dialog open={staffDialogOpen} onOpenChange={setStaffDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button data-testid="button-add-staff">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Staff
+                      </Button>
+                    </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Add New Staff Member</DialogTitle>
@@ -310,6 +408,7 @@ export default function Admin() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+                </div>
               </div>
             </CardHeader>
             <CardContent>

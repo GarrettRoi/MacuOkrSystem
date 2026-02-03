@@ -191,6 +191,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/staff/merge", requireAdmin, async (req, res) => {
+    try {
+      const { sourceId, targetId } = req.body;
+      if (!sourceId || !targetId) {
+        return res.status(400).json({ error: "Both sourceId and targetId are required" });
+      }
+      if (sourceId === targetId) {
+        return res.status(400).json({ error: "Cannot merge a staff member with themselves" });
+      }
+      
+      const source = await storage.getStaff(sourceId);
+      const target = await storage.getStaff(targetId);
+      if (!source) {
+        return res.status(404).json({ error: "Source staff member not found" });
+      }
+      if (!target) {
+        return res.status(404).json({ error: "Target staff member not found" });
+      }
+
+      const result = await storage.mergeStaff(sourceId, targetId);
+      res.json({
+        success: true,
+        message: `Merged "${source.name}" into "${target.name}". Transferred ${result.okrsMerged} OKRs, ${result.updatesMerged} updates, and ${result.responsibilitiesMerged} responsibilities.`,
+        ...result,
+      });
+    } catch (error) {
+      console.error("Merge staff error:", error);
+      res.status(500).json({ error: "Failed to merge staff accounts" });
+    }
+  });
+
   app.get("/api/spus", async (_req, res) => {
     try {
       const spus = await storage.getAllSpus();

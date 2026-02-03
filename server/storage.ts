@@ -41,6 +41,7 @@ export interface IStorage {
   createStaff(staff: InsertStaff): Promise<Staff>;
   updateStaff(id: string, updates: Partial<InsertStaff>): Promise<Staff>;
   deleteStaff(id: string): Promise<void>;
+  mergeStaff(sourceId: string, targetId: string): Promise<{ okrsMerged: number; updatesMerged: number; responsibilitiesMerged: number }>;
   
   getAllSpus(): Promise<Spu[]>;
   getSpu(id: string): Promise<Spu | undefined>;
@@ -202,6 +203,43 @@ export class DatabaseStorage implements IStorage {
 
   async deleteStaff(id: string): Promise<void> {
     await db.delete(staff).where(eq(staff.id, id));
+  }
+
+  async mergeStaff(sourceId: string, targetId: string): Promise<{ okrsMerged: number; updatesMerged: number; responsibilitiesMerged: number }> {
+    // Transfer all OKRs from source to target
+    const sourceOkrs = await db.select().from(okrs).where(eq(okrs.staffId, sourceId));
+    for (const okr of sourceOkrs) {
+      await db.update(okrs).set({ staffId: targetId }).where(eq(okrs.id, okr.id));
+    }
+
+    // Transfer all quarterly updates from source to target
+    const sourceUpdates = await db.select().from(quarterlyUpdates).where(eq(quarterlyUpdates.staffId, sourceId));
+    for (const update of sourceUpdates) {
+      await db.update(quarterlyUpdates).set({ staffId: targetId }).where(eq(quarterlyUpdates.id, update.id));
+    }
+
+    // Transfer all OKR responsibilities from source to target
+    const sourceResponsibilities = await db.select().from(okrResponsibilities).where(eq(okrResponsibilities.staffId, sourceId));
+    for (const resp of sourceResponsibilities) {
+      // Check if target already has this responsibility for this OKR
+      const existing = await db.select().from(okrResponsibilities)
+        .where(and(eq(okrResponsibilities.okrId, resp.okrId), eq(okrResponsibilities.staffId, targetId)));
+      if (existing.length === 0) {
+        await db.update(okrResponsibilities).set({ staffId: targetId }).where(eq(okrResponsibilities.id, resp.id));
+      } else {
+        // Delete duplicate responsibility
+        await db.delete(okrResponsibilities).where(eq(okrResponsibilities.id, resp.id));
+      }
+    }
+
+    // Delete the source staff member
+    await db.delete(staff).where(eq(staff.id, sourceId));
+
+    return {
+      okrsMerged: sourceOkrs.length,
+      updatesMerged: sourceUpdates.length,
+      responsibilitiesMerged: sourceResponsibilities.length,
+    };
   }
 
   async getStaffByName(name: string): Promise<Staff | undefined> {
