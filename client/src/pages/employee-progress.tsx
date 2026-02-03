@@ -197,7 +197,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all" data-testid="option-filter-staff-all">All employees</SelectItem>
-                      {allStaff && allStaff.map((s) => (
+                      {allStaff && allStaff.slice().sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
                         <SelectItem key={s.id} value={s.id} data-testid={`option-filter-staff-${s.id}`}>
                           {s.name}
                         </SelectItem>

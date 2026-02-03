@@ -335,7 +335,7 @@ export default function Admin() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      staff?.map((member) => (
+                      staff?.slice().sort((a, b) => a.name.localeCompare(b.name)).map((member) => (
                         <TableRow key={member.id} data-testid={`row-staff-${member.id}`}>
                           <TableCell className="font-medium">{member.name}</TableCell>
                           <TableCell>{member.email}</TableCell>

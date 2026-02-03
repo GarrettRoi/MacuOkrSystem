@@ -20,11 +20,11 @@ export default function StaffSelection({ onStaffSelected }: StaffSelectionProps)
     queryKey: ["/api/staff"],
   });
 
-  const filteredStaff = staffList?.filter((staff) =>
+  const filteredStaff = (staffList?.filter((staff) =>
     staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     staff.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     staff.spu.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  ) || []).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

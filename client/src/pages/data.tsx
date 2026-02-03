@@ -459,7 +459,7 @@ export default function Data() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Staff</SelectItem>
-                      {allStaff?.map((staff) => (
+                      {allStaff?.slice().sort((a, b) => a.name.localeCompare(b.name)).map((staff) => (
                         <SelectItem key={staff.id} value={staff.id}>
                           {staff.name}
                         </SelectItem>
