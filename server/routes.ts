@@ -364,6 +364,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get OKRs by SPU (for SPU-centric model)
+  // Uses server-side session to validate staff belongs to requested SPU
+  app.get("/api/okrs/by-spu/:spuId", async (req, res) => {
+    try {
+      const sessionStaffId = req.session.selectedStaffId;
+      const requestedSpuId = req.params.spuId;
+      
+      // Require authenticated session with selected staff
+      if (!sessionStaffId) {
+        return res.status(401).json({ error: "Please select a staff profile first" });
+      }
+      
+      // Validate staff belongs to requested SPU using server-side session
+      const staffMember = await storage.getStaff(sessionStaffId);
+      if (!staffMember) {
+        return res.status(401).json({ error: "Invalid staff session" });
+      }
+      
+      if (staffMember.spuId !== requestedSpuId) {
+        return res.status(403).json({ error: "Access denied: You can only view OKRs for your own SPU" });
+      }
+      
+      const okrs = await storage.getOkrsWithDetailsBySpu(requestedSpuId);
+      res.json(okrs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch SPU OKRs" });
+    }
+  });
+
   app.post("/api/okrs", async (req, res) => {
     try {
       console.log("[POST /api/okrs] Request body:", JSON.stringify(req.body, null, 2));

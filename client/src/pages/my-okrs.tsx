@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowLeft, Target, Calendar, Building2, TrendingUp, CheckCircle2, AlertCircle, Clock, Filter, X } from "lucide-react";
+import { ArrowLeft, Target, Calendar, Building2, TrendingUp, CheckCircle2, AlertCircle, Clock, Filter, X, User } from "lucide-react";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
 import { QUARTERS, getQuarterLabel } from "@shared/schema";
 
@@ -31,8 +31,18 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   const [spuFilter, setSpuFilter] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
 
-  const { data: okrs, isLoading: okrsLoading } = useQuery<OkrWithDetails[]>({
-    queryKey: ["/api/okrs"],
+  // SPU-centric model: Fetch OKRs scoped to user's SPU directly from server
+  // Server validates session-based staff belongs to requested SPU
+  const { data: spuOkrs, isLoading: okrsLoading } = useQuery<OkrWithDetails[]>({
+    queryKey: ["/api/okrs/by-spu", staff.spuId],
+    queryFn: async () => {
+      const response = await fetch(`/api/okrs/by-spu/${staff.spuId}`, {
+        credentials: "include", // Include session cookies
+      });
+      if (!response.ok) throw new Error("Failed to fetch SPU OKRs");
+      return response.json();
+    },
+    enabled: !!staff.spuId,
   });
 
   const { data: updates } = useQuery<QuarterlyUpdate[]>({
@@ -43,20 +53,18 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     queryKey: ["/api/spus"],
   });
 
-  const myOkrs = useMemo(() => {
-    if (!okrs) return [];
-    return okrs.filter((okr) => okr.staffId === staff.id);
-  }, [okrs, staff.id]);
+  // OKRs are already scoped to user's SPU from the server
+  const mySpuOkrs = spuOkrs || [];
 
   const filteredOkrs = useMemo(() => {
-    return myOkrs.filter((okr) => {
+    return mySpuOkrs.filter((okr) => {
       const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
       const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
       const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
       const statusMatch = statusFilter === "All" || okr.status === statusFilter;
       return yearMatch && quarterMatch && spuMatch && statusMatch;
     });
-  }, [myOkrs, yearFilter, quarterFilter, spuFilter, statusFilter]);
+  }, [mySpuOkrs, yearFilter, quarterFilter, spuFilter, statusFilter]);
 
   const getLatestUpdate = (okrId: string) => {
     if (!updates) return null;
@@ -90,9 +98,9 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   ].filter(Boolean).length;
 
   const uniqueSpusInMyOkrs = useMemo(() => {
-    const spuIds = new Set(myOkrs.map((okr) => okr.spuId));
+    const spuIds = new Set(mySpuOkrs.map((okr) => okr.spuId));
     return spus?.filter((spu) => spuIds.has(spu.id)) || [];
-  }, [myOkrs, spus]);
+  }, [mySpuOkrs, spus]);
 
   const totalProgress = filteredOkrs.length > 0
     ? Math.round(filteredOkrs.reduce((sum, okr) => sum + okr.currentValue, 0) / filteredOkrs.length)
@@ -121,9 +129,9 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">My OKRs</h1>
+            <h1 className="text-3xl font-bold">{staff.spu?.name || "My"} OKRs</h1>
             <p className="text-muted-foreground">
-              View and track all your submitted OKRs and Key Results
+              View and track all OKRs for your SPU
             </p>
           </div>
         </div>
@@ -208,7 +216,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
-              {myOkrs.length} total across all periods
+              {mySpuOkrs.length} total across all periods
             </p>
           </CardContent>
         </Card>
@@ -244,11 +252,11 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
             <Target className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No OKRs Found</h3>
             <p className="text-muted-foreground mb-4">
-              {myOkrs.length === 0
-                ? "You haven't submitted any OKRs yet."
+              {mySpuOkrs.length === 0
+                ? "Your SPU hasn't submitted any OKRs yet."
                 : "No OKRs match your current filters."}
             </p>
-            {myOkrs.length === 0 ? (
+            {mySpuOkrs.length === 0 ? (
               <Link href="/submit-okr">
                 <Button data-testid="button-submit-first-okr">Submit Your First OKR</Button>
               </Link>
@@ -310,6 +318,15 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                 </AccordionTrigger>
                 <AccordionContent className="px-4 pb-4">
                   <div className="space-y-4 pt-2">
+                    {/* SPU-centric: Show who submitted this OKR */}
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 p-2 rounded-md">
+                      <User className="h-4 w-4" />
+                      <span>Submitted by: <span className="font-medium text-foreground">{okr.staff?.name || "Unknown"}</span></span>
+                      {okr.staffId === staff.id && (
+                        <Badge variant="outline" className="ml-2 text-xs">You</Badge>
+                      )}
+                    </div>
+
                     <div>
                       <h4 className="text-sm font-medium text-muted-foreground mb-1">Objective Statement</h4>
                       <p className="text-sm">{okr.objectiveStatement}</p>

@@ -70,6 +70,8 @@ export interface IStorage {
   getAllOkrsWithDetails(): Promise<OkrWithDetails[]>;
   getOkr(id: string): Promise<Okr | undefined>;
   getOkrsByStaff(staffId: string): Promise<Okr[]>;
+  getOkrsBySpu(spuId: string): Promise<Okr[]>;
+  getOkrsWithDetailsBySpu(spuId: string): Promise<OkrWithDetails[]>;
   createOkr(okr: InsertOkr): Promise<Okr>;
   updateOkr(id: string, updates: Partial<Okr>): Promise<Okr>;
   deleteOkr(id: string): Promise<void>;
@@ -442,6 +444,58 @@ export class DatabaseStorage implements IStorage {
 
   async getOkrsByStaff(staffId: string): Promise<Okr[]> {
     return await db.select().from(okrs).where(eq(okrs.staffId, staffId));
+  }
+
+  async getOkrsBySpu(spuId: string): Promise<Okr[]> {
+    return await db.select().from(okrs).where(eq(okrs.spuId, spuId));
+  }
+
+  async getOkrsWithDetailsBySpu(spuId: string): Promise<OkrWithDetails[]> {
+    const okrSpu = alias(spus, 'okrSpu');
+    const okrSubUnit = alias(subUnits, 'okrSubUnit');
+    const staffSpu = alias(spus, 'staffSpu');
+    const staffSubUnit = alias(subUnits, 'staffSubUnit');
+    const collaborationSpu = alias(spus, 'collaborationSpu');
+    
+    const result = await db
+      .select({
+        okr: okrs,
+        staff: staff,
+        okrSpu: okrSpu,
+        okrSubUnit: okrSubUnit,
+        staffSpu: staffSpu,
+        staffSubUnit: staffSubUnit,
+        collaborationSpu: collaborationSpu,
+      })
+      .from(okrs)
+      .leftJoin(staff, eq(okrs.staffId, staff.id))
+      .leftJoin(okrSpu, eq(okrs.spuId, okrSpu.id))
+      .leftJoin(okrSubUnit, eq(okrs.subUnitId, okrSubUnit.id))
+      .leftJoin(staffSpu, eq(staff.spuId, staffSpu.id))
+      .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
+      .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id))
+      .where(eq(okrs.spuId, spuId));
+
+    return result.map((row) => ({
+      ...row.okr,
+      staff: row.staff ? {
+        ...row.staff,
+        spu: row.staffSpu!,
+        subUnit: row.staffSubUnit || null,
+      } : {
+        id: row.okr.staffId,
+        name: "Unknown User",
+        email: "",
+        spuId: row.okr.spuId,
+        subUnitId: null,
+        isAdmin: false,
+        spu: row.okrSpu!,
+        subUnit: null,
+      },
+      spu: row.okrSpu || null,
+      subUnit: row.okrSubUnit || null,
+      collaborationSpu: row.collaborationSpu || null,
+    }));
   }
 
   async createOkr(insertOkr: InsertOkr): Promise<Okr> {

@@ -254,7 +254,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
           <CardHeader>
             <CardTitle className="text-2xl font-semibold">Submit New OKR</CardTitle>
             <CardDescription>
-              Create a new Objective and Key Result for tracking
+              Create a new Objective and Key Result for your SPU
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -52,18 +52,26 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   const [selectedQuarter, setSelectedQuarter] = useState("");
   const [selectedYear, setSelectedYear] = useState(currentYear);
 
-  const { data: okrs, isLoading } = useQuery<OkrWithDetails[]>({
-    queryKey: ["/api/okrs", staff.id],
+  // SPU-centric model: Fetch OKRs scoped to user's SPU directly from server
+  // Server validates session-based staff belongs to requested SPU
+  const { data: spuOkrs, isLoading } = useQuery<OkrWithDetails[]>({
+    queryKey: ["/api/okrs/by-spu", staff.spuId],
+    queryFn: async () => {
+      const response = await fetch(`/api/okrs/by-spu/${staff.spuId}`, {
+        credentials: "include", // Include session cookies
+      });
+      if (!response.ok) throw new Error("Failed to fetch SPU OKRs");
+      return response.json();
+    },
+    enabled: !!staff.spuId,
   });
 
   const { data: years } = useQuery<Year[]>({
     queryKey: ["/api/years"],
   });
-
-  const staffOkrs = okrs?.filter((okr) => okr.staffId === staff.id) || [];
   
   // Filter OKRs by selected quarter and year
-  const filteredOkrs = staffOkrs.filter((okr) => {
+  const filteredOkrs = (spuOkrs || []).filter((okr) => {
     if (!selectedQuarter || !selectedYear) return false;
     return okr.quarter === selectedQuarter && okr.year === selectedYear;
   });
@@ -142,6 +150,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs/by-spu", staff.spuId] });
       queryClient.invalidateQueries({ queryKey: ["/api/quarterly-updates"] });
       setIsSubmitted(true);
       toast({
@@ -268,7 +277,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
         <CardHeader>
           <CardTitle className="text-2xl font-semibold">Submit Quarterly Update</CardTitle>
           <CardDescription>
-            Score each key result for your OKR and provide a summary of outcomes
+            Score each key result for your SPU's OKRs and provide a summary of outcomes
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -411,14 +420,17 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                             ) : (
                               filteredOkrs.map((okr) => (
                                 <SelectItem key={okr.id} value={okr.id} data-testid={`option-okr-${okr.id}`}>
-                                  {okr.okrNumber} - {okr.objectiveStatement.substring(0, 60)}{okr.objectiveStatement.length > 60 ? '...' : ''}
+                                  <div className="flex flex-col">
+                                    <span>{okr.okrNumber} - {okr.objectiveStatement.substring(0, 50)}{okr.objectiveStatement.length > 50 ? '...' : ''}</span>
+                                    <span className="text-xs text-muted-foreground">Submitted by: {okr.staff?.name || "Unknown"}</span>
+                                  </div>
                                 </SelectItem>
                               ))
                             )}
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          Select which OKR you want to score for this quarter
+                          Select which OKR from your SPU you want to score for this quarter
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
