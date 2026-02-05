@@ -637,8 +637,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
       
+      // Get staff name to store as submitterName (persists even if staff is deleted)
+      let submitterName: string | undefined;
+      if (parsed.data.staffId) {
+        const staffMember = await storage.getStaff(parsed.data.staffId);
+        submitterName = staffMember?.name;
+      }
+      
       console.log("[POST /api/okrs] Parsed data:", JSON.stringify(parsed.data, null, 2));
-      const okr = await storage.createOkr(parsed.data);
+      const okr = await storage.createOkr({ ...parsed.data, submitterName });
       console.log("[POST /api/okrs] Created OKR:", JSON.stringify(okr, null, 2));
       res.status(201).json(okr);
     } catch (error) {
@@ -753,7 +760,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
       
-      const update = await storage.createQuarterlyUpdate(parsed.data);
+      // Get staff name to store as scorerName (persists even if staff is deleted)
+      let scorerName: string | undefined;
+      if (parsed.data.staffId) {
+        const staffMember = await storage.getStaff(parsed.data.staffId);
+        scorerName = staffMember?.name;
+      }
+      
+      const update = await storage.createQuarterlyUpdate({ ...parsed.data, scorerName });
       res.status(201).json(update);
     } catch (error) {
       res.status(500).json({ error: "Failed to create quarterly update" });

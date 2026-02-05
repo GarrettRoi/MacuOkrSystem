@@ -519,7 +519,7 @@ export class DatabaseStorage implements IStorage {
       } : {
         id: row.okr.staffId || "deleted",
         staffIdNumber: null,
-        name: "Deleted User",
+        name: row.okr.submitterName || "Unknown",
         email: "",
         spuId: row.okr.spuId,
         subUnitId: null,

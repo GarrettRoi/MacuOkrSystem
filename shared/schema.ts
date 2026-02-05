@@ -48,6 +48,7 @@ export const leaderBasicAssignments = pgTable("leader_basic_assignments", {
 export const okrs = pgTable("okrs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").references(() => staff.id, { onDelete: "set null" }),
+  submitterName: text("submitter_name"),
   spuId: varchar("spu_id").notNull().references(() => spus.id),
   subUnitId: varchar("sub_unit_id").references(() => subUnits.id),
   okrNumber: text("okr_number").notNull(),
@@ -70,6 +71,7 @@ export const quarterlyUpdates = pgTable("quarterly_updates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   okrId: varchar("okr_id").notNull().references(() => okrs.id, { onDelete: "cascade" }),
   staffId: varchar("staff_id").references(() => staff.id, { onDelete: "set null" }),
+  scorerName: text("scorer_name"),
   quarter: text("quarter").notNull(),
   year: integer("year").notNull(),
   progress: integer("progress").notNull(),
