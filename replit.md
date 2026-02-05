@@ -25,7 +25,8 @@ PostgreSQL is used as the database, accessed via Drizzle ORM and Neon Database's
 ### Core Features
 
 - **SPU Selection**: Staff can submit OKRs for various departments/sub-departments, distinguishing between their primary assignment and the OKR's submission SPU.
-- **Authentication & Authorization**: A dual password-based system provides Admin and Staff access levels, with role-based access control.
+- **Multi-SPU Assignments**: Leaders and super admins can be assigned to manage multiple SPUs beyond their primary assignment. This is managed via the Admin panel's staff management section (gear icon).
+- **Authentication & Authorization**: A dual password-based system provides Admin and Staff access levels, with role-based access control (super_admin, leader, basic).
 - **Key Pages**:
     - **Submit OKR**: Form for creating OKRs, including alignment with university objectives and dynamic key results.
     - **Quarterly Update**: Interface for updating OKR progress with individual key result scoring and notes.

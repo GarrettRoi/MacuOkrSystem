@@ -57,6 +57,35 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     queryKey: ["/api/years"],
   });
 
+  // Fetch SPU assignments for leaders/super_admins
+  const { data: spuAssignments } = useQuery<any[]>({
+    queryKey: ["/api/staff", staff.id, "spu-assignments"],
+    enabled: staff.role === "leader" || staff.role === "super_admin",
+  });
+
+  // Get available SPUs for this user
+  const getAvailableSpus = () => {
+    if (!spus) return [];
+    
+    // Super admins can see all SPUs
+    if (staff.role === "super_admin") {
+      return spus;
+    }
+    
+    // Leaders can see their primary SPU plus assigned SPUs
+    if (staff.role === "leader") {
+      const assignedSpuIds = (spuAssignments || []).map((a: any) => a.spuId);
+      return spus.filter(spu => 
+        spu.id === staff.spuId || assignedSpuIds.includes(spu.id)
+      );
+    }
+    
+    // Basic users can only see their primary SPU
+    return spus.filter(spu => spu.id === staff.spuId);
+  };
+
+  const availableSpus = getAvailableSpus();
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -376,15 +405,18 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {spus?.map((spu) => (
+                            {availableSpus.map((spu) => (
                               <SelectItem key={spu.id} value={spu.id}>
                                 {spu.name}
+                                {spu.id === staff.spuId && " (Primary)"}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                         <FormDescription className="text-xs">
-                          Choose the department this OKR targets
+                          {staff.role === "leader" || staff.role === "super_admin" 
+                            ? "Choose the department this OKR targets. You can submit for your assigned SPUs."
+                            : "Choose the department this OKR targets"}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

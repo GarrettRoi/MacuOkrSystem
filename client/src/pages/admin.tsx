@@ -54,6 +54,11 @@ export default function Admin({ staff }: AdminProps) {
   const [staffNameFilter, setStaffNameFilter] = useState("");
   const [deleteStaffDialogOpen, setDeleteStaffDialogOpen] = useState(false);
   const [staffToDelete, setStaffToDelete] = useState<Staff | null>(null);
+  
+  const [spuAssignmentsDialogOpen, setSpuAssignmentsDialogOpen] = useState(false);
+  const [spuAssignmentsStaff, setSpuAssignmentsStaff] = useState<Staff | null>(null);
+  const [newAssignmentSpuId, setNewAssignmentSpuId] = useState("");
+  const [newAssignmentSubUnitId, setNewAssignmentSubUnitId] = useState("");
 
   const { data: spus, isLoading: spusLoading } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
@@ -222,6 +227,47 @@ export default function Admin({ staff }: AdminProps) {
         description: error?.message || "Failed to merge staff accounts.",
         variant: "destructive"
       });
+    },
+  });
+
+  // Query for staff SPU assignments
+  const { data: staffSpuAssignments } = useQuery<any[]>({
+    queryKey: ["/api/staff", spuAssignmentsStaff?.id, "spu-assignments"],
+    enabled: !!spuAssignmentsStaff?.id,
+  });
+
+  const addSpuAssignmentMutation = useMutation({
+    mutationFn: async (data: { staffId: string; spuId: string; subUnitId?: string }) => {
+      return await apiRequest("POST", `/api/staff/${data.staffId}/spu-assignments`, { 
+        spuId: data.spuId, 
+        subUnitId: data.subUnitId 
+      });
+    },
+    onSuccess: () => {
+      if (spuAssignmentsStaff) {
+        queryClient.invalidateQueries({ queryKey: ["/api/staff", spuAssignmentsStaff.id, "spu-assignments"] });
+      }
+      setNewAssignmentSpuId("");
+      setNewAssignmentSubUnitId("");
+      toast({ title: "SPU Assignment Added", description: "The SPU assignment has been added." });
+    },
+    onError: () => {
+      toast({ title: "Failed", description: "Failed to add SPU assignment.", variant: "destructive" });
+    },
+  });
+
+  const deleteSpuAssignmentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/staff/spu-assignments/${id}`, {});
+    },
+    onSuccess: () => {
+      if (spuAssignmentsStaff) {
+        queryClient.invalidateQueries({ queryKey: ["/api/staff", spuAssignmentsStaff.id, "spu-assignments"] });
+      }
+      toast({ title: "SPU Assignment Removed", description: "The SPU assignment has been removed." });
+    },
+    onError: () => {
+      toast({ title: "Failed", description: "Failed to remove SPU assignment.", variant: "destructive" });
     },
   });
 
@@ -598,7 +644,7 @@ export default function Admin({ staff }: AdminProps) {
                           <TableCell>{getSpuName(member.spuId)}</TableCell>
                           <TableCell>{getSubUnitName(member.subUnitId)}</TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -610,6 +656,20 @@ export default function Admin({ staff }: AdminProps) {
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
+                              {(member.role === "leader" || member.role === "super_admin") && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setSpuAssignmentsStaff(member);
+                                    setSpuAssignmentsDialogOpen(true);
+                                  }}
+                                  title="Manage SPU Assignments"
+                                  data-testid={`button-spu-assignments-${member.id}`}
+                                >
+                                  <Settings className="h-4 w-4 text-blue-600" />
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -789,6 +849,101 @@ export default function Admin({ staff }: AdminProps) {
                   {deleteStaffMutation.isPending ? "Deleting..." : "Delete"}
                 </Button>
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={spuAssignmentsDialogOpen} onOpenChange={(open) => {
+            setSpuAssignmentsDialogOpen(open);
+            if (!open) {
+              setSpuAssignmentsStaff(null);
+              setNewAssignmentSpuId("");
+              setNewAssignmentSubUnitId("");
+            }
+          }}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>SPU Assignments for {spuAssignmentsStaff?.name}</DialogTitle>
+                <DialogDescription>
+                  Manage which SPUs/Sub-Units this leader can access and submit OKRs for
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Current Assignments</Label>
+                  {staffSpuAssignments && staffSpuAssignments.length > 0 ? (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {staffSpuAssignments.map((assignment: any) => (
+                        <div key={assignment.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <span className="text-sm">
+                            {getSpuName(assignment.spuId)}
+                            {assignment.subUnitId && ` - ${getSubUnitName(assignment.subUnitId)}`}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteSpuAssignmentMutation.mutate(assignment.id)}
+                            data-testid={`button-remove-assignment-${assignment.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No additional SPU assignments</p>
+                  )}
+                </div>
+
+                <div className="border-t pt-4">
+                  <Label>Add New Assignment</Label>
+                  <div className="space-y-2 mt-2">
+                    <Select value={newAssignmentSpuId} onValueChange={(val) => {
+                      setNewAssignmentSpuId(val);
+                      setNewAssignmentSubUnitId("");
+                    }}>
+                      <SelectTrigger data-testid="select-assignment-spu">
+                        <SelectValue placeholder="Select SPU" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {spus?.map((spu) => (
+                          <SelectItem key={spu.id} value={spu.id}>{spu.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    {newAssignmentSpuId && (
+                      <Select value={newAssignmentSubUnitId || "none"} onValueChange={(val) => setNewAssignmentSubUnitId(val === "none" ? "" : val)}>
+                        <SelectTrigger data-testid="select-assignment-subunit">
+                          <SelectValue placeholder="Select Sub-Unit (Optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Sub-Unit (SPU Only)</SelectItem>
+                          {subUnits?.filter((su) => su.spuId === newAssignmentSpuId).map((subUnit) => (
+                            <SelectItem key={subUnit.id} value={subUnit.id}>{subUnit.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    
+                    <Button
+                      onClick={() => {
+                        if (spuAssignmentsStaff && newAssignmentSpuId) {
+                          addSpuAssignmentMutation.mutate({
+                            staffId: spuAssignmentsStaff.id,
+                            spuId: newAssignmentSpuId,
+                            subUnitId: newAssignmentSubUnitId && newAssignmentSubUnitId !== "none" ? newAssignmentSubUnitId : undefined,
+                          });
+                        }
+                      }}
+                      disabled={!newAssignmentSpuId || addSpuAssignmentMutation.isPending}
+                      className="w-full"
+                      data-testid="button-add-assignment"
+                    >
+                      {addSpuAssignmentMutation.isPending ? "Adding..." : "Add Assignment"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         </TabsContent>
