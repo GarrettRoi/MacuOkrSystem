@@ -11,15 +11,39 @@ import {
   insertQuarterlyUpdateSchema,
   updateQuarterlyUpdateSchema,
   insertOkrResponsibilitySchema,
+  insertStaffSpuAssignmentSchema,
+  insertLeaderBasicAssignmentSchema,
+  USER_ROLES,
 } from "@shared/schema";
-import type { Okr, OkrWithDetails, EmployeeProgressRecord } from "@shared/schema";
-
+import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole } from "@shared/schema";
+import { z } from "zod";
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.isAdmin) {
     return res.status(403).json({ error: "Forbidden: Admin access required" });
   }
   next();
+}
+
+async function requireRole(req: Request, res: Response, roles: UserRole[]): Promise<boolean> {
+  const staffId = req.session.selectedStaffId;
+  if (!staffId) {
+    res.status(401).json({ error: "Please select a staff profile first" });
+    return false;
+  }
+  
+  const staff = await storage.getStaff(staffId);
+  if (!staff) {
+    res.status(401).json({ error: "Invalid staff session" });
+    return false;
+  }
+  
+  if (!roles.includes(staff.role as UserRole)) {
+    res.status(403).json({ error: `Access denied. Required roles: ${roles.join(", ")}` });
+    return false;
+  }
+  
+  return true;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -219,6 +243,217 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Merge staff error:", error);
       res.status(500).json({ error: "Failed to merge staff accounts" });
+    }
+  });
+
+  // Staff lookup by ID number or email
+  app.get("/api/staff/by-id-number/:staffIdNumber", async (req, res) => {
+    try {
+      const staff = await storage.getStaffByIdNumber(req.params.staffIdNumber);
+      if (!staff) {
+        return res.status(404).json({ error: "Staff not found" });
+      }
+      res.json(staff);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch staff" });
+    }
+  });
+
+  app.get("/api/staff/by-email/:email", async (req, res) => {
+    try {
+      const staff = await storage.getStaffByEmail(decodeURIComponent(req.params.email));
+      if (!staff) {
+        return res.status(404).json({ error: "Staff not found" });
+      }
+      res.json(staff);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch staff" });
+    }
+  });
+
+  // Staff SPU Assignments
+  app.get("/api/staff/:staffId/assignments", async (req, res) => {
+    try {
+      const assignments = await storage.getStaffSpuAssignments(req.params.staffId);
+      res.json(assignments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch SPU assignments" });
+    }
+  });
+
+  app.post("/api/staff/:staffId/assignments", async (req, res) => {
+    try {
+      // Only super admins and leaders can assign SPUs
+      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      
+      const sessionStaffId = req.session.selectedStaffId!;
+      const sessionStaff = await storage.getStaff(sessionStaffId);
+      const targetStaffId = req.params.staffId;
+      
+      // Leaders can only assign SPUs to their own basic users
+      if (sessionStaff?.role === "leader" && sessionStaffId !== targetStaffId) {
+        const basicUsers = await storage.getBasicUsersForLeader(sessionStaffId);
+        if (!basicUsers.find(u => u.id === targetStaffId)) {
+          return res.status(403).json({ error: "Leaders can only manage their own basic users" });
+        }
+      }
+      
+      const parsed = insertStaffSpuAssignmentSchema.safeParse({
+        ...req.body,
+        staffId: targetStaffId,
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      }
+      
+      const assignment = await storage.createStaffSpuAssignment(parsed.data);
+      res.status(201).json(assignment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create SPU assignment" });
+    }
+  });
+
+  app.delete("/api/staff/:staffId/assignments/:assignmentId", async (req, res) => {
+    try {
+      // Only super admins and leaders can delete assignments
+      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      
+      await storage.deleteStaffSpuAssignment(req.params.assignmentId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete SPU assignment" });
+    }
+  });
+
+  // Leader-Basic Relationships
+  app.get("/api/staff/:staffId/leaders", async (req, res) => {
+    try {
+      const leaders = await storage.getLeadersForBasicUser(req.params.staffId);
+      res.json(leaders);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch leaders" });
+    }
+  });
+
+  app.get("/api/staff/:staffId/basic-users", async (req, res) => {
+    try {
+      const basicUsers = await storage.getBasicUsersForLeader(req.params.staffId);
+      res.json(basicUsers);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch basic users" });
+    }
+  });
+
+  app.post("/api/leader-assignments", async (req, res) => {
+    try {
+      // Only super admins and leaders can create leader-basic assignments
+      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      
+      const sessionStaffId = req.session.selectedStaffId!;
+      const sessionStaff = await storage.getStaff(sessionStaffId);
+      
+      // Leaders can only assign themselves as leader
+      if (sessionStaff?.role === "leader" && req.body.leaderId !== sessionStaffId) {
+        return res.status(403).json({ error: "Leaders can only assign themselves" });
+      }
+      
+      const parsed = insertLeaderBasicAssignmentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      }
+      
+      const assignment = await storage.createLeaderBasicAssignment(parsed.data);
+      res.status(201).json(assignment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create leader assignment" });
+    }
+  });
+
+  app.delete("/api/leader-assignments/:leaderId/:basicId", async (req, res) => {
+    try {
+      // Only super admins and the leader themselves can delete assignments
+      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      
+      const sessionStaffId = req.session.selectedStaffId!;
+      const sessionStaff = await storage.getStaff(sessionStaffId);
+      
+      // Leaders can only delete their own assignments
+      if (sessionStaff?.role === "leader" && req.params.leaderId !== sessionStaffId) {
+        return res.status(403).json({ error: "Leaders can only remove their own assignments" });
+      }
+      
+      await storage.deleteLeaderBasicAssignment(req.params.leaderId, req.params.basicId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete leader assignment" });
+    }
+  });
+
+  // Create user with role-based authorization
+  app.post("/api/users/create", async (req, res) => {
+    try {
+      // Super admins can create any role, leaders can only create basic users
+      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      
+      const sessionStaffId = req.session.selectedStaffId!;
+      const sessionStaff = await storage.getStaff(sessionStaffId);
+      
+      const { staffIdNumber, name, email, spuId, subUnitId, role } = req.body;
+      
+      // Leaders can only create basic users
+      if (sessionStaff?.role === "leader" && role !== "basic") {
+        return res.status(403).json({ error: "Leaders can only create basic users" });
+      }
+      
+      // Check if user already exists
+      if (staffIdNumber) {
+        const existingByIdNumber = await storage.getStaffByIdNumber(staffIdNumber);
+        if (existingByIdNumber) {
+          return res.status(409).json({ 
+            error: "User already exists", 
+            existingUser: existingByIdNumber,
+            message: "A user with this Staff ID Number already exists. Would you like to add them to your SPU instead?"
+          });
+        }
+      }
+      
+      const existingByEmail = await storage.getStaffByEmail(email);
+      if (existingByEmail) {
+        return res.status(409).json({ 
+          error: "User already exists", 
+          existingUser: existingByEmail,
+          message: "A user with this email already exists. Would you like to add them to your SPU instead?"
+        });
+      }
+      
+      const parsed = insertStaffSchema.safeParse({
+        staffIdNumber,
+        name,
+        email,
+        spuId,
+        subUnitId: subUnitId || null,
+        role: role || "basic",
+        isAdmin: role === "super_admin",
+      });
+      
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error });
+      }
+      
+      const newStaff = await storage.createStaff(parsed.data);
+      
+      // If a leader created this user, automatically assign leader-basic relationship
+      if (sessionStaff?.role === "leader") {
+        await storage.createLeaderBasicAssignment({
+          leaderId: sessionStaffId,
+          basicId: newStaff.id,
+        });
+      }
+      
+      res.status(201).json(newStaff);
+    } catch (error) {
+      console.error("Create user error:", error);
+      res.status(500).json({ error: "Failed to create user" });
     }
   });
 

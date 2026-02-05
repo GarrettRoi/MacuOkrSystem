@@ -3,6 +3,8 @@ import { pgTable, text, varchar, integer, timestamp, boolean } from "drizzle-orm
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const USER_ROLES = ["super_admin", "leader", "basic"] as const;
+
 export const spus = pgTable("spus", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
@@ -21,11 +23,26 @@ export const years = pgTable("years", {
 
 export const staff = pgTable("staff", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  staffIdNumber: text("staff_id_number").unique(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   spuId: varchar("spu_id").notNull().references(() => spus.id),
   subUnitId: varchar("sub_unit_id").references(() => subUnits.id),
   isAdmin: boolean("is_admin").notNull().default(false),
+  role: text("role").notNull().default("basic"),
+});
+
+export const staffSpuAssignments = pgTable("staff_spu_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
+  spuId: varchar("spu_id").notNull().references(() => spus.id, { onDelete: "cascade" }),
+  subUnitId: varchar("sub_unit_id").references(() => subUnits.id, { onDelete: "cascade" }),
+});
+
+export const leaderBasicAssignments = pgTable("leader_basic_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leaderId: varchar("leader_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
+  basicId: varchar("basic_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
 });
 
 export const okrs = pgTable("okrs", {
@@ -110,7 +127,11 @@ export const RESPONSIBILITY_ROLES = ["owner", "collaborator"] as const;
 export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });
 export const insertSubUnitSchema = createInsertSchema(subUnits).omit({ id: true });
 export const insertYearSchema = createInsertSchema(years).omit({ id: true });
-export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
+export const insertStaffSchema = createInsertSchema(staff).omit({ id: true }).extend({
+  role: z.enum(USER_ROLES).default("basic"),
+});
+export const insertStaffSpuAssignmentSchema = createInsertSchema(staffSpuAssignments).omit({ id: true });
+export const insertLeaderBasicAssignmentSchema = createInsertSchema(leaderBasicAssignments).omit({ id: true });
 export const insertOkrResponsibilitySchema = createInsertSchema(okrResponsibilities).omit({ id: true }).extend({
   role: z.enum(RESPONSIBILITY_ROLES),
 });
@@ -194,6 +215,8 @@ export type InsertStaff = z.infer<typeof insertStaffSchema>;
 export type InsertOkr = z.infer<typeof insertOkrSchema>;
 export type InsertQuarterlyUpdate = z.infer<typeof insertQuarterlyUpdateSchema>;
 export type InsertOkrResponsibility = z.infer<typeof insertOkrResponsibilitySchema>;
+export type InsertStaffSpuAssignment = z.infer<typeof insertStaffSpuAssignmentSchema>;
+export type InsertLeaderBasicAssignment = z.infer<typeof insertLeaderBasicAssignmentSchema>;
 
 export type Spu = typeof spus.$inferSelect;
 export type SubUnit = typeof subUnits.$inferSelect;
@@ -202,10 +225,24 @@ export type Staff = typeof staff.$inferSelect;
 export type Okr = typeof okrs.$inferSelect;
 export type QuarterlyUpdate = typeof quarterlyUpdates.$inferSelect;
 export type OkrResponsibility = typeof okrResponsibilities.$inferSelect;
+export type StaffSpuAssignment = typeof staffSpuAssignments.$inferSelect;
+export type LeaderBasicAssignment = typeof leaderBasicAssignments.$inferSelect;
+
+export type UserRole = typeof USER_ROLES[number];
 
 export type StaffWithDetails = Staff & {
   spu: Spu;
   subUnit?: SubUnit | null;
+};
+
+export type StaffSpuAssignmentWithDetails = StaffSpuAssignment & {
+  spu: Spu;
+  subUnit?: SubUnit | null;
+};
+
+export type StaffWithAssignments = StaffWithDetails & {
+  assignments: StaffSpuAssignmentWithDetails[];
+  leaders?: StaffWithDetails[];
 };
 
 export type OkrWithDetails = Okr & {

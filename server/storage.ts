@@ -6,6 +6,8 @@ import {
   type Okr,
   type QuarterlyUpdate,
   type OkrResponsibility,
+  type StaffSpuAssignment,
+  type LeaderBasicAssignment,
   type InsertStaff,
   type InsertSpu,
   type InsertSubUnit,
@@ -13,7 +15,10 @@ import {
   type InsertOkr,
   type InsertQuarterlyUpdate,
   type InsertOkrResponsibility,
+  type InsertStaffSpuAssignment,
+  type InsertLeaderBasicAssignment,
   type StaffWithDetails,
+  type StaffSpuAssignmentWithDetails,
   type OkrWithDetails,
   type EmployeeProgressRecord,
   type EmployeeProgressSummary,
@@ -24,6 +29,8 @@ import {
   okrs,
   quarterlyUpdates,
   okrResponsibilities,
+  staffSpuAssignments,
+  leaderBasicAssignments,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
@@ -87,6 +94,22 @@ export interface IStorage {
   getOkrResponsibilities(okrId: string): Promise<OkrResponsibility[]>;
   deleteOkrResponsibility(id: string): Promise<void>;
   
+  // Staff SPU Assignments
+  getStaffSpuAssignments(staffId: string): Promise<StaffSpuAssignmentWithDetails[]>;
+  createStaffSpuAssignment(assignment: InsertStaffSpuAssignment): Promise<StaffSpuAssignment>;
+  deleteStaffSpuAssignment(id: string): Promise<void>;
+  getStaffBySpuAssignment(spuId: string): Promise<StaffWithDetails[]>;
+  
+  // Leader-Basic Relationships
+  getLeadersForBasicUser(basicId: string): Promise<StaffWithDetails[]>;
+  getBasicUsersForLeader(leaderId: string): Promise<StaffWithDetails[]>;
+  createLeaderBasicAssignment(assignment: InsertLeaderBasicAssignment): Promise<LeaderBasicAssignment>;
+  deleteLeaderBasicAssignment(leaderId: string, basicId: string): Promise<void>;
+  
+  // Staff lookup by ID number or email
+  getStaffByIdNumber(staffIdNumber: string): Promise<Staff | undefined>;
+  getStaffByEmail(email: string): Promise<Staff | undefined>;
+  
   getEmployeeProgress(filters: {
     year?: number;
     quarter?: string;
@@ -125,9 +148,11 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: staff.id,
+        staffIdNumber: staff.staffIdNumber,
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
+        role: staff.role,
         spuId: staff.spuId,
         subUnitId: staff.subUnitId,
         spu: spus,
@@ -139,9 +164,11 @@ export class DatabaseStorage implements IStorage {
 
     return result.map((row) => ({
       id: row.id,
+      staffIdNumber: row.staffIdNumber,
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
+      role: row.role,
       spuId: row.spuId,
       subUnitId: row.subUnitId,
       spu: row.spu!,
@@ -158,9 +185,11 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: staff.id,
+        staffIdNumber: staff.staffIdNumber,
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
+        role: staff.role,
         spuId: staff.spuId,
         subUnitId: staff.subUnitId,
         spu: spus,
@@ -176,9 +205,11 @@ export class DatabaseStorage implements IStorage {
     const row = result[0];
     return {
       id: row.id,
+      staffIdNumber: row.staffIdNumber,
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
+      role: row.role,
       spuId: row.spuId,
       subUnitId: row.subUnitId,
       spu: row.spu!,
@@ -276,6 +307,7 @@ export class DatabaseStorage implements IStorage {
       spuId,
       subUnitId: subUnitId || null,
       isAdmin: false,
+      role: "basic",
     });
   }
 
@@ -484,11 +516,13 @@ export class DatabaseStorage implements IStorage {
         subUnit: row.staffSubUnit || null,
       } : {
         id: row.okr.staffId,
+        staffIdNumber: null,
         name: "Unknown User",
         email: "",
         spuId: row.okr.spuId,
         subUnitId: null,
         isAdmin: false,
+        role: "basic" as const,
         spu: row.okrSpu!,
         subUnit: null,
       },
@@ -732,6 +766,175 @@ export class DatabaseStorage implements IStorage {
     summaries.sort((a, b) => a.staff.name.localeCompare(b.staff.name));
     
     return summaries;
+  }
+
+  // Staff SPU Assignments
+  async getStaffSpuAssignments(staffId: string): Promise<StaffSpuAssignmentWithDetails[]> {
+    const result = await db
+      .select({
+        id: staffSpuAssignments.id,
+        staffId: staffSpuAssignments.staffId,
+        spuId: staffSpuAssignments.spuId,
+        subUnitId: staffSpuAssignments.subUnitId,
+        spu: spus,
+        subUnit: subUnits,
+      })
+      .from(staffSpuAssignments)
+      .leftJoin(spus, eq(staffSpuAssignments.spuId, spus.id))
+      .leftJoin(subUnits, eq(staffSpuAssignments.subUnitId, subUnits.id))
+      .where(eq(staffSpuAssignments.staffId, staffId));
+
+    return result.map((row) => ({
+      id: row.id,
+      staffId: row.staffId,
+      spuId: row.spuId,
+      subUnitId: row.subUnitId,
+      spu: row.spu!,
+      subUnit: row.subUnit || null,
+    }));
+  }
+
+  async createStaffSpuAssignment(assignment: InsertStaffSpuAssignment): Promise<StaffSpuAssignment> {
+    const [result] = await db
+      .insert(staffSpuAssignments)
+      .values(assignment)
+      .returning();
+    return result;
+  }
+
+  async deleteStaffSpuAssignment(id: string): Promise<void> {
+    await db.delete(staffSpuAssignments).where(eq(staffSpuAssignments.id, id));
+  }
+
+  async getStaffBySpuAssignment(spuId: string): Promise<StaffWithDetails[]> {
+    const result = await db
+      .select({
+        id: staff.id,
+        staffIdNumber: staff.staffIdNumber,
+        name: staff.name,
+        email: staff.email,
+        isAdmin: staff.isAdmin,
+        role: staff.role,
+        spuId: staff.spuId,
+        subUnitId: staff.subUnitId,
+        spu: spus,
+        subUnit: subUnits,
+      })
+      .from(staffSpuAssignments)
+      .innerJoin(staff, eq(staffSpuAssignments.staffId, staff.id))
+      .leftJoin(spus, eq(staff.spuId, spus.id))
+      .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
+      .where(eq(staffSpuAssignments.spuId, spuId));
+
+    return result.map((row) => ({
+      id: row.id,
+      staffIdNumber: row.staffIdNumber,
+      name: row.name,
+      email: row.email,
+      isAdmin: row.isAdmin,
+      role: row.role,
+      spuId: row.spuId,
+      subUnitId: row.subUnitId,
+      spu: row.spu!,
+      subUnit: row.subUnit || null,
+    }));
+  }
+
+  // Leader-Basic Relationships
+  async getLeadersForBasicUser(basicId: string): Promise<StaffWithDetails[]> {
+    const result = await db
+      .select({
+        id: staff.id,
+        staffIdNumber: staff.staffIdNumber,
+        name: staff.name,
+        email: staff.email,
+        isAdmin: staff.isAdmin,
+        role: staff.role,
+        spuId: staff.spuId,
+        subUnitId: staff.subUnitId,
+        spu: spus,
+        subUnit: subUnits,
+      })
+      .from(leaderBasicAssignments)
+      .innerJoin(staff, eq(leaderBasicAssignments.leaderId, staff.id))
+      .leftJoin(spus, eq(staff.spuId, spus.id))
+      .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
+      .where(eq(leaderBasicAssignments.basicId, basicId));
+
+    return result.map((row) => ({
+      id: row.id,
+      staffIdNumber: row.staffIdNumber,
+      name: row.name,
+      email: row.email,
+      isAdmin: row.isAdmin,
+      role: row.role,
+      spuId: row.spuId,
+      subUnitId: row.subUnitId,
+      spu: row.spu!,
+      subUnit: row.subUnit || null,
+    }));
+  }
+
+  async getBasicUsersForLeader(leaderId: string): Promise<StaffWithDetails[]> {
+    const result = await db
+      .select({
+        id: staff.id,
+        staffIdNumber: staff.staffIdNumber,
+        name: staff.name,
+        email: staff.email,
+        isAdmin: staff.isAdmin,
+        role: staff.role,
+        spuId: staff.spuId,
+        subUnitId: staff.subUnitId,
+        spu: spus,
+        subUnit: subUnits,
+      })
+      .from(leaderBasicAssignments)
+      .innerJoin(staff, eq(leaderBasicAssignments.basicId, staff.id))
+      .leftJoin(spus, eq(staff.spuId, spus.id))
+      .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
+      .where(eq(leaderBasicAssignments.leaderId, leaderId));
+
+    return result.map((row) => ({
+      id: row.id,
+      staffIdNumber: row.staffIdNumber,
+      name: row.name,
+      email: row.email,
+      isAdmin: row.isAdmin,
+      role: row.role,
+      spuId: row.spuId,
+      subUnitId: row.subUnitId,
+      spu: row.spu!,
+      subUnit: row.subUnit || null,
+    }));
+  }
+
+  async createLeaderBasicAssignment(assignment: InsertLeaderBasicAssignment): Promise<LeaderBasicAssignment> {
+    const [result] = await db
+      .insert(leaderBasicAssignments)
+      .values(assignment)
+      .returning();
+    return result;
+  }
+
+  async deleteLeaderBasicAssignment(leaderId: string, basicId: string): Promise<void> {
+    await db.delete(leaderBasicAssignments).where(
+      and(
+        eq(leaderBasicAssignments.leaderId, leaderId),
+        eq(leaderBasicAssignments.basicId, basicId)
+      )
+    );
+  }
+
+  // Staff lookup by ID number or email
+  async getStaffByIdNumber(staffIdNumber: string): Promise<Staff | undefined> {
+    const [result] = await db.select().from(staff).where(eq(staff.staffIdNumber, staffIdNumber));
+    return result || undefined;
+  }
+
+  async getStaffByEmail(email: string): Promise<Staff | undefined> {
+    const [result] = await db.select().from(staff).where(eq(staff.email, email));
+    return result || undefined;
   }
 }
 

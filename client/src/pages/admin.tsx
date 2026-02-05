@@ -6,16 +6,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Settings, Pencil, Merge } from "lucide-react";
-import type { Staff, Spu, SubUnit, Year } from "@shared/schema";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus } from "lucide-react";
+import type { Staff, Spu, SubUnit, Year, StaffWithDetails } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames } from "@/lib/utils";
 
-export default function Admin() {
+interface AdminProps {
+  staff: StaffWithDetails;
+}
+
+export default function Admin({ staff }: AdminProps) {
   const { toast } = useToast();
   
   const [spuDialogOpen, setSpuDialogOpen] = useState(false);
@@ -31,10 +36,12 @@ export default function Admin() {
   const [newSubUnitName, setNewSubUnitName] = useState("");
   const [newSubUnitParent, setNewSubUnitParent] = useState("");
   
+  const [newStaffIdNumber, setNewStaffIdNumber] = useState("");
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffEmail, setNewStaffEmail] = useState("");
   const [newStaffSpu, setNewStaffSpu] = useState("");
   const [newStaffSubUnit, setNewStaffSubUnit] = useState("");
+  const [newStaffRole, setNewStaffRole] = useState<"super_admin" | "leader" | "basic">("basic");
   const [newYear, setNewYear] = useState("");
   
   const [editingSpu, setEditingSpu] = useState<Spu | null>(null);
@@ -53,12 +60,25 @@ export default function Admin() {
     queryKey: ["/api/sub-units"],
   });
 
-  const { data: staff, isLoading: staffLoading } = useQuery<Staff[]>({
+  const { data: staffList, isLoading: staffLoading } = useQuery<Staff[]>({
     queryKey: ["/api/staff"],
   });
 
   const { data: years, isLoading: yearsLoading } = useQuery<Year[]>({
     queryKey: ["/api/years"],
+  });
+
+  // Fetch basic users for leaders
+  const { data: myTeam, isLoading: myTeamLoading } = useQuery<StaffWithDetails[]>({
+    queryKey: ["/api/staff", staff.id, "basic-users"],
+    queryFn: async () => {
+      const response = await fetch(`/api/staff/${staff.id}/basic-users`, {
+        credentials: "include",
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: staff.role === "leader" || staff.role === "super_admin",
   });
 
   const addSpuMutation = useMutation({
@@ -129,11 +149,13 @@ export default function Admin() {
   });
 
   const addStaffMutation = useMutation({
-    mutationFn: async (data: { name: string; email: string; spuId: string; subUnitId?: string }) => {
+    mutationFn: async (data: { staffIdNumber?: string; name: string; email: string; spuId: string; subUnitId?: string; role: string }) => {
       return await apiRequest("POST", "/api/staff", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      setNewStaffIdNumber("");
+      setNewStaffRole("basic");
       setStaffDialogOpen(false);
       setNewStaffName("");
       setNewStaffEmail("");
@@ -154,7 +176,7 @@ export default function Admin() {
   });
 
   const updateStaffMutation = useMutation({
-    mutationFn: async (data: { id: string; name?: string; email?: string; spuId?: string; subUnitId?: string }) => {
+    mutationFn: async (data: { id: string; staffIdNumber?: string | null; name?: string; email?: string; role?: string; spuId?: string; subUnitId?: string }) => {
       const { id, ...updates } = data;
       return await apiRequest("PUT", `/api/staff/${id}`, updates);
     },
@@ -240,11 +262,79 @@ export default function Admin() {
 
       <Tabs defaultValue="staff" className="space-y-6">
         <TabsList>
+          {(staff.role === "leader" || staff.role === "super_admin") && (
+            <TabsTrigger value="myteam" data-testid="tab-myteam">
+              <Users className="h-4 w-4 mr-2" />
+              My Team
+            </TabsTrigger>
+          )}
           <TabsTrigger value="staff" data-testid="tab-staff">Staff Management</TabsTrigger>
           <TabsTrigger value="spus" data-testid="tab-spus">SPUs</TabsTrigger>
           <TabsTrigger value="subunits" data-testid="tab-subunits">Sub-Units</TabsTrigger>
           <TabsTrigger value="years" data-testid="tab-years">Years</TabsTrigger>
         </TabsList>
+
+        {(staff.role === "leader" || staff.role === "super_admin") && (
+          <TabsContent value="myteam">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="h-5 w-5" />
+                      My Team
+                    </CardTitle>
+                    <CardDescription>Basic users you supervise across your SPU assignments</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {myTeamLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-12 w-full" />
+                    ))}
+                  </div>
+                ) : !myTeam || myTeam.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                    <p>No team members yet.</p>
+                    <p className="text-sm">Basic users you create or are assigned to you will appear here.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID Number</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Primary SPU</TableHead>
+                        <TableHead>Sub-Unit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {myTeam.sort((a, b) => compareNames(a.name, b.name)).map((member) => (
+                        <TableRow key={member.id} data-testid={`row-team-${member.id}`}>
+                          <TableCell className="text-muted-foreground">{member.staffIdNumber || "-"}</TableCell>
+                          <TableCell className="font-medium">{member.name}</TableCell>
+                          <TableCell>{member.email}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{member.spu?.name || "-"}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {member.subUnit?.name ? (
+                              <Badge variant="outline">{member.subUnit.name}</Badge>
+                            ) : "-"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         <TabsContent value="staff">
           <Card>
@@ -277,7 +367,7 @@ export default function Admin() {
                               <SelectValue placeholder="Select account to merge from" />
                             </SelectTrigger>
                             <SelectContent>
-                              {staff?.slice().sort((a, b) => compareNames(a.name, b.name)).map((s) => (
+                              {staffList?.slice().sort((a, b) => compareNames(a.name, b.name)).map((s) => (
                                 <SelectItem key={s.id} value={s.id} disabled={s.id === mergeTargetId}>
                                   {s.name} ({s.email})
                                 </SelectItem>
@@ -292,7 +382,7 @@ export default function Admin() {
                               <SelectValue placeholder="Select account to merge into" />
                             </SelectTrigger>
                             <SelectContent>
-                              {staff?.slice().sort((a, b) => compareNames(a.name, b.name)).map((s) => (
+                              {staffList?.slice().sort((a, b) => compareNames(a.name, b.name)).map((s) => (
                                 <SelectItem key={s.id} value={s.id} disabled={s.id === mergeSourceId}>
                                   {s.name} ({s.email})
                                 </SelectItem>
@@ -302,7 +392,7 @@ export default function Admin() {
                         </div>
                         {mergeSourceId && mergeTargetId && (
                           <div className="p-3 bg-muted rounded-md text-sm">
-                            <strong>Preview:</strong> All OKRs, quarterly updates, and responsibilities from "{staff?.find(s => s.id === mergeSourceId)?.name}" will be transferred to "{staff?.find(s => s.id === mergeTargetId)?.name}". The source account will be permanently deleted.
+                            <strong>Preview:</strong> All OKRs, quarterly updates, and responsibilities from "{staffList?.find(s => s.id === mergeSourceId)?.name}" will be transferred to "{staffList?.find(s => s.id === mergeTargetId)?.name}". The source account will be permanently deleted.
                           </div>
                         )}
                       </div>
@@ -337,6 +427,16 @@ export default function Admin() {
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
+                        <Label htmlFor="staff-id-number">Staff ID Number</Label>
+                        <Input
+                          id="staff-id-number"
+                          value={newStaffIdNumber}
+                          onChange={(e) => setNewStaffIdNumber(e.target.value)}
+                          placeholder="e.g., 322503"
+                          data-testid="input-staff-id-number"
+                        />
+                      </div>
+                      <div className="space-y-2">
                         <Label htmlFor="staff-name">Name *</Label>
                         <Input
                           id="staff-name"
@@ -356,6 +456,19 @@ export default function Admin() {
                           placeholder="e.g., john@macu.edu"
                           data-testid="input-staff-email"
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="staff-role">Role *</Label>
+                        <Select value={newStaffRole} onValueChange={(v) => setNewStaffRole(v as "super_admin" | "leader" | "basic")}>
+                          <SelectTrigger data-testid="select-staff-role">
+                            <SelectValue placeholder="Select role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="basic">Basic User</SelectItem>
+                            <SelectItem value="leader">Leader User</SelectItem>
+                            <SelectItem value="super_admin">Super Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="staff-spu">Primary SPU (School, Department, Unit) *</Label>
@@ -393,10 +506,12 @@ export default function Admin() {
                         onClick={() => {
                           if (newStaffName && newStaffEmail && newStaffSpu) {
                             addStaffMutation.mutate({
+                              staffIdNumber: newStaffIdNumber || undefined,
                               name: newStaffName,
                               email: newStaffEmail,
                               spuId: newStaffSpu,
                               subUnitId: newStaffSubUnit || undefined,
+                              role: newStaffRole,
                             });
                           }
                         }}
@@ -420,8 +535,10 @@ export default function Admin() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Staff ID</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
                       <TableHead>Primary SPU</TableHead>
                       <TableHead>Sub-Unit</TableHead>
                       <TableHead className="w-20">Actions</TableHead>
@@ -430,15 +547,27 @@ export default function Admin() {
                   <TableBody>
                     {staff?.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground">
                           No staff members yet. Add your first staff member above.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      staff?.slice().sort((a, b) => compareNames(a.name, b.name)).map((member) => (
+                      staffList?.slice().sort((a, b) => compareNames(a.name, b.name)).map((member) => (
                         <TableRow key={member.id} data-testid={`row-staff-${member.id}`}>
+                          <TableCell className="text-muted-foreground">{member.staffIdNumber || "-"}</TableCell>
                           <TableCell className="font-medium">{member.name}</TableCell>
                           <TableCell>{member.email}</TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              member.role === "super_admin" 
+                                ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" 
+                                : member.role === "leader" 
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" 
+                                  : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+                            }`}>
+                              {member.role === "super_admin" ? "Super Admin" : member.role === "leader" ? "Leader" : "Basic"}
+                            </span>
+                          </TableCell>
                           <TableCell>{getSpuName(member.spuId)}</TableCell>
                           <TableCell>{getSubUnitName(member.subUnitId)}</TableCell>
                           <TableCell>
@@ -481,6 +610,16 @@ export default function Admin() {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
+                  <Label htmlFor="edit-staff-id-number">Staff ID Number</Label>
+                  <Input
+                    id="edit-staff-id-number"
+                    value={editingStaff?.staffIdNumber || ""}
+                    onChange={(e) => setEditingStaff(editingStaff ? { ...editingStaff, staffIdNumber: e.target.value || null } : null)}
+                    placeholder="e.g., 322503"
+                    data-testid="input-edit-staff-id-number"
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="edit-staff-name">Name *</Label>
                   <Input
                     id="edit-staff-name"
@@ -500,6 +639,22 @@ export default function Admin() {
                     placeholder="e.g., john@macu.edu"
                     data-testid="input-edit-staff-email"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-staff-role">Role *</Label>
+                  <Select 
+                    value={editingStaff?.role || "basic"} 
+                    onValueChange={(value) => setEditingStaff(editingStaff ? { ...editingStaff, role: value } : null)}
+                  >
+                    <SelectTrigger data-testid="select-edit-staff-role">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="basic">Basic User</SelectItem>
+                      <SelectItem value="leader">Leader User</SelectItem>
+                      <SelectItem value="super_admin">Super Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-staff-spu">Primary SPU (School, Department, Unit) *</Label>
@@ -554,8 +709,10 @@ export default function Admin() {
                     if (editingStaff && editingStaff.name && editingStaff.email && editingStaff.spuId) {
                       updateStaffMutation.mutate({
                         id: editingStaff.id,
+                        staffIdNumber: editingStaff.staffIdNumber,
                         name: editingStaff.name,
                         email: editingStaff.email,
+                        role: editingStaff.role,
                         spuId: editingStaff.spuId,
                         subUnitId: editingStaff.subUnitId || undefined,
                       });

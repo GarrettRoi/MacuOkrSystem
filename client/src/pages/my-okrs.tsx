@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowLeft, Target, Calendar, Building2, TrendingUp, CheckCircle2, AlertCircle, Clock, Filter, X, User } from "lucide-react";
+import { ArrowLeft, Target, Calendar, Building2, TrendingUp, CheckCircle2, AlertCircle, Clock, Filter, X, User, Users } from "lucide-react";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
 import { QUARTERS, getQuarterLabel } from "@shared/schema";
 
@@ -51,6 +51,19 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
 
   const { data: spus } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
+  });
+
+  // Fetch leaders for basic users
+  const { data: leaders } = useQuery<StaffWithDetails[]>({
+    queryKey: ["/api/staff", staff.id, "leaders"],
+    queryFn: async () => {
+      const response = await fetch(`/api/staff/${staff.id}/leaders`, {
+        credentials: "include",
+      });
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: staff.role === "basic",
   });
 
   // OKRs are already scoped to user's SPU from the server
@@ -135,6 +148,24 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
             </p>
           </div>
         </div>
+
+        {staff.role === "basic" && leaders && leaders.length > 0 && (
+          <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                    Your SPU Leaders
+                  </p>
+                  <p className="text-sm text-blue-600 dark:text-blue-400">
+                    {leaders.map(l => l.name).join(", ")}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="pb-4">

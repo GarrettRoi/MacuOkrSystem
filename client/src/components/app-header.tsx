@@ -23,7 +23,8 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
     { path: "/export", icon: Download, label: "Export", adminOnly: false },
   ];
 
-  const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
+  const canAccessAdmin = isAdmin || staff.role === "leader" || staff.role === "super_admin";
+  const navItems = allNavItems.filter((item) => !item.adminOnly || canAccessAdmin);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -68,8 +69,8 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
                 </Badge>
               )}
             </div>
-            {staff.department && (
-              <p className="text-xs text-muted-foreground">{staff.department.name}</p>
+            {staff.spu && (
+              <p className="text-xs text-muted-foreground">{staff.spu.name}</p>
             )}
           </div>
           <Button variant="ghost" size="icon" onClick={onLogout} data-testid="button-logout">

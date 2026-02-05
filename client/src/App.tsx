@@ -30,7 +30,9 @@ function Router({ staff, isAdmin }: { staff: StaffWithDetails; isAdmin: boolean 
       <Route path="/my-okrs" component={() => <MyOkrs staff={staff} />} />
       <Route path="/data" component={Data} />
       <Route path="/trends" component={Trends} />
-      {isAdmin && <Route path="/admin" component={Admin} />}
+      {(isAdmin || staff.role === "leader" || staff.role === "super_admin") && (
+        <Route path="/admin" component={() => <Admin staff={staff} />} />
+      )}
       <Route path="/export" component={Export} />
       <Route component={() => <Home staff={staff} isAdmin={isAdmin} />} />
     </Switch>
