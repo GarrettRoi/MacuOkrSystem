@@ -97,6 +97,7 @@ export interface IStorage {
   
   // Staff SPU Assignments
   getStaffSpuAssignments(staffId: string): Promise<StaffSpuAssignmentWithDetails[]>;
+  getAllStaffSpuAssignments(): Promise<StaffSpuAssignmentWithDetails[]>;
   createStaffSpuAssignment(assignment: InsertStaffSpuAssignment): Promise<StaffSpuAssignment>;
   deleteStaffSpuAssignment(id: string): Promise<void>;
   getStaffBySpuAssignment(spuId: string): Promise<StaffWithDetails[]>;
@@ -791,6 +792,30 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(spus, eq(staffSpuAssignments.spuId, spus.id))
       .leftJoin(subUnits, eq(staffSpuAssignments.subUnitId, subUnits.id))
       .where(eq(staffSpuAssignments.staffId, staffId));
+
+    return result.map((row) => ({
+      id: row.id,
+      staffId: row.staffId,
+      spuId: row.spuId,
+      subUnitId: row.subUnitId,
+      spu: row.spu!,
+      subUnit: row.subUnit || null,
+    }));
+  }
+
+  async getAllStaffSpuAssignments(): Promise<StaffSpuAssignmentWithDetails[]> {
+    const result = await db
+      .select({
+        id: staffSpuAssignments.id,
+        staffId: staffSpuAssignments.staffId,
+        spuId: staffSpuAssignments.spuId,
+        subUnitId: staffSpuAssignments.subUnitId,
+        spu: spus,
+        subUnit: subUnits,
+      })
+      .from(staffSpuAssignments)
+      .leftJoin(spus, eq(staffSpuAssignments.spuId, spus.id))
+      .leftJoin(subUnits, eq(staffSpuAssignments.subUnitId, subUnits.id));
 
     return result.map((row) => ({
       id: row.id,

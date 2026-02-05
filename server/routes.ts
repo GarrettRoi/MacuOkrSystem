@@ -582,6 +582,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Staff SPU Assignments - for multi-SPU leadership
+  app.get("/api/spu-assignments", async (req, res) => {
+    try {
+      const assignments = await storage.getAllStaffSpuAssignments();
+      res.json(assignments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch all SPU assignments" });
+    }
+  });
+
   app.get("/api/staff/:staffId/spu-assignments", async (req, res) => {
     try {
       const assignments = await storage.getStaffSpuAssignments(req.params.staffId);

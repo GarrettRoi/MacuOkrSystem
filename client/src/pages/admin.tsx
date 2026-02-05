@@ -76,6 +76,22 @@ export default function Admin({ staff }: AdminProps) {
     queryKey: ["/api/years"],
   });
 
+  // Fetch all SPU assignments for display in staff table
+  const { data: allSpuAssignments } = useQuery<any[]>({
+    queryKey: ["/api/spu-assignments"],
+  });
+
+  // Helper to get additional SPU names for a staff member
+  const getAdditionalSpuNames = (memberId: string): string[] => {
+    if (!allSpuAssignments || !spus) return [];
+    const assignments = allSpuAssignments.filter(a => a.staffId === memberId);
+    return assignments.map(a => {
+      const spuName = a.spu?.name || getSpuName(a.spuId);
+      const subUnitName = a.subUnit?.name || (a.subUnitId ? getSubUnitName(a.subUnitId) : null);
+      return subUnitName ? `${spuName} - ${subUnitName}` : spuName;
+    });
+  };
+
   // Fetch basic users for leaders
   const { data: myTeam, isLoading: myTeamLoading } = useQuery<StaffWithDetails[]>({
     queryKey: ["/api/staff", staff.id, "basic-users"],
@@ -244,6 +260,7 @@ export default function Admin({ staff }: AdminProps) {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] });
       if (spuAssignmentsStaff) {
         queryClient.invalidateQueries({ queryKey: ["/api/staff", spuAssignmentsStaff.id, "spu-assignments"] });
       }
@@ -261,6 +278,7 @@ export default function Admin({ staff }: AdminProps) {
       return await apiRequest("DELETE", `/api/staff/spu-assignments/${id}`, {});
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] });
       if (spuAssignmentsStaff) {
         queryClient.invalidateQueries({ queryKey: ["/api/staff", spuAssignmentsStaff.id, "spu-assignments"] });
       }
@@ -608,13 +626,14 @@ export default function Admin({ staff }: AdminProps) {
                       <TableHead>Role</TableHead>
                       <TableHead>Primary SPU</TableHead>
                       <TableHead>Sub-Unit</TableHead>
+                      <TableHead>Additional SPUs</TableHead>
                       <TableHead className="w-20">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {staffList?.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground">
                           No staff members yet. Add your first staff member above.
                         </TableCell>
                       </TableRow>
@@ -643,6 +662,23 @@ export default function Admin({ staff }: AdminProps) {
                           </TableCell>
                           <TableCell>{getSpuName(member.spuId)}</TableCell>
                           <TableCell>{getSubUnitName(member.subUnitId)}</TableCell>
+                          <TableCell data-testid={`cell-additional-spus-${member.id}`}>
+                            {(member.role === "leader" || member.role === "super_admin") ? (
+                              <div className="flex flex-wrap gap-1">
+                                {getAdditionalSpuNames(member.id).length > 0 ? (
+                                  getAdditionalSpuNames(member.id).map((spuName, idx) => (
+                                    <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                                      {spuName}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-muted-foreground text-sm">—</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
                               <Button
