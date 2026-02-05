@@ -33,7 +33,7 @@ import {
   leaderBasicAssignments,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray, ne } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 export interface IStorage {
@@ -105,6 +105,7 @@ export interface IStorage {
   // Leader-Basic Relationships
   getLeadersForBasicUser(basicId: string): Promise<StaffWithDetails[]>;
   getBasicUsersForLeader(leaderId: string): Promise<StaffWithDetails[]>;
+  getTeamMembersForLeader(leaderId: string): Promise<StaffWithDetails[]>;
   createLeaderBasicAssignment(assignment: InsertLeaderBasicAssignment): Promise<LeaderBasicAssignment>;
   deleteLeaderBasicAssignment(leaderId: string, basicId: string): Promise<void>;
   
@@ -927,6 +928,56 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(spus, eq(staff.spuId, spus.id))
       .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
       .where(eq(leaderBasicAssignments.leaderId, leaderId));
+
+    return result.map((row) => ({
+      id: row.id,
+      staffIdNumber: row.staffIdNumber,
+      name: row.name,
+      email: row.email,
+      isAdmin: row.isAdmin,
+      role: row.role,
+      spuId: row.spuId,
+      subUnitId: row.subUnitId,
+      spu: row.spu!,
+      subUnit: row.subUnit || null,
+    }));
+  }
+
+  async getTeamMembersForLeader(leaderId: string): Promise<StaffWithDetails[]> {
+    // Get the leader's info
+    const leader = await this.getStaff(leaderId);
+    if (!leader) return [];
+
+    // Collect all SPU IDs: primary SPU + additional assignments
+    const spuIds: string[] = [leader.spuId];
+    const assignments = await this.getStaffSpuAssignments(leaderId);
+    for (const a of assignments) {
+      if (!spuIds.includes(a.spuId)) {
+        spuIds.push(a.spuId);
+      }
+    }
+
+    // Get all staff in those SPUs (excluding the leader themselves)
+    const result = await db
+      .select({
+        id: staff.id,
+        staffIdNumber: staff.staffIdNumber,
+        name: staff.name,
+        email: staff.email,
+        isAdmin: staff.isAdmin,
+        role: staff.role,
+        spuId: staff.spuId,
+        subUnitId: staff.subUnitId,
+        spu: spus,
+        subUnit: subUnits,
+      })
+      .from(staff)
+      .leftJoin(spus, eq(staff.spuId, spus.id))
+      .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
+      .where(and(
+        inArray(staff.spuId, spuIds),
+        ne(staff.id, leaderId)
+      ));
 
     return result.map((row) => ({
       id: row.id,

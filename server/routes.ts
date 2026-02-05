@@ -337,10 +337,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/staff/:staffId/basic-users", async (req, res) => {
     try {
-      const basicUsers = await storage.getBasicUsersForLeader(req.params.staffId);
-      res.json(basicUsers);
+      const teamMembers = await storage.getTeamMembersForLeader(req.params.staffId);
+      res.json(teamMembers);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch basic users" });
+      res.status(500).json({ error: "Failed to fetch team members" });
     }
   });
 

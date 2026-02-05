@@ -360,7 +360,7 @@ export default function Admin({ staff }: AdminProps) {
                       <Users className="h-5 w-5" />
                       My Team
                     </CardTitle>
-                    <CardDescription>Basic users you supervise across your SPU assignments</CardDescription>
+                    <CardDescription>All staff members in your SPUs (regardless of sub-unit)</CardDescription>
                   </div>
                 </div>
               </CardHeader>
