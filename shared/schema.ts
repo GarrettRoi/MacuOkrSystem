@@ -143,7 +143,7 @@ export const insertOkrResponsibilitySchema = createInsertSchema(okrResponsibilit
   role: z.enum(RESPONSIBILITY_ROLES),
 });
 
-export const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true });
+export const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true, okrNumber: true });
 
 export const updateOkrSchema = z.object({
   objectiveStatement: z.string().min(20, "Objective must be at least 20 characters").optional(),

@@ -81,7 +81,7 @@ export interface IStorage {
   getOkrsBySpu(spuId: string): Promise<Okr[]>;
   countOkrsBySpu(spuId: string): Promise<number>;
   getOkrsWithDetailsBySpu(spuId: string): Promise<OkrWithDetails[]>;
-  createOkr(okr: InsertOkr): Promise<Okr>;
+  createOkr(okr: InsertOkr & { okrNumber: string }): Promise<Okr>;
   updateOkr(id: string, updates: Partial<Okr>): Promise<Okr>;
   deleteOkr(id: string): Promise<void>;
   
@@ -547,7 +547,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async createOkr(insertOkr: InsertOkr): Promise<Okr> {
+  async createOkr(insertOkr: InsertOkr & { okrNumber: string }): Promise<Okr> {
     const [okr] = await db
       .insert(okrs)
       .values(insertOkr)
