@@ -31,6 +31,7 @@ import {
   okrResponsibilities,
   staffSpuAssignments,
   leaderBasicAssignments,
+  appSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, inArray, ne } from "drizzle-orm";
@@ -109,6 +110,10 @@ export interface IStorage {
   createLeaderBasicAssignment(assignment: InsertLeaderBasicAssignment): Promise<LeaderBasicAssignment>;
   deleteLeaderBasicAssignment(leaderId: string, basicId: string): Promise<void>;
   
+  // App Settings
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
+
   // Staff lookup by ID number or email
   getStaffByIdNumber(staffIdNumber: string): Promise<Staff | undefined>;
   getStaffByEmail(email: string): Promise<Staff | undefined>;
@@ -1008,6 +1013,19 @@ export class DatabaseStorage implements IStorage {
         eq(leaderBasicAssignments.basicId, basicId)
       )
     );
+  }
+
+  // App Settings
+  async getSetting(key: string): Promise<string | null> {
+    const [result] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    return result?.value ?? null;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    await db
+      .insert(appSettings)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value } });
   }
 
   // Staff lookup by ID number or email

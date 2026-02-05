@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames } from "@/lib/utils";
@@ -103,6 +104,26 @@ export default function Admin({ staff }: AdminProps) {
       return response.json();
     },
     enabled: staff.role === "leader" || staff.role === "super_admin",
+  });
+
+  const { data: passwordLoginSetting } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/settings/password-login"],
+    enabled: staff.role === "super_admin",
+  });
+
+  const togglePasswordLoginMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      return await apiRequest("PUT", "/api/settings/password-login", { enabled });
+    },
+    onSuccess: (_data, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/password-login"] });
+      toast({
+        title: enabled ? "Password Login Enabled" : "Password Login Disabled",
+        description: enabled
+          ? "Users must now enter a password to access the system."
+          : "Users can now enter without a password by selecting Admin or Staff access.",
+      });
+    },
   });
 
   const addSpuMutation = useMutation({
@@ -348,6 +369,12 @@ export default function Admin({ staff }: AdminProps) {
           <TabsTrigger value="spus" data-testid="tab-spus">SPUs</TabsTrigger>
           <TabsTrigger value="subunits" data-testid="tab-subunits">Sub-Units</TabsTrigger>
           <TabsTrigger value="years" data-testid="tab-years">Years</TabsTrigger>
+          {staff.role === "super_admin" && (
+            <TabsTrigger value="settings" data-testid="tab-settings">
+              <Lock className="h-4 w-4 mr-2" />
+              Settings
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {(staff.role === "leader" || staff.role === "super_admin") && (
@@ -1426,6 +1453,37 @@ export default function Admin({ staff }: AdminProps) {
             </CardContent>
           </Card>
         </TabsContent>
+        {staff.role === "super_admin" && (
+          <TabsContent value="settings">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5" />
+                  System Settings
+                </CardTitle>
+                <CardDescription>Configure system-wide settings for the OKR Tracking System</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between gap-4 p-4 border rounded-md">
+                  <div className="space-y-1">
+                    <Label className="text-base font-medium" data-testid="text-password-login-label">Password Login</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {passwordLoginSetting?.enabled !== false
+                        ? "Users must enter a password (admin or staff) to access the system."
+                        : "Password login is off. Users choose between Admin or Staff access without a password."}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={passwordLoginSetting?.enabled !== false}
+                    onCheckedChange={(checked) => togglePasswordLoginMutation.mutate(checked)}
+                    disabled={togglePasswordLoginMutation.isPending}
+                    data-testid="switch-password-login"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

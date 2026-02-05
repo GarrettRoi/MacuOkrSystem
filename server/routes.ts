@@ -157,6 +157,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // App Settings
+  app.get("/api/settings/password-login", async (_req, res) => {
+    try {
+      const value = await storage.getSetting("password_login_enabled");
+      res.json({ enabled: value !== "false" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch setting" });
+    }
+  });
+
+  app.put("/api/settings/password-login", async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const staffMember = await storage.getStaff(req.session.selectedStaffId);
+      if (!staffMember || staffMember.role !== "super_admin") {
+        return res.status(403).json({ error: "Only super admins can change this setting" });
+      }
+      const schema = z.object({ enabled: z.boolean() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      await storage.setSetting("password_login_enabled", parsed.data.enabled ? "true" : "false");
+      res.json({ success: true, enabled: parsed.data.enabled });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update setting" });
+    }
+  });
+
+  app.post("/api/auth/enter", async (req, res) => {
+    try {
+      const passwordRequired = await storage.getSetting("password_login_enabled");
+      if (passwordRequired !== "false") {
+        return res.status(403).json({ error: "Password login is still enabled" });
+      }
+      const schema = z.object({ isAdmin: z.boolean() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const { isAdmin } = parsed.data;
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Session error" });
+        }
+        req.session.isAdmin = !!isAdmin;
+        req.session.sessionVersion = Date.now();
+        delete req.session.selectedStaffId;
+        delete req.session.selectedStaffName;
+        req.session.save((err) => {
+          if (err) {
+            return res.status(500).json({ error: "Session save error" });
+          }
+          res.json({ success: true, isAdmin: !!isAdmin });
+        });
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/staff", async (_req, res) => {
     try {
       const staff = await storage.getAllStaffWithDetails();

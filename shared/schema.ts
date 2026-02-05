@@ -39,6 +39,11 @@ export const staffSpuAssignments = pgTable("staff_spu_assignments", {
   subUnitId: varchar("sub_unit_id").references(() => subUnits.id, { onDelete: "cascade" }),
 });
 
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
 export const leaderBasicAssignments = pgTable("leader_basic_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   leaderId: varchar("leader_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
