@@ -51,6 +51,7 @@ export default function Admin({ staff }: AdminProps) {
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [mergeSourceId, setMergeSourceId] = useState("");
   const [mergeTargetId, setMergeTargetId] = useState("");
+  const [staffNameFilter, setStaffNameFilter] = useState("");
 
   const { data: spus, isLoading: spusLoading } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
@@ -527,6 +528,15 @@ export default function Admin({ staff }: AdminProps) {
               </div>
             </CardHeader>
             <CardContent>
+              <div className="mb-4">
+                <Input
+                  placeholder="Search by name..."
+                  value={staffNameFilter}
+                  onChange={(e) => setStaffNameFilter(e.target.value)}
+                  className="max-w-sm"
+                  data-testid="input-staff-name-filter"
+                />
+              </div>
               {staffLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
@@ -545,14 +555,20 @@ export default function Admin({ staff }: AdminProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {staff?.length === 0 ? (
+                    {staffList?.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center text-muted-foreground">
                           No staff members yet. Add your first staff member above.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      staffList?.slice().sort((a, b) => compareNames(a.name, b.name)).map((member) => (
+                      staffList?.slice()
+                        .filter((member) => 
+                          staffNameFilter === "" || 
+                          member.name.toLowerCase().includes(staffNameFilter.toLowerCase())
+                        )
+                        .sort((a, b) => compareNames(a.name, b.name))
+                        .map((member) => (
                         <TableRow key={member.id} data-testid={`row-staff-${member.id}`}>
                           <TableCell className="text-muted-foreground">{member.staffIdNumber || "-"}</TableCell>
                           <TableCell className="font-medium">{member.name}</TableCell>
