@@ -581,6 +581,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Staff SPU Assignments - for multi-SPU leadership
+  app.get("/api/staff/:staffId/spu-assignments", async (req, res) => {
+    try {
+      const assignments = await storage.getStaffSpuAssignments(req.params.staffId);
+      res.json(assignments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch SPU assignments" });
+    }
+  });
+
+  app.post("/api/staff/:staffId/spu-assignments", requireAdmin, async (req, res) => {
+    try {
+      const { spuId, subUnitId } = req.body;
+      if (!spuId) {
+        return res.status(400).json({ error: "SPU ID is required" });
+      }
+      const assignment = await storage.createStaffSpuAssignment({
+        staffId: req.params.staffId,
+        spuId,
+        subUnitId: subUnitId || null,
+      });
+      res.status(201).json(assignment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create SPU assignment" });
+    }
+  });
+
+  app.delete("/api/staff/spu-assignments/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteStaffSpuAssignment(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete SPU assignment" });
+    }
+  });
+
   app.get("/api/okrs", async (req, res) => {
     try {
       const okrs = await storage.getAllOkrsWithDetails();
