@@ -16,7 +16,7 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
   const allNavItems = [
     { path: "/", icon: Home, label: "Home", adminOnly: false },
     { path: "/submit-okr", icon: FileText, label: "Submit OKR", adminOnly: false },
-    { path: "/quarterly-update", icon: TrendingUp, label: "Quarterly Update", adminOnly: false },
+    { path: "/quarterly-update", icon: TrendingUp, label: "Score OKR", adminOnly: false },
     { path: "/dashboard", icon: BarChart3, label: "Dashboard", adminOnly: false },
     { path: "/trends", icon: LineChart, label: "Trends", adminOnly: false },
     { path: "/admin", icon: Settings, label: "Admin", adminOnly: true },
