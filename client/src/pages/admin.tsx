@@ -52,6 +52,8 @@ export default function Admin({ staff }: AdminProps) {
   const [mergeSourceId, setMergeSourceId] = useState("");
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [staffNameFilter, setStaffNameFilter] = useState("");
+  const [deleteStaffDialogOpen, setDeleteStaffDialogOpen] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState<Staff | null>(null);
 
   const { data: spus, isLoading: spusLoading } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
@@ -172,7 +174,16 @@ export default function Admin({ staff }: AdminProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      setDeleteStaffDialogOpen(false);
+      setStaffToDelete(null);
       toast({ title: "Staff Member Deleted", description: "The staff member has been removed." });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Failed to Delete", 
+        description: error.message || "Could not delete staff member. Please try again.",
+        variant: "destructive"
+      });
     },
   });
 
@@ -602,7 +613,10 @@ export default function Admin({ staff }: AdminProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => deleteStaffMutation.mutate(member.id)}
+                                onClick={() => {
+                                  setStaffToDelete(member);
+                                  setDeleteStaffDialogOpen(true);
+                                }}
                                 data-testid={`button-delete-staff-${member.id}`}
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
@@ -738,6 +752,41 @@ export default function Admin({ staff }: AdminProps) {
                   data-testid="button-save-edit-staff"
                 >
                   {updateStaffMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={deleteStaffDialogOpen} onOpenChange={setDeleteStaffDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Staff Member</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete {staffToDelete?.name}? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDeleteStaffDialogOpen(false);
+                    setStaffToDelete(null);
+                  }}
+                  data-testid="button-cancel-delete-staff"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    if (staffToDelete) {
+                      deleteStaffMutation.mutate(staffToDelete.id);
+                    }
+                  }}
+                  disabled={deleteStaffMutation.isPending}
+                  data-testid="button-confirm-delete-staff"
+                >
+                  {deleteStaffMutation.isPending ? "Deleting..." : "Delete"}
                 </Button>
               </DialogFooter>
             </DialogContent>
