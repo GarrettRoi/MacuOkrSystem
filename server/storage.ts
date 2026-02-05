@@ -235,9 +235,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteStaff(id: string): Promise<void> {
-    // First delete related OKRs (which will cascade to quarterly_updates and okr_responsibilities)
-    await db.delete(okrs).where(eq(okrs.staffId, id));
-    // Then delete the staff member (other relations have cascade delete)
+    // OKRs belong to SPUs, not staff - they will have staffId set to null automatically
+    // Other relations (assignments, leader-basic) have cascade delete
     await db.delete(staff).where(eq(staff.id, id));
   }
 
@@ -518,9 +517,9 @@ export class DatabaseStorage implements IStorage {
         spu: row.staffSpu!,
         subUnit: row.staffSubUnit || null,
       } : {
-        id: row.okr.staffId,
+        id: row.okr.staffId || "deleted",
         staffIdNumber: null,
-        name: "Unknown User",
+        name: "Deleted User",
         email: "",
         spuId: row.okr.spuId,
         subUnitId: null,
