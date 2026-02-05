@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2, Sparkles } from "lucide-react";
 import type { StaffWithDetails, Spu, SubUnit, Year } from "@shared/schema";
-import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, OKR_NUMBERS, QUARTERS } from "@shared/schema";
+import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, QUARTERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 const keyResultSchema = z.object({
@@ -24,7 +24,6 @@ const formSchema = z.object({
   staffId: z.string(),
   spuId: z.string().min(1, "Please select a primary SPU"),
   subUnitId: z.string().optional(),
-  okrNumber: z.string().min(1, "Please select an OKR number"),
   quarter: z.string().min(1, "Please select a quarter"),
   year: z.number(),
   collaborationSpuId: z.string().optional(),
@@ -64,7 +63,6 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       staffId: staff.id,
       spuId: staff.spuId,
       subUnitId: staff.subUnitId || undefined,
-      okrNumber: "",
       quarter: "",
       year: currentYear,
       collaborationSpuId: undefined,
@@ -122,7 +120,6 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       staffId: staff.id,
       spuId: staff.spuId,
       subUnitId: staff.subUnitId || undefined,
-      okrNumber: "",
       quarter: "",
       year: currentYear,
       collaborationSpuId: undefined,
@@ -285,10 +282,10 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
               </div>
 
               <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground border">
-                Each Strategic Planning Unit (SPU) may submit multiple OKRs per quarter. Please select the number that corresponds to this OKR for the Primary SPU. For example, if this is the first OKR you’re submitting for this quarter, select “OKR 1.” If it’s your second for this quarter, select “OKR 2,” and so on. This number will correspond to each unique score you will submit at the end of the quarter.
+                Each Strategic Planning Unit (SPU) may submit multiple OKRs. OKR numbers are automatically assigned sequentially as they are submitted for your SPU.
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
                   name="quarter"
@@ -349,33 +346,6 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="okrNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>OKR Number *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-okr-number">
-                            <SelectValue placeholder="Select OKR #" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {OKR_NUMBERS.map((num) => (
-                            <SelectItem key={num} value={num} data-testid={`option-okr-${num}`}>
-                              {num}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription className="text-xs">
-                        Which numbered OKR are you submitting?
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
 
               <div className="space-y-4">
