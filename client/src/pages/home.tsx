@@ -49,7 +49,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       adminOnly: false,
     },
     {
-      title: "Employee Progress",
+      title: "University Achievement",
       description: "Comprehensive view of OKR progress by employee with filtering",
       icon: Users,
       path: "/employee-progress",
