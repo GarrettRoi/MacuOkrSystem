@@ -34,7 +34,7 @@ import {
   appSettings,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, inArray, ne } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, ne } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 export interface IStorage {
@@ -322,7 +322,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllSpus(): Promise<Spu[]> {
-    return await db.select().from(spus);
+    return await db.select().from(spus).orderBy(asc(spus.name));
   }
 
   async getSpu(id: string): Promise<Spu | undefined> {
@@ -364,7 +364,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllSubUnits(): Promise<SubUnit[]> {
-    return await db.select().from(subUnits);
+    return await db.select().from(subUnits).orderBy(asc(subUnits.name));
   }
 
   async getSubUnit(id: string): Promise<SubUnit | undefined> {
