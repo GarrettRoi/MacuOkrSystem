@@ -14,22 +14,12 @@ import { compareNames } from "@/lib/utils";
 interface EmployeeProgressProps {
   staff: StaffWithDetails;
 }
-const STATUSES = ["not_started", "in_progress", "at_risk", "completed"];
-
-const statusLabels = {
-  not_started: "Not Started",
-  in_progress: "In Progress",
-  at_risk: "At Risk",
-  completed: "Completed",
-};
-
 export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   // Filter state
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [selectedQuarter, setSelectedQuarter] = useState<string>("");
   const [selectedStaffId, setSelectedStaffId] = useState<string>("");
   const [selectedSpuId, setSelectedSpuId] = useState<string>("");
-  const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [showFilters, setShowFilters] = useState(true);
 
   // Fetch years
@@ -53,7 +43,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   if (selectedQuarter && selectedQuarter !== "all") queryParams.append("quarter", selectedQuarter);
   if (selectedStaffId && selectedStaffId !== "all") queryParams.append("staffId", selectedStaffId);
   if (selectedSpuId && selectedSpuId !== "all") queryParams.append("spuId", selectedSpuId);
-  if (selectedStatus && selectedStatus !== "all") queryParams.append("status", selectedStatus);
 
   // Fetch employee progress grouped
   const { data: progressSummaries, isLoading } = useQuery<EmployeeProgressSummary[]>({
@@ -225,23 +214,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                   </Select>
                 </div>
 
-                {/* Status Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Status</label>
-                  <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                    <SelectTrigger data-testid="select-filter-status">
-                      <SelectValue placeholder="All statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" data-testid="option-filter-status-all">All statuses</SelectItem>
-                      {STATUSES.map((status) => (
-                        <SelectItem key={status} value={status} data-testid={`option-filter-status-${status}`}>
-                          {statusLabels[status as keyof typeof statusLabels]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             </CardContent>
           )}
@@ -345,7 +317,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                               <tr key={`${record.okr.id}-aligned`} className="border-b">
                                 <td className="p-2 text-xs text-muted-foreground font-medium">Aligned</td>
                                 <td className="p-2">{record.okr.quarter} {record.okr.year}</td>
-                                <td className="p-2">{statusLabels[record.okr.status as keyof typeof statusLabels]}</td>
+                                <td className="p-2">—</td>
                                 <td className="p-2">—</td>
                                 <td className="p-2">—</td>
                                 <td className="p-2 text-muted-foreground text-xs">

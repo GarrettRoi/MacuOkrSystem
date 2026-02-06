@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, StaffWithDetails } from "@shared/schema";
 
@@ -23,7 +23,6 @@ export default function Dashboard() {
   const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
   const [spuFilter, setSpuFilter] = useState<string>("All");
   const [staffFilter, setStaffFilter] = useState<string>("All");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
   const [keywordSearch, setKeywordSearch] = useState<string>("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [spuSearch, setSpuSearch] = useState<string>("");
@@ -52,14 +51,13 @@ export default function Dashboard() {
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
     const spuMatch = spuFilter === "All" || String(okr.staff.spuId) === spuFilter;
     const staffMatch = staffFilter === "All" || String(okr.staffId) === staffFilter;
-    const statusMatch = statusFilter === "All" || okr.status === statusFilter;
     const keywordMatch = !keywordSearch || 
       okr.objectiveStatement.toLowerCase().includes(keywordSearch.toLowerCase()) ||
       okr.universityObjective.toLowerCase().includes(keywordSearch.toLowerCase()) ||
       okr.universityKeyResult.toLowerCase().includes(keywordSearch.toLowerCase()) ||
       okr.okrNumber.toLowerCase().includes(keywordSearch.toLowerCase());
     
-    return quarterMatch && yearMatch && spuMatch && staffMatch && statusMatch && keywordMatch;
+    return quarterMatch && yearMatch && spuMatch && staffMatch && keywordMatch;
   }) || [];
 
   const clearAllFilters = () => {
@@ -67,7 +65,6 @@ export default function Dashboard() {
     setYearFilter(String(currentYear));
     setSpuFilter("All");
     setStaffFilter("All");
-    setStatusFilter("All");
     setKeywordSearch("");
   };
 
@@ -76,7 +73,6 @@ export default function Dashboard() {
     yearFilter !== String(currentYear),
     spuFilter !== "All",
     staffFilter !== "All",
-    statusFilter !== "All",
     keywordSearch !== "",
   ].filter(Boolean).length;
 
@@ -133,13 +129,6 @@ export default function Dashboard() {
     s.name.toLowerCase().includes(staffSearch.toLowerCase()) ||
     s.spuName.toLowerCase().includes(staffSearch.toLowerCase())
   );
-
-  const statusDistribution = [
-    { name: "Not Started", value: filteredOkrs.filter((o) => o.status === "not_started").length },
-    { name: "In Progress", value: filteredOkrs.filter((o) => o.status === "in_progress").length },
-    { name: "Completed", value: filteredOkrs.filter((o) => o.status === "completed").length },
-    { name: "At Risk", value: filteredOkrs.filter((o) => o.status === "at_risk").length },
-  ].filter((s) => s.value > 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -247,21 +236,6 @@ export default function Dashboard() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Status</label>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger data-testid="select-filter-status">
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All">All Statuses</SelectItem>
-                      <SelectItem value="not_started">Not Started</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="at_risk">At Risk</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               <div className="space-y-2">
@@ -356,7 +330,6 @@ export default function Dashboard() {
       <Tabs defaultValue="spus" className="space-y-6">
         <TabsList>
           <TabsTrigger value="spus" data-testid="tab-spus">By SPU</TabsTrigger>
-          <TabsTrigger value="status" data-testid="tab-status">By Status</TabsTrigger>
           <TabsTrigger value="staff" data-testid="tab-staff">By Staff</TabsTrigger>
         </TabsList>
 
@@ -423,63 +396,6 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="status" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>OKR Status Distribution</CardTitle>
-                <CardDescription>Breakdown of OKR statuses</CardDescription>
-              </CardHeader>
-              <CardContent className="flex items-center justify-center">
-                {statusDistribution.length === 0 ? (
-                  <p className="text-muted-foreground py-12">No data available</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={statusDistribution}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {statusDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Status Summary</CardTitle>
-                <CardDescription>OKR counts by status</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {statusDistribution.map((status, index) => (
-                  <div key={status.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="h-4 w-4 rounded"
-                        style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
-                      />
-                      <span className="text-sm font-medium">{status.name}</span>
-                    </div>
-                    <span className="text-sm font-semibold" data-testid={`text-status-${status.name}`}>{status.value}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 

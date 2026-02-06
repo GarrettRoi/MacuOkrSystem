@@ -146,17 +146,8 @@ export const insertOkrResponsibilitySchema = createInsertSchema(okrResponsibilit
 export const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true, okrNumber: true });
 
 export const updateOkrSchema = z.object({
-  objectiveStatement: z.string().min(20, "Objective must be at least 20 characters").optional(),
-  status: z.enum(["not_started", "in_progress", "at_risk", "completed"]).optional(),
-}).refine(
-  (data) => {
-    // At least one field must be provided
-    return data.objectiveStatement !== undefined || data.status !== undefined;
-  },
-  {
-    message: "At least one field (objectiveStatement or status) must be provided",
-  }
-);
+  objectiveStatement: z.string().min(20, "Objective must be at least 20 characters"),
+});
 
 export const insertOkrSchema = baseInsertOkrSchema.refine(
   (data) => {

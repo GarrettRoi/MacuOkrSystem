@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArrowLeft, Target, Calendar, Building2, TrendingUp, CheckCircle2, AlertCircle, Clock, Filter, X, User, Users } from "lucide-react";
+import { ArrowLeft, Target, Calendar, Building2, TrendingUp, Filter, X, User, Users } from "lucide-react";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
 import { QUARTERS, getQuarterLabel } from "@shared/schema";
 
@@ -18,18 +18,10 @@ interface MyOkrsProps {
 const currentYear = new Date().getFullYear();
 const YEARS = ["All", String(currentYear - 1), String(currentYear), String(currentYear + 1)];
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle2 }> = {
-  not_started: { label: "Not Started", color: "bg-gray-100 text-gray-700", icon: Clock },
-  in_progress: { label: "In Progress", color: "bg-blue-100 text-blue-700", icon: TrendingUp },
-  completed: { label: "Completed", color: "bg-green-100 text-green-700", icon: CheckCircle2 },
-  at_risk: { label: "At Risk", color: "bg-red-100 text-red-700", icon: AlertCircle },
-};
-
 export default function MyOkrs({ staff }: MyOkrsProps) {
   const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
   const [spuFilter, setSpuFilter] = useState<string>("All");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
 
   // SPU-centric model: Fetch OKRs scoped to user's SPU directly from server
   // Server validates session-based staff belongs to requested SPU
@@ -74,10 +66,9 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
       const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
       const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
       const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
-      const statusMatch = statusFilter === "All" || okr.status === statusFilter;
-      return yearMatch && quarterMatch && spuMatch && statusMatch;
+      return yearMatch && quarterMatch && spuMatch;
     });
-  }, [mySpuOkrs, yearFilter, quarterFilter, spuFilter, statusFilter]);
+  }, [mySpuOkrs, yearFilter, quarterFilter, spuFilter]);
 
   const getLatestUpdate = (okrId: string) => {
     if (!updates) return null;
@@ -100,14 +91,12 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     setYearFilter(String(currentYear));
     setQuarterFilter("All");
     setSpuFilter("All");
-    setStatusFilter("All");
   };
 
   const activeFilterCount = [
     yearFilter !== String(currentYear),
     quarterFilter !== "All",
     spuFilter !== "All",
-    statusFilter !== "All",
   ].filter(Boolean).length;
 
   const uniqueSpusInMyOkrs = useMemo(() => {
@@ -222,18 +211,6 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                 </SelectContent>
               </Select>
 
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40" data-testid="select-status">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Statuses</SelectItem>
-                  <SelectItem value="not_started">Not Started</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="at_risk">At Risk</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </CardContent>
         </Card>
@@ -264,14 +241,14 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Completed</CardDescription>
-            <CardTitle className="text-3xl" data-testid="text-completed">
-              {filteredOkrs.filter((o) => o.status === "completed").length}
+            <CardDescription>Scored</CardDescription>
+            <CardTitle className="text-3xl" data-testid="text-scored">
+              {filteredOkrs.filter((o) => o.currentValue > 0).length}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
-              {filteredOkrs.filter((o) => o.status === "in_progress").length} in progress
+              {filteredOkrs.filter((o) => o.currentValue === 0).length} not yet scored
             </p>
           </CardContent>
         </Card>
@@ -303,9 +280,6 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
           {filteredOkrs.map((okr) => {
             const keyResults = parseKeyResults(okr.keyResults);
             const latestUpdate = getLatestUpdate(okr.id);
-            const statusConfig = STATUS_CONFIG[okr.status] || STATUS_CONFIG.not_started;
-            const StatusIcon = statusConfig.icon;
-
             let keyResultScores: Array<{ keyResultNumber: number; description: string; score: number }> = [];
             if (latestUpdate?.keyResultScores) {
               try {
@@ -336,10 +310,6 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                       <Badge variant="secondary" className="flex items-center gap-1">
                         <Building2 className="h-3 w-3" />
                         {okr.spu?.name || staff.spu.name}
-                      </Badge>
-                      <Badge className={statusConfig.color}>
-                        <StatusIcon className="h-3 w-3 mr-1" />
-                        {statusConfig.label}
                       </Badge>
                       <span className="font-bold text-lg" data-testid={`text-okr-progress-${okr.id}`}>
                         {okr.currentValue}%

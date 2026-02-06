@@ -27,7 +27,6 @@ interface AggregatedOkr extends OkrWithDetails {
 
 const editOkrSchema = z.object({
   objectiveStatement: z.string().min(20, "Objective must be at least 20 characters"),
-  status: z.enum(["not_started", "in_progress", "at_risk", "completed"]),
 });
 
 const editQuarterlyUpdateSchema = z.object({
@@ -334,7 +333,6 @@ export default function Data() {
     setEditingOkr(okr);
     okrForm.reset({
       objectiveStatement: okr.objectiveStatement,
-      status: okr.status as "not_started" | "in_progress" | "at_risk" | "completed",
     });
   };
 
@@ -366,21 +364,6 @@ export default function Data() {
       id: editingUpdate.id,
       updates,
     });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "bg-green-500";
-      case "in_progress":
-        return "bg-blue-500";
-      case "at_risk":
-        return "bg-yellow-500";
-      case "not_started":
-        return "bg-gray-500";
-      default:
-        return "bg-gray-500";
-    }
   };
 
   if (isLoading) {
@@ -574,14 +557,13 @@ export default function Data() {
                   <TableHead>Quarter/Year</TableHead>
                   <TableHead>Objective</TableHead>
                   <TableHead>Progress</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {!filteredOkrs || filteredOkrs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                       {hasActiveFilters ? "No OKRs match the selected filters" : "No OKRs found"}
                     </TableCell>
                   </TableRow>
@@ -624,11 +606,6 @@ export default function Data() {
                             <span className="font-semibold" data-testid={`text-progress-${okr.id}`}>
                               {okr.derivedProgress}%
                             </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(okr.status)} data-testid={`badge-status-${okr.id}`}>
-                              {okr.status.replace("_", " ")}
-                            </Badge>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
@@ -808,29 +785,6 @@ export default function Data() {
                 <p className="text-sm font-medium">University Objective (Read-only)</p>
                 <p className="text-sm text-muted-foreground">{editingOkr?.universityObjective}</p>
               </div>
-              <FormField
-                control={okrForm.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-status">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="not_started">Not Started</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="at_risk">At Risk</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditingOkr(null)} data-testid="button-cancel-okr">
                   Cancel
