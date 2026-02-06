@@ -50,7 +50,7 @@ export default function Dashboard() {
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
-    const spuMatch = spuFilter === "All" || String(okr.staff.spuId) === spuFilter;
+    const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
     const staffMatch = staffFilter === "All" || String(okr.staffId) === staffFilter;
     const keywordMatch = !keywordSearch || 
       okr.objectiveStatement.toLowerCase().includes(keywordSearch.toLowerCase()) ||
@@ -94,7 +94,7 @@ export default function Dashboard() {
   }).length;
 
   const spuProgress = spus?.map((spu) => {
-    const spuOkrs = filteredOkrs.filter((okr) => okr.staff.spuId === spu.id);
+    const spuOkrs = filteredOkrs.filter((okr) => okr.spuId === spu.id);
     const avgProg = spuOkrs.length > 0
       ? Math.round(spuOkrs.reduce((sum, okr) => sum + okr.currentValue, 0) / spuOkrs.length)
       : 0;
@@ -118,7 +118,7 @@ export default function Dashboard() {
     return {
       staffId,
       name: staffMember?.name || "",
-      spuName: staffMember?.spu.name || "",
+      spuName: staffMember?.spu?.name || "",
       okrCount: staffOkrs.length,
       avgProgress: avgProg,
       staff: staffMember,
