@@ -516,6 +516,14 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     <FormDescription>
                       Select one or more University Level Strategic Objectives for your OKR
                     </FormDescription>
+                    {field.value.length > 0 && (
+                      <div className="rounded-md border border-input bg-muted/30 p-3 space-y-2" data-testid="selected-objectives-display">
+                        <p className="text-xs font-medium text-muted-foreground">Selected Objective(s):</p>
+                        {field.value.map((item: string, idx: number) => (
+                          <p key={idx} className="text-sm leading-relaxed" data-testid={`selected-objective-text-${idx}`}>{item}</p>
+                        ))}
+                      </div>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -539,6 +547,14 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     <FormDescription>
                       Select one or more University-Level Key Results for your OKR
                     </FormDescription>
+                    {field.value.length > 0 && (
+                      <div className="rounded-md border border-input bg-muted/30 p-3 space-y-2" data-testid="selected-key-results-display">
+                        <p className="text-xs font-medium text-muted-foreground">Selected Key Result(s):</p>
+                        {field.value.map((item: string, idx: number) => (
+                          <p key={idx} className="text-sm leading-relaxed" data-testid={`selected-key-result-text-${idx}`}>{item}</p>
+                        ))}
+                      </div>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
