@@ -311,6 +311,12 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                         <Building2 className="h-3 w-3" />
                         {okr.spu?.name || staff.spu.name}
                       </Badge>
+                      {okr.subUnit && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {okr.subUnit.name}
+                        </Badge>
+                      )}
                       <span className="font-bold text-lg" data-testid={`text-okr-progress-${okr.id}`}>
                         {okr.currentValue}%
                       </span>
