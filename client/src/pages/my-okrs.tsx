@@ -300,7 +300,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                       <Badge variant="outline" className="font-mono bg-[#aa182c] text-[#fcfcfc]">
                         {okr.okrNumber}
                       </Badge>
-                      <span className="font-semibold">{parseMultiSelectField(okr.universityObjective).map(o => o.split(":")[0]?.trim()).join(", ")}</span>
+                      <span className="font-semibold">{okr.objectiveStatement}</span>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
                       <Badge variant="secondary" className="flex items-center gap-1">
