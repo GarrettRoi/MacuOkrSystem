@@ -297,7 +297,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                 <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                   <div className="flex flex-col md:flex-row md:items-center justify-between w-full gap-2 text-left pr-4">
                     <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="font-mono">
+                      <Badge variant="outline" className="font-mono bg-[#aa182c] text-[#fcfcfc]">
                         {okr.okrNumber}
                       </Badge>
                       <span className="font-semibold">{parseMultiSelectField(okr.universityObjective).map(o => o.split(":")[0]?.trim()).join(", ")}</span>
