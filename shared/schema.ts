@@ -131,6 +131,15 @@ export const getQuarterLabel = (value: string): string => {
 
 export const RESPONSIBILITY_ROLES = ["owner", "collaborator"] as const;
 
+export function parseMultiSelectField(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+  }
+  return value ? [value] : [];
+}
+
 export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });
 export const insertSubUnitSchema = createInsertSchema(subUnits).omit({ id: true });
 export const insertYearSchema = createInsertSchema(years).omit({ id: true });
