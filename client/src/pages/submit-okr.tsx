@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -63,9 +63,6 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   });
 
   const objectiveOptions = universityObjectivesData?.map(obj => `${obj.label}: ${obj.description}`) || [];
-  const keyResultOptions = universityObjectivesData?.flatMap(obj =>
-    obj.keyResults.map(kr => `${kr.label} : ${kr.description}`)
-  ) || [];
 
   // Fetch SPU assignments for leaders/super_admins
   const { data: spuAssignments } = useQuery<any[]>({
@@ -118,6 +115,24 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   });
 
   const watchedKeyResults = form.watch("keyResults");
+  const watchedObjectives = form.watch("universityObjectives");
+  const watchedUniversityKeyResults = form.watch("universityKeyResults");
+
+  const keyResultOptions = useMemo(() => {
+    if (!universityObjectivesData || watchedObjectives.length === 0) return [];
+    const selectedLabels = watchedObjectives.map((opt: string) => opt.split(":")[0].trim());
+    return universityObjectivesData
+      .filter(obj => selectedLabels.includes(obj.label))
+      .flatMap(obj => obj.keyResults.map(kr => `${kr.label} : ${kr.description}`));
+  }, [universityObjectivesData, watchedObjectives]);
+
+  useEffect(() => {
+    if (watchedUniversityKeyResults.length === 0) return;
+    const valid = watchedUniversityKeyResults.filter((kr: string) => keyResultOptions.includes(kr));
+    if (valid.length !== watchedUniversityKeyResults.length) {
+      form.setValue("universityKeyResults", valid);
+    }
+  }, [keyResultOptions]);
 
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
