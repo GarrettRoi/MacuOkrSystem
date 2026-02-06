@@ -1886,31 +1886,6 @@ export default function Admin({ staff }: AdminProps) {
                       data-testid="switch-edit-obj-active"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Applicable Years</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {years && years.sort((a, b) => b.year - a.year).map((yr) => (
-                        <label key={yr.id} className="flex items-center gap-1.5 cursor-pointer">
-                          <Checkbox
-                            checked={editingObj?.applicableYears?.includes(yr.year) || false}
-                            onCheckedChange={(checked) => {
-                              if (editingObj) {
-                                setEditingObj({
-                                  ...editingObj,
-                                  applicableYears: checked
-                                    ? [...(editingObj.applicableYears || []), yr.year]
-                                    : (editingObj.applicableYears || []).filter(y => y !== yr.year),
-                                });
-                              }
-                            }}
-                            data-testid={`checkbox-edit-obj-year-${yr.year}`}
-                          />
-                          <span className="text-sm">{yr.year}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Select which years this objective applies to</p>
-                  </div>
                 </div>
                 <DialogFooter>
                   <Button
