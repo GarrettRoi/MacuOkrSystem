@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, StaffWithDetails } from "@shared/schema";
+import { parseMultiSelectField } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const currentYear = new Date().getFullYear();
@@ -53,8 +54,8 @@ export default function Dashboard() {
     const staffMatch = staffFilter === "All" || String(okr.staffId) === staffFilter;
     const keywordMatch = !keywordSearch || 
       okr.objectiveStatement.toLowerCase().includes(keywordSearch.toLowerCase()) ||
-      okr.universityObjective.toLowerCase().includes(keywordSearch.toLowerCase()) ||
-      okr.universityKeyResult.toLowerCase().includes(keywordSearch.toLowerCase()) ||
+      parseMultiSelectField(okr.universityObjective).some(o => o.toLowerCase().includes(keywordSearch.toLowerCase())) ||
+      parseMultiSelectField(okr.universityKeyResult).some(kr => kr.toLowerCase().includes(keywordSearch.toLowerCase())) ||
       okr.okrNumber.toLowerCase().includes(keywordSearch.toLowerCase());
     
     return quarterMatch && yearMatch && spuMatch && staffMatch && keywordMatch;

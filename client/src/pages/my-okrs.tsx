@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ArrowLeft, Target, Calendar, Building2, TrendingUp, Filter, X, User, Users } from "lucide-react";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
-import { QUARTERS, getQuarterLabel } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField } from "@shared/schema";
 
 interface MyOkrsProps {
   staff: StaffWithDetails;
@@ -300,7 +300,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                       <Badge variant="outline" className="font-mono">
                         {okr.okrNumber}
                       </Badge>
-                      <span className="font-semibold">{okr.universityObjective}</span>
+                      <span className="font-semibold">{parseMultiSelectField(okr.universityObjective).map(o => o.split(":")[0]?.trim()).join(", ")}</span>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
                       <Badge variant="secondary" className="flex items-center gap-1">
@@ -334,8 +334,21 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                     </div>
 
                     <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-1">University Key Result</h4>
-                      <p className="text-sm">{okr.universityKeyResult}</p>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">University Strategic Objective(s)</h4>
+                      <div className="space-y-1">
+                        {parseMultiSelectField(okr.universityObjective).map((obj, i) => (
+                          <p key={i} className="text-sm">{obj}</p>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-medium text-muted-foreground mb-1">University Key Result(s)</h4>
+                      <div className="space-y-1">
+                        {parseMultiSelectField(okr.universityKeyResult).map((kr, i) => (
+                          <p key={i} className="text-sm">{kr}</p>
+                        ))}
+                      </div>
                     </div>
 
                     <div>

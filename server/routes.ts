@@ -16,6 +16,7 @@ import {
   USER_ROLES,
 } from "@shared/schema";
 import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole } from "@shared/schema";
+import { parseMultiSelectField } from "@shared/schema";
 import { z } from "zod";
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -1019,8 +1020,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           okr.quarter,
           okr.year,
           okr.okrNumber,
-          `"${okr.universityObjective.replace(/"/g, '""')}"`,
-          `"${okr.universityKeyResult.replace(/"/g, '""')}"`,
+          `"${parseMultiSelectField(okr.universityObjective).join("; ").replace(/"/g, '""')}"`,
+          `"${parseMultiSelectField(okr.universityKeyResult).join("; ").replace(/"/g, '""')}"`,
           `"${okr.objectiveStatement.replace(/"/g, '""')}"`,
           `"${okr.keyResults.replace(/"/g, '""')}"`,
           okr.currentValue,

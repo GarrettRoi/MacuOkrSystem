@@ -8,7 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Filter } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, Year } from "@shared/schema";
-import { QUARTERS, getQuarterLabel } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
 
 interface EmployeeProgressProps {
@@ -59,10 +59,9 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     setSelectedQuarter("");
     setSelectedStaffId("");
     setSelectedSpuId("");
-    setSelectedStatus("");
   };
 
-  const activeFiltersCount = [selectedYear, selectedQuarter, selectedStaffId, selectedSpuId, selectedStatus].filter(v => v && v !== "all").length;
+  const activeFiltersCount = [selectedYear, selectedQuarter, selectedStaffId, selectedSpuId].filter(v => v && v !== "all").length;
 
   const getKeyResults = (keyResultsJson: string) => {
     try {
@@ -292,7 +291,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                               {/* Row 2: Strategic Alignment */}
                               <tr key={`${record.okr.id}-strategic`} className="border-b">
                                 <td className="p-2 text-xs text-muted-foreground font-medium">Strategic</td>
-                                <td className="p-2">{record.okr.universityObjective}</td>
+                                <td className="p-2">{parseMultiSelectField(record.okr.universityObjective).map(o => o.split(":")[0]?.trim()).join(", ")}</td>
                                 <td className="p-2">{record.okr.subUnit?.name || "—"}</td>
                                 <td className="p-2">{record.okr.collaborationSpu?.name || "—"}</td>
                                 <td className="p-2">
@@ -300,7 +299,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                     ? record.responsibilities.filter(r => r.role === 'collaborator').map(r => r.staff.name).join(", ")
                                     : "—"}
                                 </td>
-                                <td className="p-2">{record.okr.universityKeyResult}</td>
+                                <td className="p-2">{parseMultiSelectField(record.okr.universityKeyResult).map(kr => kr.split(":")[0]?.trim()).join(", ")}</td>
                               </tr>
                               {/* Row 3: Owner / SPU */}
                               <tr key={`${record.okr.id}-owner`} className="border-b bg-muted/20">

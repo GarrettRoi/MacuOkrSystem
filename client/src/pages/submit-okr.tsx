@@ -15,6 +15,7 @@ import { CheckCircle2, Plus, Trash2, Sparkles } from "lucide-react";
 import type { StaffWithDetails, Spu, SubUnit, Year } from "@shared/schema";
 import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, QUARTERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
 
 const keyResultSchema = z.object({
   description: z.string().min(10, "Key result description must be at least 10 characters"),
@@ -27,8 +28,8 @@ const formSchema = z.object({
   quarter: z.string().min(1, "Please select a quarter"),
   year: z.number(),
   collaborationSpuId: z.string().optional(),
-  universityObjective: z.string().min(1, "Please select a university objective"),
-  universityKeyResult: z.string().min(1, "Please select a university key result"),
+  universityObjectives: z.array(z.string()).min(1, "Please select at least one university objective"),
+  universityKeyResults: z.array(z.string()).min(1, "Please select at least one university key result"),
   objectiveStatement: z.string().min(20, "Objective statement must be at least 20 characters"),
   keyResults: z.array(keyResultSchema).min(1, "At least one key result is required"),
 });
@@ -95,8 +96,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       quarter: "",
       year: currentYear,
       collaborationSpuId: undefined,
-      universityObjective: "",
-      universityKeyResult: "",
+      universityObjectives: [],
+      universityKeyResults: [],
       objectiveStatement: "",
       keyResults: [{ description: "" }],
     },
@@ -113,12 +114,16 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     mutationFn: async (data: FormValues) => {
       const normalizedKeyResults = data.keyResults.map(kr => ({
         description: kr.description,
-        percentage: 25, // Default equal weighting for all key results
+        percentage: 25,
       }));
       const payload = {
         ...data,
+        universityObjective: JSON.stringify(data.universityObjectives),
+        universityKeyResult: JSON.stringify(data.universityKeyResults),
         keyResults: JSON.stringify(normalizedKeyResults),
       };
+      delete (payload as any).universityObjectives;
+      delete (payload as any).universityKeyResults;
       return await apiRequest("POST", "/api/okrs", payload);
     },
     onSuccess: () => {
@@ -152,8 +157,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       quarter: "",
       year: currentYear,
       collaborationSpuId: undefined,
-      universityObjective: "",
-      universityKeyResult: "",
+      universityObjectives: [],
+      universityKeyResults: [],
       objectiveStatement: "",
       keyResults: [{ description: "" }],
     });
@@ -495,26 +500,21 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
 
               <FormField
                 control={form.control}
-                name="universityObjective"
+                name="universityObjectives"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>University Level Strategic Objective *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-university-objective">
-                          <SelectValue placeholder="Select a strategic objective" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {UNIVERSITY_OBJECTIVES.map((obj) => (
-                          <SelectItem key={obj} value={obj}>
-                            {obj}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>University Level Strategic Objective(s) *</FormLabel>
+                    <FormControl>
+                      <MultiSelectCheckboxes
+                        options={UNIVERSITY_OBJECTIVES}
+                        selected={field.value}
+                        onChange={field.onChange}
+                        placeholder="Select strategic objective(s)..."
+                        testIdPrefix="select-university-objective"
+                      />
+                    </FormControl>
                     <FormDescription>
-                      Select the University Level Strategic Objective for your OKR
+                      Select one or more University Level Strategic Objectives for your OKR
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -523,26 +523,21 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
 
               <FormField
                 control={form.control}
-                name="universityKeyResult"
+                name="universityKeyResults"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>University-Level Key Result *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-university-key-result">
-                          <SelectValue placeholder="Select a key result" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {UNIVERSITY_KEY_RESULTS.map((kr) => (
-                          <SelectItem key={kr} value={kr}>
-                            {kr}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>University-Level Key Result(s) *</FormLabel>
+                    <FormControl>
+                      <MultiSelectCheckboxes
+                        options={UNIVERSITY_KEY_RESULTS}
+                        selected={field.value}
+                        onChange={field.onChange}
+                        placeholder="Select key result(s)..."
+                        testIdPrefix="select-university-key-result"
+                      />
+                    </FormControl>
                     <FormDescription>
-                      Select the appropriate University-Level Key Result for your OKR
+                      Select one or more University-Level Key Results for your OKR
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

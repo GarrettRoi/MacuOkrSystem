@@ -17,7 +17,7 @@ import { z } from "zod";
 import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, Year } from "@shared/schema";
-import { getQuarterLabel } from "@shared/schema";
+import { getQuarterLabel, parseMultiSelectField } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
 
 interface AggregatedOkr extends OkrWithDetails {
@@ -782,8 +782,20 @@ export default function Data() {
                 )}
               />
               <div className="space-y-2">
-                <p className="text-sm font-medium">University Objective (Read-only)</p>
-                <p className="text-sm text-muted-foreground">{editingOkr?.universityObjective}</p>
+                <p className="text-sm font-medium">University Objective(s) (Read-only)</p>
+                <div className="space-y-1">
+                  {editingOkr && parseMultiSelectField(editingOkr.universityObjective).map((obj, i) => (
+                    <p key={i} className="text-sm text-muted-foreground">{obj}</p>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">University Key Result(s) (Read-only)</p>
+                <div className="space-y-1">
+                  {editingOkr && parseMultiSelectField(editingOkr.universityKeyResult).map((kr, i) => (
+                    <p key={i} className="text-sm text-muted-foreground">{kr}</p>
+                  ))}
+                </div>
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditingOkr(null)} data-testid="button-cancel-okr">
