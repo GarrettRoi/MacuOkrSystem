@@ -56,6 +56,7 @@ export const universityObjectives = pgTable("university_objectives", {
   description: text("description").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
   applicableYears: integer("applicable_years").array().default([]),
+  isActive: boolean("is_active").notNull().default(true),
 });
 
 export const universityKeyResults = pgTable("university_key_results", {
