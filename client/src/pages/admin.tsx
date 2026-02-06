@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -65,12 +66,13 @@ export default function Admin({ staff }: AdminProps) {
   const [objDialogOpen, setObjDialogOpen] = useState(false);
   const [newObjLabel, setNewObjLabel] = useState("");
   const [newObjDescription, setNewObjDescription] = useState("");
+  const [newObjYears, setNewObjYears] = useState<number[]>([]);
   const [krDialogOpen, setKrDialogOpen] = useState(false);
   const [krParentObjId, setKrParentObjId] = useState("");
   const [newKrLabel, setNewKrLabel] = useState("");
   const [newKrDescription, setNewKrDescription] = useState("");
   const [editObjDialogOpen, setEditObjDialogOpen] = useState(false);
-  const [editingObj, setEditingObj] = useState<{ id: string; label: string; description: string } | null>(null);
+  const [editingObj, setEditingObj] = useState<{ id: string; label: string; description: string; applicableYears: number[] } | null>(null);
   const [editKrDialogOpen, setEditKrDialogOpen] = useState(false);
   const [editingKr, setEditingKr] = useState<{ id: string; label: string; description: string } | null>(null);
   const [expandedObjectives, setExpandedObjectives] = useState<Set<string>>(new Set());
@@ -131,7 +133,7 @@ export default function Admin({ staff }: AdminProps) {
   });
 
   const addObjectiveMutation = useMutation({
-    mutationFn: async (data: { label: string; description: string; sortOrder?: number }) => {
+    mutationFn: async (data: { label: string; description: string; sortOrder?: number; applicableYears?: number[] }) => {
       return await apiRequest("POST", "/api/university-objectives", data);
     },
     onSuccess: () => {
@@ -139,12 +141,13 @@ export default function Admin({ staff }: AdminProps) {
       setObjDialogOpen(false);
       setNewObjLabel("");
       setNewObjDescription("");
+      setNewObjYears([]);
       toast({ title: "Objective Added", description: "The university objective has been created." });
     },
   });
 
   const updateObjectiveMutation = useMutation({
-    mutationFn: async ({ id, ...data }: { id: string; label: string; description: string }) => {
+    mutationFn: async ({ id, ...data }: { id: string; label: string; description: string; applicableYears: number[] }) => {
       return await apiRequest("PATCH", `/api/university-objectives/${id}`, data);
     },
     onSuccess: () => {
@@ -1676,6 +1679,27 @@ export default function Admin({ staff }: AdminProps) {
                               data-testid="input-obj-description"
                             />
                           </div>
+                          <div className="space-y-2">
+                            <Label>Applicable Years</Label>
+                            <div className="flex flex-wrap gap-2">
+                              {years && years.sort((a, b) => b.year - a.year).map((yr) => (
+                                <label key={yr.id} className="flex items-center gap-1.5 cursor-pointer">
+                                  <Checkbox
+                                    checked={newObjYears.includes(yr.year)}
+                                    onCheckedChange={(checked) => {
+                                      setNewObjYears(checked
+                                        ? [...newObjYears, yr.year]
+                                        : newObjYears.filter(y => y !== yr.year)
+                                      );
+                                    }}
+                                    data-testid={`checkbox-new-obj-year-${yr.year}`}
+                                  />
+                                  <span className="text-sm">{yr.year}</span>
+                                </label>
+                              ))}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Select which years this objective applies to</p>
+                          </div>
                         </div>
                         <DialogFooter>
                           <Button
@@ -1686,6 +1710,7 @@ export default function Admin({ staff }: AdminProps) {
                                   label: newObjLabel,
                                   description: newObjDescription,
                                   sortOrder,
+                                  applicableYears: newObjYears,
                                 });
                               }
                             }}
@@ -1733,6 +1758,11 @@ export default function Admin({ staff }: AdminProps) {
                             <div className="flex items-center gap-2 flex-wrap">
                               <Badge variant="default" data-testid={`badge-objective-${obj.id}`}>{obj.label}</Badge>
                               <span className="text-xs text-muted-foreground">{obj.keyResults.length} key result(s)</span>
+                              {obj.applicableYears && obj.applicableYears.length > 0 && (
+                                obj.applicableYears.sort((a, b) => a - b).map((yr) => (
+                                  <Badge key={yr} variant="outline" className="text-xs" data-testid={`badge-obj-year-${obj.id}-${yr}`}>{yr}</Badge>
+                                ))
+                              )}
                             </div>
                             <p className="text-sm mt-1 text-muted-foreground">{obj.description}</p>
                           </div>
@@ -1741,7 +1771,7 @@ export default function Admin({ staff }: AdminProps) {
                               variant="ghost"
                               size="icon"
                               onClick={() => {
-                                setEditingObj({ id: obj.id, label: obj.label, description: obj.description });
+                                setEditingObj({ id: obj.id, label: obj.label, description: obj.description, applicableYears: obj.applicableYears || [] });
                                 setEditObjDialogOpen(true);
                               }}
                               data-testid={`button-edit-objective-${obj.id}`}
@@ -1833,6 +1863,31 @@ export default function Admin({ staff }: AdminProps) {
                       className="min-h-20 resize-none"
                       data-testid="input-edit-obj-description"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Applicable Years</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {years && years.sort((a, b) => b.year - a.year).map((yr) => (
+                        <label key={yr.id} className="flex items-center gap-1.5 cursor-pointer">
+                          <Checkbox
+                            checked={editingObj?.applicableYears?.includes(yr.year) || false}
+                            onCheckedChange={(checked) => {
+                              if (editingObj) {
+                                setEditingObj({
+                                  ...editingObj,
+                                  applicableYears: checked
+                                    ? [...(editingObj.applicableYears || []), yr.year]
+                                    : (editingObj.applicableYears || []).filter(y => y !== yr.year),
+                                });
+                              }
+                            }}
+                            data-testid={`checkbox-edit-obj-year-${yr.year}`}
+                          />
+                          <span className="text-sm">{yr.year}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Select which years this objective applies to</p>
                   </div>
                 </div>
                 <DialogFooter>

@@ -62,7 +62,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     queryKey: ["/api/university-objectives"],
   });
 
-  const objectiveOptions = universityObjectivesData?.map(obj => `${obj.label}: ${obj.description}`) || [];
+  
 
   // Fetch SPU assignments for leaders/super_admins
   const { data: spuAssignments } = useQuery<any[]>({
@@ -115,8 +115,19 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   });
 
   const watchedKeyResults = form.watch("keyResults");
+  const watchedYear = form.watch("year");
   const watchedObjectives = form.watch("universityObjectives");
   const watchedUniversityKeyResults = form.watch("universityKeyResults");
+
+  const objectiveOptions = useMemo(() => {
+    if (!universityObjectivesData) return [];
+    return universityObjectivesData
+      .filter(obj => {
+        if (!obj.applicableYears || obj.applicableYears.length === 0) return true;
+        return obj.applicableYears.includes(watchedYear);
+      })
+      .map(obj => `${obj.label}: ${obj.description}`);
+  }, [universityObjectivesData, watchedYear]);
 
   const keyResultOptions = useMemo(() => {
     if (!universityObjectivesData || watchedObjectives.length === 0) return [];
@@ -125,6 +136,14 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       .filter(obj => selectedLabels.includes(obj.label))
       .flatMap(obj => obj.keyResults.map(kr => `${kr.label} : ${kr.description}`));
   }, [universityObjectivesData, watchedObjectives]);
+
+  useEffect(() => {
+    if (watchedObjectives.length === 0) return;
+    const valid = watchedObjectives.filter((obj: string) => objectiveOptions.includes(obj));
+    if (valid.length !== watchedObjectives.length) {
+      form.setValue("universityObjectives", valid);
+    }
+  }, [objectiveOptions]);
 
   useEffect(() => {
     if (watchedUniversityKeyResults.length === 0) return;
