@@ -72,7 +72,7 @@ export default function Admin({ staff }: AdminProps) {
   const [newKrLabel, setNewKrLabel] = useState("");
   const [newKrDescription, setNewKrDescription] = useState("");
   const [editObjDialogOpen, setEditObjDialogOpen] = useState(false);
-  const [editingObj, setEditingObj] = useState<{ id: string; label: string; description: string; applicableYears: number[] } | null>(null);
+  const [editingObj, setEditingObj] = useState<{ id: string; label: string; description: string; applicableYears: number[]; isActive: boolean } | null>(null);
   const [editKrDialogOpen, setEditKrDialogOpen] = useState(false);
   const [editingKr, setEditingKr] = useState<{ id: string; label: string; description: string } | null>(null);
   const [expandedObjectives, setExpandedObjectives] = useState<Set<string>>(new Set());
@@ -147,7 +147,7 @@ export default function Admin({ staff }: AdminProps) {
   });
 
   const updateObjectiveMutation = useMutation({
-    mutationFn: async ({ id, ...data }: { id: string; label: string; description: string; applicableYears: number[] }) => {
+    mutationFn: async ({ id, ...data }: { id: string; label: string; description: string; applicableYears: number[]; isActive: boolean }) => {
       return await apiRequest("PATCH", `/api/university-objectives/${id}`, data);
     },
     onSuccess: () => {
@@ -1757,6 +1757,9 @@ export default function Admin({ staff }: AdminProps) {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <Badge variant="default" data-testid={`badge-objective-${obj.id}`}>{obj.label}</Badge>
+                              {obj.isActive === false && (
+                                <Badge variant="secondary" className="text-xs" data-testid={`badge-inactive-${obj.id}`}>Inactive</Badge>
+                              )}
                               <span className="text-xs text-muted-foreground">{obj.keyResults.length} key result(s)</span>
                               {obj.applicableYears && obj.applicableYears.length > 0 && (
                                 obj.applicableYears.sort((a, b) => a - b).map((yr) => (
@@ -1771,7 +1774,7 @@ export default function Admin({ staff }: AdminProps) {
                               variant="ghost"
                               size="icon"
                               onClick={() => {
-                                setEditingObj({ id: obj.id, label: obj.label, description: obj.description, applicableYears: obj.applicableYears || [] });
+                                setEditingObj({ id: obj.id, label: obj.label, description: obj.description, applicableYears: obj.applicableYears || [], isActive: obj.isActive !== false });
                                 setEditObjDialogOpen(true);
                               }}
                               data-testid={`button-edit-objective-${obj.id}`}
@@ -1862,6 +1865,25 @@ export default function Admin({ staff }: AdminProps) {
                       onChange={(e) => setEditingObj(editingObj ? { ...editingObj, description: e.target.value } : null)}
                       className="min-h-20 resize-none"
                       data-testid="input-edit-obj-description"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 p-4 border rounded-md">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium">Active</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {editingObj?.isActive !== false
+                          ? "This objective is available for OKR submissions."
+                          : "This objective is hidden from OKR submissions."}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={editingObj?.isActive !== false}
+                      onCheckedChange={(checked) => {
+                        if (editingObj) {
+                          setEditingObj({ ...editingObj, isActive: checked });
+                        }
+                      }}
+                      data-testid="switch-edit-obj-active"
                     />
                   </div>
                   <div className="space-y-2">

@@ -122,6 +122,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   const objectiveOptions = useMemo(() => {
     if (!universityObjectivesData) return [];
     return universityObjectivesData
+      .filter(obj => obj.isActive !== false)
       .filter(obj => {
         if (!obj.applicableYears || obj.applicableYears.length === 0) return true;
         return obj.applicableYears.includes(watchedYear);

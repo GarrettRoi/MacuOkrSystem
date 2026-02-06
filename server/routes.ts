@@ -225,6 +225,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         label: z.string().min(1).optional(),
         description: z.string().min(1).optional(),
         sortOrder: z.number().int().optional(),
+        applicableYears: z.array(z.number().int()).optional(),
+        isActive: z.boolean().optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
