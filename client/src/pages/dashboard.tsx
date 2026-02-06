@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter } from "lucide-react";
-import type { OkrWithDetails, QuarterlyUpdate, Spu, StaffWithDetails } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
 import { parseMultiSelectField } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
@@ -23,11 +22,9 @@ export default function Dashboard() {
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
   const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
   const [spuFilter, setSpuFilter] = useState<string>("All");
-  const [staffFilter, setStaffFilter] = useState<string>("All");
   const [keywordSearch, setKeywordSearch] = useState<string>("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [spuSearch, setSpuSearch] = useState<string>("");
-  const [staffSearch, setStaffSearch] = useState<string>("");
 
   const { data: okrs, isLoading: okrsLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
@@ -41,31 +38,25 @@ export default function Dashboard() {
     queryKey: ["/api/spus"],
   });
 
-  const { data: staff, isLoading: staffLoading } = useQuery<StaffWithDetails[]>({
-    queryKey: ["/api/staff"],
-  });
-
-  const isLoading = okrsLoading || updatesLoading || spusLoading || staffLoading;
+  const isLoading = okrsLoading || updatesLoading || spusLoading;
 
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
     const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
-    const staffMatch = staffFilter === "All" || String(okr.staffId) === staffFilter;
     const keywordMatch = !keywordSearch || 
       okr.objectiveStatement.toLowerCase().includes(keywordSearch.toLowerCase()) ||
       parseMultiSelectField(okr.universityObjective).some(o => o.toLowerCase().includes(keywordSearch.toLowerCase())) ||
       parseMultiSelectField(okr.universityKeyResult).some(kr => kr.toLowerCase().includes(keywordSearch.toLowerCase())) ||
       okr.okrNumber.toLowerCase().includes(keywordSearch.toLowerCase());
     
-    return quarterMatch && yearMatch && spuMatch && staffMatch && keywordMatch;
+    return quarterMatch && yearMatch && spuMatch && keywordMatch;
   }) || [];
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
     setYearFilter(String(currentYear));
     setSpuFilter("All");
-    setStaffFilter("All");
     setKeywordSearch("");
   };
 
@@ -73,7 +64,6 @@ export default function Dashboard() {
     quarterFilter !== "All",
     yearFilter !== String(currentYear),
     spuFilter !== "All",
-    staffFilter !== "All",
     keywordSearch !== "",
   ].filter(Boolean).length;
 
@@ -110,26 +100,6 @@ export default function Dashboard() {
     spu.name.toLowerCase().includes(spuSearch.toLowerCase())
   );
 
-  // Get unique staff with their OKRs for the staff tab
-  const staffWithOkrs = Array.from(new Set(filteredOkrs.map((o) => o.staffId))).map((staffId) => {
-    const staffOkrs = filteredOkrs.filter((o) => o.staffId === staffId);
-    const staffMember = staffOkrs[0]?.staff;
-    const avgProg = Math.round(staffOkrs.reduce((sum, o) => sum + o.currentValue, 0) / staffOkrs.length);
-    return {
-      staffId,
-      name: staffMember?.name || "",
-      spuName: staffMember?.spu?.name || "",
-      okrCount: staffOkrs.length,
-      avgProgress: avgProg,
-      staff: staffMember,
-    };
-  });
-
-  // Filter staff by search term
-  const filteredStaffWithOkrs = staffWithOkrs.filter((s) =>
-    s.name.toLowerCase().includes(staffSearch.toLowerCase()) ||
-    s.spuName.toLowerCase().includes(staffSearch.toLowerCase())
-  );
 
   return (
     <div className="p-6 space-y-6">
@@ -220,22 +190,6 @@ export default function Dashboard() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Staff Member</label>
-                  <Select value={staffFilter} onValueChange={setStaffFilter}>
-                    <SelectTrigger data-testid="select-filter-staff">
-                      <SelectValue placeholder="All Staff" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All">All Staff</SelectItem>
-                      {staff?.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)} data-testid={`option-filter-staff-${s.id}`}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
               </div>
 
@@ -328,13 +282,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <Tabs defaultValue="spus" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="spus" data-testid="tab-spus">By SPU</TabsTrigger>
-          <TabsTrigger value="staff" data-testid="tab-staff">By Staff</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="spus" className="space-y-6">
+      <div className="space-y-6">
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -398,72 +346,7 @@ export default function Dashboard() {
               </Card>
             ))}
           </div>
-        </TabsContent>
-
-        <TabsContent value="staff" className="space-y-6">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search staff by name or SPU..."
-              value={staffSearch}
-              onChange={(e) => setStaffSearch(e.target.value)}
-              className="pl-9"
-              data-testid="input-search-staff"
-            />
-            {staffSearch && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                onClick={() => setStaffSearch("")}
-                data-testid="button-clear-staff-search"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Staff OKR Overview</CardTitle>
-              <CardDescription>
-                Individual staff member progress
-                {staffSearch && ` • Showing results for "${staffSearch}"`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {filteredStaffWithOkrs.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-12">
-                    No staff found{staffSearch ? ` matching "${staffSearch}"` : " for selected filters"}
-                  </p>
-                ) : (
-                  filteredStaffWithOkrs.map((s) => (
-                    <Card key={s.staffId} data-testid={`card-staff-${s.staffId}`}>
-                      <CardContent className="pt-4">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold" data-testid={`text-staff-name-${s.staffId}`}>{s.name}</h4>
-                            <p className="text-sm text-muted-foreground">{s.spuName}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{s.okrCount} OKRs</p>
-                          </div>
-                          <div className="flex-1 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-muted-foreground">Average Progress</span>
-                              <span className="font-semibold" data-testid={`text-staff-progress-${s.staffId}`}>{s.avgProgress}%</span>
-                            </div>
-                            <Progress value={s.avgProgress} className="h-2" />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   );
 }
