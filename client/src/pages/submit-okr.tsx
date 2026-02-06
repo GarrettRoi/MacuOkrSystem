@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2, Sparkles } from "lucide-react";
-import type { StaffWithDetails, Spu, SubUnit, Year } from "@shared/schema";
-import { UNIVERSITY_OBJECTIVES, UNIVERSITY_KEY_RESULTS, QUARTERS } from "@shared/schema";
+import type { StaffWithDetails, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
+import { QUARTERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
 
@@ -57,6 +57,15 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   const { data: years } = useQuery<Year[]>({
     queryKey: ["/api/years"],
   });
+
+  const { data: universityObjectivesData } = useQuery<UniversityObjectiveWithKeyResults[]>({
+    queryKey: ["/api/university-objectives"],
+  });
+
+  const objectiveOptions = universityObjectivesData?.map(obj => `${obj.label}: ${obj.description}`) || [];
+  const keyResultOptions = universityObjectivesData?.flatMap(obj =>
+    obj.keyResults.map(kr => `${kr.label} : ${kr.description}`)
+  ) || [];
 
   // Fetch SPU assignments for leaders/super_admins
   const { data: spuAssignments } = useQuery<any[]>({
@@ -506,7 +515,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     <FormLabel>University Level Strategic Objective(s) *</FormLabel>
                     <FormControl>
                       <MultiSelectCheckboxes
-                        options={UNIVERSITY_OBJECTIVES}
+                        options={objectiveOptions}
                         selected={field.value}
                         onChange={field.onChange}
                         placeholder="Select strategic objective(s)..."
@@ -537,7 +546,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     <FormLabel>University-Level Key Result(s) *</FormLabel>
                     <FormControl>
                       <MultiSelectCheckboxes
-                        options={UNIVERSITY_KEY_RESULTS}
+                        options={keyResultOptions}
                         selected={field.value}
                         onChange={field.onChange}
                         placeholder="Select key result(s)..."

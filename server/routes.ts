@@ -189,6 +189,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // University Strategic Planning routes
+  app.get("/api/university-objectives", async (_req, res) => {
+    try {
+      const objectives = await storage.getAllUniversityObjectives();
+      res.json(objectives);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch university objectives" });
+    }
+  });
+
+  app.post("/api/university-objectives", async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      const schema = z.object({
+        label: z.string().min(1),
+        description: z.string().min(1),
+        sortOrder: z.number().int().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error.errors });
+      }
+      const objective = await storage.createUniversityObjective(parsed.data);
+      res.status(201).json(objective);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create university objective" });
+    }
+  });
+
+  app.patch("/api/university-objectives/:id", async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      const schema = z.object({
+        label: z.string().min(1).optional(),
+        description: z.string().min(1).optional(),
+        sortOrder: z.number().int().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error.errors });
+      }
+      const objective = await storage.updateUniversityObjective(req.params.id, parsed.data);
+      res.json(objective);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update university objective" });
+    }
+  });
+
+  app.delete("/api/university-objectives/:id", async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      await storage.deleteUniversityObjective(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete university objective" });
+    }
+  });
+
+  app.post("/api/university-key-results", async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      const schema = z.object({
+        objectiveId: z.string().min(1),
+        label: z.string().min(1),
+        description: z.string().min(1),
+        sortOrder: z.number().int().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error.errors });
+      }
+      const kr = await storage.createUniversityKeyResult(parsed.data);
+      res.status(201).json(kr);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create university key result" });
+    }
+  });
+
+  app.patch("/api/university-key-results/:id", async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      const schema = z.object({
+        label: z.string().min(1).optional(),
+        description: z.string().min(1).optional(),
+        sortOrder: z.number().int().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid data", details: parsed.error.errors });
+      }
+      const kr = await storage.updateUniversityKeyResult(req.params.id, parsed.data);
+      res.json(kr);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update university key result" });
+    }
+  });
+
+  app.delete("/api/university-key-results/:id", async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      await storage.deleteUniversityKeyResult(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete university key result" });
+    }
+  });
+
   app.post("/api/auth/enter", async (req, res) => {
     try {
       const passwordRequired = await storage.getSetting("password_login_enabled");

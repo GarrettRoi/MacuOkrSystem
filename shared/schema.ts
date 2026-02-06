@@ -50,6 +50,21 @@ export const leaderBasicAssignments = pgTable("leader_basic_assignments", {
   basicId: varchar("basic_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
 });
 
+export const universityObjectives = pgTable("university_objectives", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  label: text("label").notNull(),
+  description: text("description").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const universityKeyResults = pgTable("university_key_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  objectiveId: varchar("objective_id").notNull().references(() => universityObjectives.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  description: text("description").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
 export const okrs = pgTable("okrs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").references(() => staff.id, { onDelete: "set null" }),
@@ -140,6 +155,9 @@ export function parseMultiSelectField(value: string): string[] {
   return value ? [value] : [];
 }
 
+export const insertUniversityObjectiveSchema = createInsertSchema(universityObjectives).omit({ id: true });
+export const insertUniversityKeyResultSchema = createInsertSchema(universityKeyResults).omit({ id: true });
+
 export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });
 export const insertSubUnitSchema = createInsertSchema(subUnits).omit({ id: true });
 export const insertYearSchema = createInsertSchema(years).omit({ id: true });
@@ -224,6 +242,16 @@ export type InsertQuarterlyUpdate = z.infer<typeof insertQuarterlyUpdateSchema>;
 export type InsertOkrResponsibility = z.infer<typeof insertOkrResponsibilitySchema>;
 export type InsertStaffSpuAssignment = z.infer<typeof insertStaffSpuAssignmentSchema>;
 export type InsertLeaderBasicAssignment = z.infer<typeof insertLeaderBasicAssignmentSchema>;
+
+export type InsertUniversityObjective = z.infer<typeof insertUniversityObjectiveSchema>;
+export type InsertUniversityKeyResult = z.infer<typeof insertUniversityKeyResultSchema>;
+
+export type UniversityObjective = typeof universityObjectives.$inferSelect;
+export type UniversityKeyResult = typeof universityKeyResults.$inferSelect;
+
+export type UniversityObjectiveWithKeyResults = UniversityObjective & {
+  keyResults: UniversityKeyResult[];
+};
 
 export type Spu = typeof spus.$inferSelect;
 export type SubUnit = typeof subUnits.$inferSelect;

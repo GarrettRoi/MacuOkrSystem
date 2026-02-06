@@ -17,6 +17,11 @@ import {
   type InsertOkrResponsibility,
   type InsertStaffSpuAssignment,
   type InsertLeaderBasicAssignment,
+  type InsertUniversityObjective,
+  type InsertUniversityKeyResult,
+  type UniversityObjective,
+  type UniversityKeyResult,
+  type UniversityObjectiveWithKeyResults,
   type StaffWithDetails,
   type StaffSpuAssignmentWithDetails,
   type OkrWithDetails,
@@ -32,6 +37,8 @@ import {
   staffSpuAssignments,
   leaderBasicAssignments,
   appSettings,
+  universityObjectives,
+  universityKeyResults,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, inArray, ne } from "drizzle-orm";
@@ -110,6 +117,15 @@ export interface IStorage {
   createLeaderBasicAssignment(assignment: InsertLeaderBasicAssignment): Promise<LeaderBasicAssignment>;
   deleteLeaderBasicAssignment(leaderId: string, basicId: string): Promise<void>;
   
+  // University Strategic Planning
+  getAllUniversityObjectives(): Promise<import("@shared/schema").UniversityObjectiveWithKeyResults[]>;
+  createUniversityObjective(obj: import("@shared/schema").InsertUniversityObjective): Promise<import("@shared/schema").UniversityObjective>;
+  updateUniversityObjective(id: string, updates: Partial<import("@shared/schema").InsertUniversityObjective>): Promise<import("@shared/schema").UniversityObjective>;
+  deleteUniversityObjective(id: string): Promise<void>;
+  createUniversityKeyResult(kr: import("@shared/schema").InsertUniversityKeyResult): Promise<import("@shared/schema").UniversityKeyResult>;
+  updateUniversityKeyResult(id: string, updates: Partial<import("@shared/schema").InsertUniversityKeyResult>): Promise<import("@shared/schema").UniversityKeyResult>;
+  deleteUniversityKeyResult(id: string): Promise<void>;
+
   // App Settings
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
@@ -1037,6 +1053,43 @@ export class DatabaseStorage implements IStorage {
   async getStaffByEmail(email: string): Promise<Staff | undefined> {
     const [result] = await db.select().from(staff).where(eq(staff.email, email));
     return result || undefined;
+  }
+
+  async getAllUniversityObjectives(): Promise<UniversityObjectiveWithKeyResults[]> {
+    const objectives = await db.select().from(universityObjectives).orderBy(asc(universityObjectives.sortOrder));
+    const krs = await db.select().from(universityKeyResults).orderBy(asc(universityKeyResults.sortOrder));
+    return objectives.map(obj => ({
+      ...obj,
+      keyResults: krs.filter(kr => kr.objectiveId === obj.id),
+    }));
+  }
+
+  async createUniversityObjective(obj: InsertUniversityObjective): Promise<UniversityObjective> {
+    const [result] = await db.insert(universityObjectives).values(obj).returning();
+    return result;
+  }
+
+  async updateUniversityObjective(id: string, updates: Partial<InsertUniversityObjective>): Promise<UniversityObjective> {
+    const [result] = await db.update(universityObjectives).set(updates).where(eq(universityObjectives.id, id)).returning();
+    return result;
+  }
+
+  async deleteUniversityObjective(id: string): Promise<void> {
+    await db.delete(universityObjectives).where(eq(universityObjectives.id, id));
+  }
+
+  async createUniversityKeyResult(kr: InsertUniversityKeyResult): Promise<UniversityKeyResult> {
+    const [result] = await db.insert(universityKeyResults).values(kr).returning();
+    return result;
+  }
+
+  async updateUniversityKeyResult(id: string, updates: Partial<InsertUniversityKeyResult>): Promise<UniversityKeyResult> {
+    const [result] = await db.update(universityKeyResults).set(updates).where(eq(universityKeyResults.id, id)).returning();
+    return result;
+  }
+
+  async deleteUniversityKeyResult(id: string): Promise<void> {
+    await db.delete(universityKeyResults).where(eq(universityKeyResults.id, id));
   }
 }
 

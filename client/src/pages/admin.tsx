@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock } from "lucide-react";
-import type { Staff, Spu, SubUnit, Year, StaffWithDetails } from "@shared/schema";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight } from "lucide-react";
+import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames } from "@/lib/utils";
 
@@ -60,6 +61,19 @@ export default function Admin({ staff }: AdminProps) {
   const [spuAssignmentsStaff, setSpuAssignmentsStaff] = useState<Staff | null>(null);
   const [newAssignmentSpuId, setNewAssignmentSpuId] = useState("");
   const [newAssignmentSubUnitId, setNewAssignmentSubUnitId] = useState("");
+
+  const [objDialogOpen, setObjDialogOpen] = useState(false);
+  const [newObjLabel, setNewObjLabel] = useState("");
+  const [newObjDescription, setNewObjDescription] = useState("");
+  const [krDialogOpen, setKrDialogOpen] = useState(false);
+  const [krParentObjId, setKrParentObjId] = useState("");
+  const [newKrLabel, setNewKrLabel] = useState("");
+  const [newKrDescription, setNewKrDescription] = useState("");
+  const [editObjDialogOpen, setEditObjDialogOpen] = useState(false);
+  const [editingObj, setEditingObj] = useState<{ id: string; label: string; description: string } | null>(null);
+  const [editKrDialogOpen, setEditKrDialogOpen] = useState(false);
+  const [editingKr, setEditingKr] = useState<{ id: string; label: string; description: string } | null>(null);
+  const [expandedObjectives, setExpandedObjectives] = useState<Set<string>>(new Set());
 
   const { data: spus, isLoading: spusLoading } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
@@ -110,6 +124,94 @@ export default function Admin({ staff }: AdminProps) {
     queryKey: ["/api/settings/password-login"],
     enabled: staff.role === "super_admin",
   });
+
+  const { data: universityObjectives, isLoading: objectivesLoading } = useQuery<UniversityObjectiveWithKeyResults[]>({
+    queryKey: ["/api/university-objectives"],
+    enabled: staff.role === "super_admin",
+  });
+
+  const addObjectiveMutation = useMutation({
+    mutationFn: async (data: { label: string; description: string; sortOrder?: number }) => {
+      return await apiRequest("POST", "/api/university-objectives", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
+      setObjDialogOpen(false);
+      setNewObjLabel("");
+      setNewObjDescription("");
+      toast({ title: "Objective Added", description: "The university objective has been created." });
+    },
+  });
+
+  const updateObjectiveMutation = useMutation({
+    mutationFn: async ({ id, ...data }: { id: string; label: string; description: string }) => {
+      return await apiRequest("PATCH", `/api/university-objectives/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
+      setEditObjDialogOpen(false);
+      setEditingObj(null);
+      toast({ title: "Objective Updated", description: "The university objective has been updated." });
+    },
+  });
+
+  const deleteObjectiveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/university-objectives/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
+      toast({ title: "Objective Deleted", description: "The university objective and its key results have been removed." });
+    },
+  });
+
+  const addKeyResultMutation = useMutation({
+    mutationFn: async (data: { objectiveId: string; label: string; description: string; sortOrder?: number }) => {
+      return await apiRequest("POST", "/api/university-key-results", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
+      setKrDialogOpen(false);
+      setKrParentObjId("");
+      setNewKrLabel("");
+      setNewKrDescription("");
+      toast({ title: "Key Result Added", description: "The university key result has been created." });
+    },
+  });
+
+  const updateKeyResultMutation = useMutation({
+    mutationFn: async ({ id, ...data }: { id: string; label: string; description: string }) => {
+      return await apiRequest("PATCH", `/api/university-key-results/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
+      setEditKrDialogOpen(false);
+      setEditingKr(null);
+      toast({ title: "Key Result Updated", description: "The university key result has been updated." });
+    },
+  });
+
+  const deleteKeyResultMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/university-key-results/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
+      toast({ title: "Key Result Deleted", description: "The university key result has been removed." });
+    },
+  });
+
+  const toggleObjectiveExpanded = (objId: string) => {
+    setExpandedObjectives(prev => {
+      const next = new Set(prev);
+      if (next.has(objId)) {
+        next.delete(objId);
+      } else {
+        next.add(objId);
+      }
+      return next;
+    });
+  };
 
   const togglePasswordLoginMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -369,6 +471,12 @@ export default function Admin({ staff }: AdminProps) {
           <TabsTrigger value="spus" data-testid="tab-spus">SPUs</TabsTrigger>
           <TabsTrigger value="subunits" data-testid="tab-subunits">Sub-Units</TabsTrigger>
           <TabsTrigger value="years" data-testid="tab-years">Years</TabsTrigger>
+          {staff.role === "super_admin" && (
+            <TabsTrigger value="strategic" data-testid="tab-strategic">
+              <Target className="h-4 w-4 mr-2" />
+              Strategic Planning
+            </TabsTrigger>
+          )}
           {staff.role === "super_admin" && (
             <TabsTrigger value="settings" data-testid="tab-settings">
               <Lock className="h-4 w-4 mr-2" />
@@ -1453,6 +1561,338 @@ export default function Admin({ staff }: AdminProps) {
             </CardContent>
           </Card>
         </TabsContent>
+        {staff.role === "super_admin" && (
+          <TabsContent value="strategic">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="h-5 w-5" />
+                      University Strategic Planning
+                    </CardTitle>
+                    <CardDescription>Manage University Level Strategic Objectives and their Key Results</CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Dialog open={krDialogOpen} onOpenChange={setKrDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" data-testid="button-add-key-result-strategic">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Key Result
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Add University Key Result</DialogTitle>
+                          <DialogDescription>Add a new key result under an existing objective</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label>Parent Objective *</Label>
+                            <Select value={krParentObjId} onValueChange={setKrParentObjId}>
+                              <SelectTrigger data-testid="select-kr-parent-objective">
+                                <SelectValue placeholder="Select parent objective" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {universityObjectives?.map((obj) => (
+                                  <SelectItem key={obj.id} value={obj.id}>
+                                    {obj.label}: {obj.description.substring(0, 60)}...
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Label *</Label>
+                            <Input
+                              value={newKrLabel}
+                              onChange={(e) => setNewKrLabel(e.target.value)}
+                              placeholder="e.g., KR 1.E"
+                              data-testid="input-kr-label"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Description *</Label>
+                            <Textarea
+                              value={newKrDescription}
+                              onChange={(e) => setNewKrDescription(e.target.value)}
+                              placeholder="Describe the key result..."
+                              className="min-h-20 resize-none"
+                              data-testid="input-kr-description"
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            onClick={() => {
+                              if (krParentObjId && newKrLabel && newKrDescription) {
+                                const parentObj = universityObjectives?.find(o => o.id === krParentObjId);
+                                const sortOrder = parentObj ? parentObj.keyResults.length + 1 : 1;
+                                addKeyResultMutation.mutate({
+                                  objectiveId: krParentObjId,
+                                  label: newKrLabel,
+                                  description: newKrDescription,
+                                  sortOrder,
+                                });
+                              }
+                            }}
+                            disabled={!krParentObjId || !newKrLabel || !newKrDescription || addKeyResultMutation.isPending}
+                            data-testid="button-save-kr"
+                          >
+                            {addKeyResultMutation.isPending ? "Adding..." : "Add Key Result"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    <Dialog open={objDialogOpen} onOpenChange={setObjDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button data-testid="button-add-objective">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Objective
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Add University Objective</DialogTitle>
+                          <DialogDescription>Add a new University Level Strategic Objective</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label>Label *</Label>
+                            <Input
+                              value={newObjLabel}
+                              onChange={(e) => setNewObjLabel(e.target.value)}
+                              placeholder="e.g., Objective 4"
+                              data-testid="input-obj-label"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Description *</Label>
+                            <Textarea
+                              value={newObjDescription}
+                              onChange={(e) => setNewObjDescription(e.target.value)}
+                              placeholder="Describe the objective..."
+                              className="min-h-20 resize-none"
+                              data-testid="input-obj-description"
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            onClick={() => {
+                              if (newObjLabel && newObjDescription) {
+                                const sortOrder = universityObjectives ? universityObjectives.length + 1 : 1;
+                                addObjectiveMutation.mutate({
+                                  label: newObjLabel,
+                                  description: newObjDescription,
+                                  sortOrder,
+                                });
+                              }
+                            }}
+                            disabled={!newObjLabel || !newObjDescription || addObjectiveMutation.isPending}
+                            data-testid="button-save-objective"
+                          >
+                            {addObjectiveMutation.isPending ? "Adding..." : "Add Objective"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {objectivesLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : !universityObjectives || universityObjectives.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Target className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                    <p>No university objectives yet.</p>
+                    <p className="text-sm">Click "Add Objective" to create the first strategic objective.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {universityObjectives.map((obj) => (
+                      <div key={obj.id} className="rounded-md border" data-testid={`strategic-objective-${obj.id}`}>
+                        <div
+                          className="flex items-start gap-3 p-4 cursor-pointer hover-elevate rounded-t-md"
+                          onClick={() => toggleObjectiveExpanded(obj.id)}
+                          data-testid={`toggle-objective-${obj.id}`}
+                        >
+                          <div className="mt-0.5 shrink-0 text-muted-foreground">
+                            {expandedObjectives.has(obj.id) ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="default" data-testid={`badge-objective-${obj.id}`}>{obj.label}</Badge>
+                              <span className="text-xs text-muted-foreground">{obj.keyResults.length} key result(s)</span>
+                            </div>
+                            <p className="text-sm mt-1 text-muted-foreground">{obj.description}</p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setEditingObj({ id: obj.id, label: obj.label, description: obj.description });
+                                setEditObjDialogOpen(true);
+                              }}
+                              data-testid={`button-edit-objective-${obj.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deleteObjectiveMutation.mutate(obj.id)}
+                              disabled={deleteObjectiveMutation.isPending}
+                              data-testid={`button-delete-objective-${obj.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                        {expandedObjectives.has(obj.id) && (
+                          <div className="border-t px-4 py-2 space-y-1 bg-muted/30">
+                            {obj.keyResults.length === 0 ? (
+                              <p className="text-sm text-muted-foreground py-2 pl-7">No key results yet. Use "Add Key Result" to add one under this objective.</p>
+                            ) : (
+                              obj.keyResults.map((kr) => (
+                                <div
+                                  key={kr.id}
+                                  className="flex items-start gap-3 py-2 pl-7"
+                                  data-testid={`strategic-kr-${kr.id}`}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="text-xs" data-testid={`badge-kr-${kr.id}`}>{kr.label}</Badge>
+                                    </div>
+                                    <p className="text-sm mt-1 text-muted-foreground">{kr.description}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => {
+                                        setEditingKr({ id: kr.id, label: kr.label, description: kr.description });
+                                        setEditKrDialogOpen(true);
+                                      }}
+                                      data-testid={`button-edit-kr-${kr.id}`}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => deleteKeyResultMutation.mutate(kr.id)}
+                                      disabled={deleteKeyResultMutation.isPending}
+                                      data-testid={`button-delete-kr-${kr.id}`}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Dialog open={editObjDialogOpen} onOpenChange={setEditObjDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit University Objective</DialogTitle>
+                  <DialogDescription>Update the objective label and description</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Label *</Label>
+                    <Input
+                      value={editingObj?.label || ""}
+                      onChange={(e) => setEditingObj(editingObj ? { ...editingObj, label: e.target.value } : null)}
+                      data-testid="input-edit-obj-label"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description *</Label>
+                    <Textarea
+                      value={editingObj?.description || ""}
+                      onChange={(e) => setEditingObj(editingObj ? { ...editingObj, description: e.target.value } : null)}
+                      className="min-h-20 resize-none"
+                      data-testid="input-edit-obj-description"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    onClick={() => {
+                      if (editingObj && editingObj.label && editingObj.description) {
+                        updateObjectiveMutation.mutate(editingObj);
+                      }
+                    }}
+                    disabled={!editingObj?.label || !editingObj?.description || updateObjectiveMutation.isPending}
+                    data-testid="button-save-edit-objective"
+                  >
+                    {updateObjectiveMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={editKrDialogOpen} onOpenChange={setEditKrDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit University Key Result</DialogTitle>
+                  <DialogDescription>Update the key result label and description</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Label *</Label>
+                    <Input
+                      value={editingKr?.label || ""}
+                      onChange={(e) => setEditingKr(editingKr ? { ...editingKr, label: e.target.value } : null)}
+                      data-testid="input-edit-kr-label"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description *</Label>
+                    <Textarea
+                      value={editingKr?.description || ""}
+                      onChange={(e) => setEditingKr(editingKr ? { ...editingKr, description: e.target.value } : null)}
+                      className="min-h-20 resize-none"
+                      data-testid="input-edit-kr-description"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    onClick={() => {
+                      if (editingKr && editingKr.label && editingKr.description) {
+                        updateKeyResultMutation.mutate(editingKr);
+                      }
+                    }}
+                    disabled={!editingKr?.label || !editingKr?.description || updateKeyResultMutation.isPending}
+                    data-testid="button-save-edit-kr"
+                  >
+                    {updateKeyResultMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+        )}
         {staff.role === "super_admin" && (
           <TabsContent value="settings">
             <Card>
