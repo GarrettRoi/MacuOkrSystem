@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,10 +6,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Filter } from "lucide-react";
-import type { StaffWithDetails, Spu, EmployeeProgressSummary, Year } from "@shared/schema";
+import { Calendar, Filter, Building2, Users } from "lucide-react";
+import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, Year } from "@shared/schema";
 import { QUARTERS, getQuarterLabel, parseMultiSelectField } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
+
+interface SpuGroup {
+  spuName: string;
+  spuId: string;
+  subUnits: {
+    subUnitName: string;
+    subUnitId: string | null;
+    okrs: EmployeeProgressRecord[];
+  }[];
+  allOkrs: EmployeeProgressRecord[];
+  overallProgress: number;
+}
 
 interface EmployeeProgressProps {
   staff: StaffWithDetails;
@@ -75,6 +87,43 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   const totalProgress = progressSummaries && progressSummaries.length > 0
     ? Math.round(progressSummaries.reduce((sum, s) => sum + s.overallProgress, 0) / progressSummaries.length)
     : 0;
+
+  const spuGroups: SpuGroup[] = (() => {
+    if (!progressSummaries) return [];
+    const allOkrs: EmployeeProgressRecord[] = progressSummaries.flatMap(s => s.okrs);
+    const spuMap: Record<string, { spuName: string; spuId: string; subMap: Record<string, { subUnitName: string; subUnitId: string | null; okrs: EmployeeProgressRecord[] }> }> = {};
+
+    for (const record of allOkrs) {
+      const spuId = record.okr.spuId || record.okr.staff?.spuId || "unknown";
+      const spuName = record.okr.spu?.name || record.okr.staff?.spu?.name || "Unknown SPU";
+      const subUnitId = record.okr.subUnitId || null;
+      const subUnitName = record.okr.subUnit?.name || "No Sub-Unit";
+
+      if (!spuMap[spuId]) {
+        spuMap[spuId] = { spuName, spuId, subMap: {} };
+      }
+      const subKey = subUnitId || "__none__";
+      if (!spuMap[spuId].subMap[subKey]) {
+        spuMap[spuId].subMap[subKey] = { subUnitName, subUnitId, okrs: [] };
+      }
+      spuMap[spuId].subMap[subKey].okrs.push(record);
+    }
+
+    return Object.values(spuMap)
+      .map(spu => {
+        const subUnits = Object.values(spu.subMap).sort((a, b) => {
+          if (a.subUnitId === null) return 1;
+          if (b.subUnitId === null) return -1;
+          return a.subUnitName.localeCompare(b.subUnitName);
+        });
+        const okrsList = subUnits.flatMap(s => s.okrs);
+        const totalProgress = okrsList.length > 0
+          ? Math.round(okrsList.reduce((sum, r) => sum + (r.latestUpdate?.averageScore || 0), 0) / okrsList.length)
+          : 0;
+        return { spuName: spu.spuName, spuId: spu.spuId, subUnits, allOkrs: okrsList, overallProgress: totalProgress };
+      })
+      .sort((a, b) => a.spuName.localeCompare(b.spuName));
+  })();
 
   const getDateRange = () => {
     if (selectedQuarter && selectedQuarter !== "all" && selectedYear && selectedYear !== "all") {
@@ -225,7 +274,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
             <Skeleton className="h-40 w-full" />
             <Skeleton className="h-40 w-full" />
           </div>
-        ) : !progressSummaries || progressSummaries.length === 0 ? (
+        ) : spuGroups.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
               <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -236,101 +285,112 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
             </CardContent>
           </Card>
         ) : (
-          <Accordion type="multiple" defaultValue={progressSummaries.slice(0, 3).map((_, i) => `employee-${i}`)} className="space-y-4">
-            {progressSummaries.map((summary, index) => (
+          <Accordion type="multiple" defaultValue={spuGroups.slice(0, 3).map((_, i) => `spu-${i}`)} className="space-y-4">
+            {spuGroups.map((spuGroup, spuIndex) => (
               <AccordionItem
-                key={summary.staff.id}
-                value={`employee-${index}`}
+                key={spuGroup.spuId}
+                value={`spu-${spuIndex}`}
                 className="border rounded-lg overflow-hidden"
-                data-testid={`accordion-employee-${summary.staff.id}`}
+                data-testid={`accordion-spu-${spuGroup.spuId}`}
               >
                 <AccordionTrigger className="px-6 py-4 bg-accent hover:no-underline hover-elevate">
                   <div className="flex items-center justify-between w-full pr-4">
                     <div className="flex items-center gap-4">
-                      <h2 className="text-xl font-bold">{summary.staff.name}</h2>
-                      <Badge variant="outline">{summary.okrCount} OKRs</Badge>
+                      <Building2 className="h-5 w-5" />
+                      <h2 className="text-xl font-bold">{spuGroup.spuName}</h2>
+                      <Badge variant="outline">{spuGroup.allOkrs.length} OKRs</Badge>
+                      {spuGroup.subUnits.filter(s => s.subUnitId !== null).length > 0 && (
+                        <Badge variant="secondary">{spuGroup.subUnits.filter(s => s.subUnitId !== null).length} Sub-Units</Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-sm text-muted-foreground">{getDateRange()}</span>
-                      <div className="text-3xl font-bold text-primary">{summary.overallProgress}%</div>
+                      <div className="text-3xl font-bold text-primary">{spuGroup.overallProgress}%</div>
                     </div>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-sm" data-testid={`table-employee-${summary.staff.id}`}>
-                      <thead>
-                        <tr className="bg-muted/50">
-                          <th className="text-left p-2 font-semibold border-b w-16">OKR #</th>
-                          <th className="text-left p-2 font-semibold border-b w-24">Activity</th>
-                          <th className="text-left p-2 font-semibold border-b w-40">Strategic / Universal</th>
-                          <th className="text-left p-2 font-semibold border-b w-32">Sub-Unit</th>
-                          <th className="text-left p-2 font-semibold border-b w-32">Collaborating SPU(s)</th>
-                          <th className="text-left p-2 font-semibold border-b w-40">Responsible Parties</th>
-                          <th className="text-left p-2 font-semibold border-b">Objective / Details</th>
-                          <th className="text-right p-2 font-semibold border-b w-20">Progress</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {summary.okrs.map((record) => {
-                          const keyResults = getKeyResults(record.okr.keyResults || "[]");
-                          const latestScore = record.latestUpdate?.averageScore;
-                          
-                          return (
-                            <>
-                              {/* Row 1: Objective (destructive background) */}
-                              <tr key={`${record.okr.id}-objective`} className="border-b" data-testid={`row-okr-${record.okr.id}`}>
-                                <td rowSpan={4} className="p-2 align-top font-semibold border-r bg-muted/50">{record.okr.okrNumber}</td>
-                                <td colSpan={6} className="p-2 font-semibold bg-[#db040473]">
-                                  {record.okr.objectiveStatement}
-                                </td>
-                                <td rowSpan={4} className="p-2 align-top text-right font-bold text-lg border-l">
-                                  {latestScore !== null && latestScore !== undefined ? `${latestScore}%` : "—"}
-                                </td>
-                              </tr>
-                              {/* Row 2: Strategic Alignment */}
-                              <tr key={`${record.okr.id}-strategic`} className="border-b">
-                                <td className="p-2 text-xs text-muted-foreground font-medium">Strategic</td>
-                                <td className="p-2">{parseMultiSelectField(record.okr.universityObjective).map(o => o.split(":")[0]?.trim()).join(", ")}</td>
-                                <td className="p-2">{record.okr.subUnit?.name || "—"}</td>
-                                <td className="p-2">{record.okr.collaborationSpu?.name || "—"}</td>
-                                <td className="p-2">
-                                  {record.responsibilities.filter(r => r.role === 'collaborator').length > 0
-                                    ? record.responsibilities.filter(r => r.role === 'collaborator').map(r => r.staff.name).join(", ")
-                                    : "—"}
-                                </td>
-                                <td className="p-2">{parseMultiSelectField(record.okr.universityKeyResult).map(kr => kr.split(":")[0]?.trim()).join(", ")}</td>
-                              </tr>
-                              {/* Row 3: Owner / SPU */}
-                              <tr key={`${record.okr.id}-owner`} className="border-b bg-muted/20">
-                                <td className="p-2 text-xs text-muted-foreground font-medium">Owner</td>
-                                <td className="p-2">{record.okr.spu?.name || "—"}</td>
-                                <td className="p-2">{record.okr.subUnit?.name || "—"}</td>
-                                <td className="p-2">—</td>
-                                <td className="p-2">
-                                  {record.responsibilities.find(r => r.role === 'owner')?.staff.name || record.okr.staff.name}
-                                </td>
-                                <td className="p-2 text-muted-foreground">{keyResults.length} Key Results</td>
-                              </tr>
-                              {/* Row 4: Aligned / Period */}
-                              <tr key={`${record.okr.id}-aligned`} className="border-b">
-                                <td className="p-2 text-xs text-muted-foreground font-medium">Aligned</td>
-                                <td className="p-2">{record.okr.quarter} {record.okr.year}</td>
-                                <td className="p-2">—</td>
-                                <td className="p-2">—</td>
-                                <td className="p-2">—</td>
-                                <td className="p-2 text-muted-foreground text-xs">
-                                  Last updated: {record.latestUpdate 
-                                    ? new Date(record.latestUpdate.submittedAt).toLocaleDateString()
-                                    : "Never"}
-                                </td>
-                              </tr>
-                            </>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  {spuGroup.subUnits.map((subUnit) => (
+                    <div key={subUnit.subUnitId || "__none__"} className="border-t">
+                      {(spuGroup.subUnits.length > 1 || subUnit.subUnitId !== null) && (
+                        <div className="flex items-center gap-2 px-6 py-2 bg-muted/30 border-b">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-semibold">{subUnit.subUnitName}</span>
+                          <Badge variant="outline" className="text-xs">{subUnit.okrs.length} OKRs</Badge>
+                        </div>
+                      )}
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-sm" data-testid={`table-spu-${spuGroup.spuId}-sub-${subUnit.subUnitId || "none"}`}>
+                          <thead>
+                            <tr className="bg-muted/50">
+                              <th className="text-left p-2 font-semibold border-b w-16">OKR #</th>
+                              <th className="text-left p-2 font-semibold border-b w-24">Activity</th>
+                              <th className="text-left p-2 font-semibold border-b w-40">Strategic / Universal</th>
+                              <th className="text-left p-2 font-semibold border-b w-32">Sub-Unit</th>
+                              <th className="text-left p-2 font-semibold border-b w-32">Collaborating SPU(s)</th>
+                              <th className="text-left p-2 font-semibold border-b w-40">Responsible Parties</th>
+                              <th className="text-left p-2 font-semibold border-b">Objective / Details</th>
+                              <th className="text-right p-2 font-semibold border-b w-20">Progress</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {subUnit.okrs.map((record) => {
+                              const keyResults = getKeyResults(record.okr.keyResults || "[]");
+                              const latestScore = record.latestUpdate?.averageScore;
+                              
+                              return (
+                                <React.Fragment key={record.okr.id}>
+                                  <tr className="border-b" data-testid={`row-okr-${record.okr.id}`}>
+                                    <td rowSpan={4} className="p-2 align-top font-semibold border-r bg-muted/50">{record.okr.okrNumber}</td>
+                                    <td colSpan={6} className="p-2 font-semibold bg-[#db040473]">
+                                      {record.okr.objectiveStatement}
+                                    </td>
+                                    <td rowSpan={4} className="p-2 align-top text-right font-bold text-lg border-l">
+                                      {latestScore !== null && latestScore !== undefined ? `${latestScore}%` : "—"}
+                                    </td>
+                                  </tr>
+                                  <tr className="border-b">
+                                    <td className="p-2 text-xs text-muted-foreground font-medium">Strategic</td>
+                                    <td className="p-2">{parseMultiSelectField(record.okr.universityObjective).map(o => o.split(":")[0]?.trim()).join(", ")}</td>
+                                    <td className="p-2">{record.okr.subUnit?.name || "—"}</td>
+                                    <td className="p-2">{record.okr.collaborationSpu?.name || "—"}</td>
+                                    <td className="p-2">
+                                      {record.responsibilities.filter(r => r.role === 'collaborator').length > 0
+                                        ? record.responsibilities.filter(r => r.role === 'collaborator').map(r => r.staff.name).join(", ")
+                                        : "—"}
+                                    </td>
+                                    <td className="p-2">{parseMultiSelectField(record.okr.universityKeyResult).map(kr => kr.split(":")[0]?.trim()).join(", ")}</td>
+                                  </tr>
+                                  <tr className="border-b bg-muted/20">
+                                    <td className="p-2 text-xs text-muted-foreground font-medium">Owner</td>
+                                    <td className="p-2">{record.okr.spu?.name || "—"}</td>
+                                    <td className="p-2">{record.okr.subUnit?.name || "—"}</td>
+                                    <td className="p-2">—</td>
+                                    <td className="p-2">
+                                      {record.responsibilities.find(r => r.role === 'owner')?.staff.name || record.okr.staff.name}
+                                    </td>
+                                    <td className="p-2 text-muted-foreground">{keyResults.length} Key Results</td>
+                                  </tr>
+                                  <tr className="border-b">
+                                    <td className="p-2 text-xs text-muted-foreground font-medium">Aligned</td>
+                                    <td className="p-2">{record.okr.quarter} {record.okr.year}</td>
+                                    <td className="p-2">—</td>
+                                    <td className="p-2">—</td>
+                                    <td className="p-2">—</td>
+                                    <td className="p-2 text-muted-foreground text-xs">
+                                      Last updated: {record.latestUpdate 
+                                        ? new Date(record.latestUpdate.submittedAt).toLocaleDateString()
+                                        : "Never"}
+                                    </td>
+                                  </tr>
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
                 </AccordionContent>
               </AccordionItem>
             ))}
