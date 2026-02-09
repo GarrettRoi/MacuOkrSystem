@@ -683,24 +683,17 @@ export class DatabaseStorage implements IStorage {
       ? await query.where(and(...conditions))
       : await query;
 
-    // For each OKR, get quarterly updates and responsibilities
-    const progressRecords: EmployeeProgressRecord[] = [];
-    
-    for (const row of okrResults) {
-      const okrId = row.okrs.id;
-      
-      // Get all quarterly updates for this OKR, ordered by date
-      const updates = await db
+    if (okrResults.length === 0) return [];
+
+    const okrIds = okrResults.map(row => row.okrs.id);
+
+    const [allUpdates, allResponsibilities] = await Promise.all([
+      db
         .select()
         .from(quarterlyUpdates)
-        .where(eq(quarterlyUpdates.okrId, okrId))
-        .orderBy(desc(quarterlyUpdates.submittedAt));
-      
-      // Get latest update (first one after descending order)
-      const latestUpdate = updates.length > 0 ? updates[0] : null;
-      
-      // Get responsibilities
-      const responsibilities = await db
+        .where(inArray(quarterlyUpdates.okrId, okrIds))
+        .orderBy(desc(quarterlyUpdates.submittedAt)),
+      db
         .select({
           id: okrResponsibilities.id,
           okrId: okrResponsibilities.okrId,
@@ -714,9 +707,32 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(staff, eq(okrResponsibilities.staffId, staff.id))
         .leftJoin(spus, eq(staff.spuId, spus.id))
         .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
-        .where(eq(okrResponsibilities.okrId, okrId));
-      
-      progressRecords.push({
+        .where(inArray(okrResponsibilities.okrId, okrIds)),
+    ]);
+
+    const updatesMap = new Map<string, typeof allUpdates>();
+    for (const update of allUpdates) {
+      if (!updatesMap.has(update.okrId)) {
+        updatesMap.set(update.okrId, []);
+      }
+      updatesMap.get(update.okrId)!.push(update);
+    }
+
+    const responsibilitiesMap = new Map<string, typeof allResponsibilities>();
+    for (const resp of allResponsibilities) {
+      if (!responsibilitiesMap.has(resp.okrId)) {
+        responsibilitiesMap.set(resp.okrId, []);
+      }
+      responsibilitiesMap.get(resp.okrId)!.push(resp);
+    }
+
+    const progressRecords: EmployeeProgressRecord[] = okrResults.map(row => {
+      const okrId = row.okrs.id;
+      const updates = updatesMap.get(okrId) || [];
+      const latestUpdate = updates.length > 0 ? updates[0] : null;
+      const responsibilities = responsibilitiesMap.get(okrId) || [];
+
+      return {
         okr: {
           ...row.okrs,
           staff: {
@@ -741,9 +757,9 @@ export class DatabaseStorage implements IStorage {
           },
         })),
         quarterlyUpdates: updates,
-      });
-    }
-    
+      };
+    });
+
     return progressRecords;
   }
 
