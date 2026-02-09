@@ -276,7 +276,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
           </CardContent>
         </Card>
       ) : (
-        <Accordion type="multiple" className="space-y-4" defaultValue={filteredOkrs.map((o) => String(o.id))}>
+        <Accordion type="multiple" className="space-y-4" defaultValue={[]}>
           {filteredOkrs.map((okr) => {
             const keyResults = parseKeyResults(okr.keyResults);
             const latestUpdate = getLatestUpdate(okr.id);
