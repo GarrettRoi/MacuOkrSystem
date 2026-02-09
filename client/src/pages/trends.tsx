@@ -50,11 +50,11 @@ export default function TrendsPage() {
         );
 
         const currentAvg = currentYearOkrs.length > 0
-          ? currentYearOkrs.reduce((sum, okr) => sum + Math.min(100, okr.targetValue > 0 ? (okr.currentValue / okr.targetValue) * 100 : 0), 0) / currentYearOkrs.length
+          ? currentYearOkrs.reduce((sum, okr) => sum + Math.min(100, (okr.targetValue || 0) > 0 ? (okr.currentValue / (okr.targetValue || 1)) * 100 : 0), 0) / currentYearOkrs.length
           : 0;
 
         const comparisonAvg = comparisonYearOkrs.length > 0
-          ? comparisonYearOkrs.reduce((sum, okr) => sum + Math.min(100, okr.targetValue > 0 ? (okr.currentValue / okr.targetValue) * 100 : 0), 0) / comparisonYearOkrs.length
+          ? comparisonYearOkrs.reduce((sum, okr) => sum + Math.min(100, (okr.targetValue || 0) > 0 ? (okr.currentValue / (okr.targetValue || 1)) * 100 : 0), 0) / comparisonYearOkrs.length
           : 0;
 
         return {
@@ -69,7 +69,7 @@ export default function TrendsPage() {
   const spuTrends = okrs
     ? Object.values(
         okrs.reduce((acc, okr) => {
-          const spuName = okr.staff.spu.name;
+          const spuName = okr.spu?.name || okr.staff?.spu?.name || "Unknown";
           if (!acc[spuName]) {
             acc[spuName] = {
               spu: spuName,
@@ -80,7 +80,7 @@ export default function TrendsPage() {
             };
           }
 
-          const progressPercent = Math.min(100, okr.targetValue > 0 ? (okr.currentValue / okr.targetValue) * 100 : 0);
+          const progressPercent = Math.min(100, (okr.targetValue || 0) > 0 ? (okr.currentValue / (okr.targetValue || 1)) * 100 : 0);
           
           if (okr.year === parseInt(selectedYear)) {
             acc[spuName].currentYear += progressPercent;
@@ -126,7 +126,7 @@ export default function TrendsPage() {
     ? Math.round(
         okrs
           .filter((okr) => okr.year === parseInt(selectedYear))
-          .reduce((sum, okr) => sum + Math.min(100, okr.targetValue > 0 ? (okr.currentValue / okr.targetValue) * 100 : 0), 0) /
+          .reduce((sum, okr) => sum + Math.min(100, (okr.targetValue || 0) > 0 ? (okr.currentValue / (okr.targetValue || 1)) * 100 : 0), 0) /
           (okrs.filter((okr) => okr.year === parseInt(selectedYear)).length || 1)
       )
     : 0;
