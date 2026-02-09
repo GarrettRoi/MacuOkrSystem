@@ -105,7 +105,6 @@ export default function Home({ staff, isAdmin }: HomeProps) {
           What would you like to do today?
         </p>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {actions.map((action) => {
           const Icon = action.icon;
@@ -129,13 +128,12 @@ export default function Home({ staff, isAdmin }: HomeProps) {
           );
         })}
       </div>
-
       <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="pt-6">
+        <CardContent className="p-6 pt-6 bg-[#c51232] text-[#ffffff]">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="space-y-1">
               <h3 className="font-semibold text-lg">Your Profile</h3>
-              <div className="text-sm text-muted-foreground space-y-1">
+              <div className="text-sm space-y-1 text-[#ffffff]">
                 <p><span className="font-medium">Name:</span> {staff.name}</p>
                 <p><span className="font-medium">Email:</span> {staff.email}</p>
                 <p><span className="font-medium">Primary SPU:</span> {staff.spu.name}</p>
