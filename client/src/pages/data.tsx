@@ -14,10 +14,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, Year } from "@shared/schema";
-import { getQuarterLabel, parseMultiSelectField } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog } from "@shared/schema";
+import { getQuarterLabel, parseMultiSelectField, QUARTERS } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
 
 interface AggregatedOkr extends OkrWithDetails {
@@ -27,6 +27,16 @@ interface AggregatedOkr extends OkrWithDetails {
 
 const editOkrSchema = z.object({
   objectiveStatement: z.string().min(20, "Objective must be at least 20 characters"),
+  okrNumber: z.string().min(1, "OKR number is required"),
+  quarter: z.string().min(1, "Quarter is required"),
+  year: z.number().min(2020).max(2040),
+  staffId: z.string().nullable(),
+  spuId: z.string().min(1, "SPU is required"),
+  subUnitId: z.string().nullable(),
+  universityObjective: z.string(),
+  universityKeyResult: z.string(),
+  keyResults: z.string(),
+  collaborationSpuId: z.string().nullable(),
 });
 
 const editQuarterlyUpdateSchema = z.object({
@@ -71,6 +81,15 @@ export default function Data() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<string>("");
 
+  // Edit reason dialog
+  const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
+  const [editReason, setEditReason] = useState("");
+  const [pendingOkrEdit, setPendingOkrEdit] = useState<{ id: string; updates: any } | null>(null);
+  const [pendingUpdateEdit, setPendingUpdateEdit] = useState<{ id: string; updates: any } | null>(null);
+
+  // Edit OKR key results state
+  const [editKeyResults, setEditKeyResults] = useState<Array<{ description: string; percentage?: number }>>([]);
+
   const { data: okrsWithUpdates, isLoading } = useQuery<AggregatedOkr[]>({
     queryKey: ["/api/okrs-with-updates"],
   });
@@ -86,6 +105,20 @@ export default function Data() {
   const { data: years } = useQuery<Year[]>({
     queryKey: ["/api/years"],
   });
+
+  const { data: subUnits } = useQuery<SubUnit[]>({
+    queryKey: ["/api/sub-units"],
+  });
+
+  const { data: universityObjectives } = useQuery<UniversityObjectiveWithKeyResults[]>({
+    queryKey: ["/api/university-objectives"],
+  });
+
+  const { data: editLogsData } = useQuery<EditLog[]>({
+    queryKey: ["/api/edit-logs"],
+  });
+
+  const [showEditLogs, setShowEditLogs] = useState(false);
 
   // Filter the data
   const filteredOkrs = useMemo(() => {
@@ -149,8 +182,11 @@ export default function Data() {
   });
 
   const updateOkrMutation = useMutation({
-    mutationFn: async (data: { id: string; updates: EditOkrFormValues }) => {
-      return await apiRequest("PUT", `/api/okrs/${data.id}`, data.updates);
+    mutationFn: async (data: { id: string; updates: any; reason: string }) => {
+      return await apiRequest("PUT", `/api/okrs/${data.id}`, {
+        ...data.updates,
+        reason: data.reason,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
@@ -171,8 +207,11 @@ export default function Data() {
   });
 
   const updateQuarterlyUpdateMutation = useMutation({
-    mutationFn: async (data: { id: string; updates: { keyResultScores?: string; additionalKeyResults?: string; notes?: string } }) => {
-      return await apiRequest("PUT", `/api/quarterly-updates/${data.id}`, data.updates);
+    mutationFn: async (data: { id: string; updates: any; reason: string }) => {
+      return await apiRequest("PUT", `/api/quarterly-updates/${data.id}`, {
+        ...data.updates,
+        reason: data.reason,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
@@ -329,10 +368,26 @@ export default function Data() {
     }
   };
 
+  const parseKeyResultsJson = (json: string): Array<{ description: string; percentage?: number }> => {
+    try { return JSON.parse(json); } catch { return []; }
+  };
+
   const handleEditOkr = (okr: AggregatedOkr) => {
     setEditingOkr(okr);
+    const krs = parseKeyResultsJson(okr.keyResults);
+    setEditKeyResults(krs);
     okrForm.reset({
       objectiveStatement: okr.objectiveStatement,
+      okrNumber: okr.okrNumber,
+      quarter: okr.quarter,
+      year: okr.year,
+      staffId: okr.staffId,
+      spuId: okr.spuId,
+      subUnitId: okr.subUnitId || null,
+      universityObjective: okr.universityObjective,
+      universityKeyResult: okr.universityKeyResult,
+      keyResults: okr.keyResults,
+      collaborationSpuId: okr.collaborationSpuId || null,
     });
   };
 
@@ -346,24 +401,56 @@ export default function Data() {
   };
 
   const onSubmitOkr = (data: EditOkrFormValues) => {
-    if (editingOkr) {
-      updateOkrMutation.mutate({ id: editingOkr.id, updates: data });
-    }
+    if (!editingOkr) return;
+    const updates = {
+      ...data,
+      keyResults: JSON.stringify(editKeyResults),
+    };
+    setPendingOkrEdit({ id: editingOkr.id, updates });
+    setEditReason("");
+    setReasonDialogOpen(true);
   };
 
   const onSubmitUpdate = (data: EditQuarterlyUpdateFormValues) => {
     if (!editingUpdate) return;
-    
     const updates = {
       keyResultScores: JSON.stringify(data.keyResultScores),
       additionalKeyResults: data.additionalKeyResults,
       notes: data.notes,
     };
-    
-    updateQuarterlyUpdateMutation.mutate({
-      id: editingUpdate.id,
-      updates,
-    });
+    setPendingUpdateEdit({ id: editingUpdate.id, updates });
+    setEditReason("");
+    setReasonDialogOpen(true);
+  };
+
+  const confirmReasonAndSave = () => {
+    if (!editReason.trim()) {
+      toast({ title: "Reason Required", description: "Please provide a reason for this edit.", variant: "destructive" });
+      return;
+    }
+    if (pendingOkrEdit) {
+      updateOkrMutation.mutate({ id: pendingOkrEdit.id, updates: pendingOkrEdit.updates, reason: editReason });
+      setPendingOkrEdit(null);
+    } else if (pendingUpdateEdit) {
+      updateQuarterlyUpdateMutation.mutate({ id: pendingUpdateEdit.id, updates: pendingUpdateEdit.updates, reason: editReason });
+      setPendingUpdateEdit(null);
+    }
+    setReasonDialogOpen(false);
+    setEditReason("");
+  };
+
+  const updateKeyResult = (index: number, field: string, value: string | number) => {
+    const updated = [...editKeyResults];
+    (updated[index] as any)[field] = value;
+    setEditKeyResults(updated);
+  };
+
+  const addKeyResult = () => {
+    setEditKeyResults([...editKeyResults, { description: "", percentage: undefined }]);
+  };
+
+  const removeKeyResult = (index: number) => {
+    setEditKeyResults(editKeyResults.filter((_, i) => i !== index));
   };
 
   if (isLoading) {
@@ -702,6 +789,88 @@ export default function Data() {
         </CardContent>
       </Card>
 
+      {/* Edit Audit Log */}
+      <Card className="mt-6">
+        <CardHeader className="cursor-pointer" onClick={() => setShowEditLogs(!showEditLogs)}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Edit className="h-6 w-6 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-lg">Edit Audit Log</CardTitle>
+                <CardDescription>
+                  Review all changes made to OKRs and quarterly updates ({editLogsData?.length || 0} entries)
+                </CardDescription>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" data-testid="button-toggle-edit-logs">
+              {showEditLogs ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </Button>
+          </div>
+        </CardHeader>
+        {showEditLogs && (
+          <CardContent>
+            {!editLogsData || editLogsData.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No edit logs found</p>
+            ) : (
+              <div className="space-y-3">
+                {editLogsData.map((log) => {
+                  let changedFields: string[] = [];
+                  let previousValues: Record<string, any> = {};
+                  let newValues: Record<string, any> = {};
+                  try { changedFields = JSON.parse(log.changedFields); } catch {}
+                  try { previousValues = JSON.parse(log.previousValues); } catch {}
+                  try { newValues = JSON.parse(log.newValues); } catch {}
+
+                  return (
+                    <Card key={log.id} className="bg-muted/30" data-testid={`card-edit-log-${log.id}`}>
+                      <CardContent className="pt-4 space-y-2">
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">
+                              Edited by: {log.editedByName || "Unknown"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(log.editedAt).toLocaleString()}
+                            </p>
+                          </div>
+                          {log.okrId && (
+                            <Badge variant="outline" className="text-xs">
+                              OKR: {log.okrId.slice(0, 8)}...
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="bg-background border rounded-md p-3">
+                          <p className="text-sm font-medium mb-1">Reason:</p>
+                          <p className="text-sm text-muted-foreground">{log.reason}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Changes ({changedFields.length} field{changedFields.length !== 1 ? "s" : ""}):</p>
+                          {changedFields.map((field) => (
+                            <div key={field} className="bg-background border rounded-md p-3 text-sm space-y-1">
+                              <p className="font-medium text-xs text-muted-foreground uppercase">{field}</p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <div>
+                                  <span className="text-xs text-muted-foreground">Before:</span>
+                                  <p className="text-sm break-all">{typeof previousValues[field] === 'string' ? previousValues[field]?.slice(0, 200) : JSON.stringify(previousValues[field])?.slice(0, 200)}</p>
+                                </div>
+                                <div>
+                                  <span className="text-xs text-muted-foreground">After:</span>
+                                  <p className="text-sm break-all">{typeof newValues[field] === 'string' ? newValues[field]?.slice(0, 200) : JSON.stringify(newValues[field])?.slice(0, 200)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
@@ -759,15 +928,167 @@ export default function Data() {
 
       {/* Edit OKR Dialog */}
       <Dialog open={!!editingOkr} onOpenChange={(open) => !open && setEditingOkr(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit OKR</DialogTitle>
             <DialogDescription>
-              Update the details for {editingOkr?.okrNumber} - {editingOkr?.quarter} {editingOkr?.year}
+              Update all details for {editingOkr?.okrNumber} - {editingOkr?.quarter} {editingOkr?.year}
             </DialogDescription>
           </DialogHeader>
           <Form {...okrForm}>
             <form onSubmit={okrForm.handleSubmit(onSubmitOkr)} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField
+                  control={okrForm.control}
+                  name="okrNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>OKR Number</FormLabel>
+                      <FormControl>
+                        <Input {...field} data-testid="input-edit-okr-number" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={okrForm.control}
+                  name="quarter"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Quarter</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-edit-quarter">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {QUARTERS.map((q) => (
+                            <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={okrForm.control}
+                  name="year"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Year</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          {...field}
+                          onChange={(e) => field.onChange(parseInt(e.target.value))}
+                          data-testid="input-edit-year"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={okrForm.control}
+                  name="staffId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Submitted By</FormLabel>
+                      <Select value={field.value || ""} onValueChange={(val) => field.onChange(val || null)}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-edit-staff">
+                            <SelectValue placeholder="Select staff" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {allStaff?.slice().sort((a, b) => compareNames(a.name, b.name)).map((s) => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={okrForm.control}
+                  name="spuId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>SPU</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-edit-spu">
+                            <SelectValue placeholder="Select SPU" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {spus?.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={okrForm.control}
+                  name="subUnitId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sub-Unit (Optional)</FormLabel>
+                      <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? null : val)}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-edit-subunit">
+                            <SelectValue placeholder="None" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {subUnits?.filter((su) => su.spuId === okrForm.watch("spuId")).map((su) => (
+                            <SelectItem key={su.id} value={su.id}>{su.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={okrForm.control}
+                  name="collaborationSpuId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Collaboration SPU (Optional)</FormLabel>
+                      <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? null : val)}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-edit-collab-spu">
+                            <SelectValue placeholder="None" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {spus?.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <FormField
                 control={okrForm.control}
                 name="objectiveStatement"
@@ -781,22 +1102,110 @@ export default function Data() {
                   </FormItem>
                 )}
               />
-              <div className="space-y-2">
-                <p className="text-sm font-medium">University Objective(s) (Read-only)</p>
-                <div className="space-y-1">
-                  {editingOkr && parseMultiSelectField(editingOkr.universityObjective).map((obj, i) => (
-                    <p key={i} className="text-sm text-muted-foreground">{obj}</p>
-                  ))}
+
+              <FormField
+                control={okrForm.control}
+                name="universityObjective"
+                render={({ field }) => {
+                  const selectedObjectives = parseMultiSelectField(field.value);
+                  const allObjectiveLabels = universityObjectives?.flatMap(obj => [`${obj.label}: ${obj.description}`]) || [];
+                  return (
+                    <FormItem>
+                      <FormLabel>University Strategic Objective(s)</FormLabel>
+                      <div className="space-y-2 border rounded-md p-3 max-h-40 overflow-y-auto">
+                        {allObjectiveLabels.map((label) => (
+                          <div key={label} className="flex items-start gap-2">
+                            <Checkbox
+                              checked={selectedObjectives.includes(label)}
+                              onCheckedChange={(checked) => {
+                                const updated = checked
+                                  ? [...selectedObjectives, label]
+                                  : selectedObjectives.filter((o) => o !== label);
+                                field.onChange(JSON.stringify(updated));
+                              }}
+                              data-testid={`checkbox-obj-${label.slice(0, 20)}`}
+                            />
+                            <span className="text-sm">{label}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+
+              <FormField
+                control={okrForm.control}
+                name="universityKeyResult"
+                render={({ field }) => {
+                  const selectedKRs = parseMultiSelectField(field.value);
+                  const allKRLabels = universityObjectives?.flatMap(obj =>
+                    obj.keyResults.map(kr => `${kr.label}: ${kr.description}`)
+                  ) || [];
+                  return (
+                    <FormItem>
+                      <FormLabel>University Key Result(s)</FormLabel>
+                      <div className="space-y-2 border rounded-md p-3 max-h-40 overflow-y-auto">
+                        {allKRLabels.map((label) => (
+                          <div key={label} className="flex items-start gap-2">
+                            <Checkbox
+                              checked={selectedKRs.includes(label)}
+                              onCheckedChange={(checked) => {
+                                const updated = checked
+                                  ? [...selectedKRs, label]
+                                  : selectedKRs.filter((k) => k !== label);
+                                field.onChange(JSON.stringify(updated));
+                              }}
+                              data-testid={`checkbox-kr-${label.slice(0, 20)}`}
+                            />
+                            <span className="text-sm">{label}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <FormLabel>Key Results</FormLabel>
+                  <Button type="button" variant="outline" size="sm" onClick={addKeyResult} data-testid="button-add-kr">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
                 </div>
+                {editKeyResults.map((kr, index) => (
+                  <div key={index} className="flex items-start gap-2 p-3 border rounded-md">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">KR {index + 1}</Badge>
+                        <Input
+                          type="number"
+                          placeholder="Weight %"
+                          value={kr.percentage ?? ""}
+                          onChange={(e) => updateKeyResult(index, "percentage", e.target.value ? parseInt(e.target.value) : undefined as any)}
+                          className="w-24"
+                          data-testid={`input-edit-kr-weight-${index}`}
+                        />
+                      </div>
+                      <Textarea
+                        value={kr.description}
+                        onChange={(e) => updateKeyResult(index, "description", e.target.value)}
+                        rows={2}
+                        placeholder="Key result description..."
+                        data-testid={`input-edit-kr-desc-${index}`}
+                      />
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => removeKeyResult(index)} data-testid={`button-remove-kr-${index}`}>
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-medium">University Key Result(s) (Read-only)</p>
-                <div className="space-y-1">
-                  {editingOkr && parseMultiSelectField(editingOkr.universityKeyResult).map((kr, i) => (
-                    <p key={i} className="text-sm text-muted-foreground">{kr}</p>
-                  ))}
-                </div>
-              </div>
+
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditingOkr(null)} data-testid="button-cancel-okr">
                   Cancel
@@ -821,7 +1230,6 @@ export default function Data() {
           </DialogHeader>
           <Form {...updateForm}>
             <form onSubmit={updateForm.handleSubmit(onSubmitUpdate)} className="space-y-4">
-              {/* Individual Key Result Scores */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <FormLabel>Key Result Scores (0-100)</FormLabel>
@@ -899,6 +1307,47 @@ export default function Data() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Reason Dialog */}
+      <Dialog open={reasonDialogOpen} onOpenChange={setReasonDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reason for Edit</DialogTitle>
+            <DialogDescription>
+              Please explain why this data is being edited. This will be logged for admin review.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <Textarea
+              value={editReason}
+              onChange={(e) => setEditReason(e.target.value)}
+              placeholder="Enter the reason for this edit..."
+              rows={3}
+              data-testid="input-edit-reason"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReasonDialogOpen(false);
+                setPendingOkrEdit(null);
+                setPendingUpdateEdit(null);
+              }}
+              data-testid="button-cancel-reason"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmReasonAndSave}
+              disabled={!editReason.trim() || updateOkrMutation.isPending || updateQuarterlyUpdateMutation.isPending}
+              data-testid="button-confirm-reason"
+            >
+              {updateOkrMutation.isPending || updateQuarterlyUpdateMutation.isPending ? "Saving..." : "Confirm & Save"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

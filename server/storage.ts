@@ -22,6 +22,8 @@ import {
   type UniversityObjective,
   type UniversityKeyResult,
   type UniversityObjectiveWithKeyResults,
+  type EditLog,
+  type InsertEditLog,
   type StaffWithDetails,
   type StaffSpuAssignmentWithDetails,
   type OkrWithDetails,
@@ -39,6 +41,7 @@ import {
   appSettings,
   universityObjectives,
   universityKeyResults,
+  editLogs,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, inArray, ne } from "drizzle-orm";
@@ -149,6 +152,9 @@ export interface IStorage {
     spuId?: string;
     status?: string;
   }): Promise<EmployeeProgressSummary[]>;
+
+  createEditLog(log: InsertEditLog): Promise<EditLog>;
+  getAllEditLogs(): Promise<EditLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1106,6 +1112,15 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUniversityKeyResult(id: string): Promise<void> {
     await db.delete(universityKeyResults).where(eq(universityKeyResults.id, id));
+  }
+
+  async createEditLog(log: InsertEditLog): Promise<EditLog> {
+    const [result] = await db.insert(editLogs).values(log).returning();
+    return result;
+  }
+
+  async getAllEditLogs(): Promise<EditLog[]> {
+    return await db.select().from(editLogs).orderBy(desc(editLogs.editedAt));
   }
 }
 

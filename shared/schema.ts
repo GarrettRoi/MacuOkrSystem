@@ -111,6 +111,18 @@ export const okrResponsibilities = pgTable("okr_responsibilities", {
   role: text("role").notNull(),
 });
 
+export const editLogs = pgTable("edit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  okrId: varchar("okr_id").references(() => okrs.id, { onDelete: "set null" }),
+  editedBy: varchar("edited_by").references(() => staff.id, { onDelete: "set null" }),
+  editedByName: text("edited_by_name"),
+  reason: text("reason").notNull(),
+  changedFields: text("changed_fields").notNull(),
+  previousValues: text("previous_values").notNull(),
+  newValues: text("new_values").notNull(),
+  editedAt: timestamp("edited_at").notNull().defaultNow(),
+});
+
 export const UNIVERSITY_OBJECTIVES = [
   "Objective 1: We will humbly CREATE transformative opportunities for the holistic growth of students, faculty, staff, alums, and our community from a Christ-centered, biblical worldview and Wesleyan perspective.",
   "Objective 2: We will joyfully COLLABORATE to align our organizational structures, facilities, and resources effectively and efficiently to achieve sustainability and future expansion.",
@@ -175,7 +187,17 @@ export const insertOkrResponsibilitySchema = createInsertSchema(okrResponsibilit
 export const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true, okrNumber: true });
 
 export const updateOkrSchema = z.object({
-  objectiveStatement: z.string().min(20, "Objective must be at least 20 characters"),
+  objectiveStatement: z.string().min(20, "Objective must be at least 20 characters").optional(),
+  okrNumber: z.string().optional(),
+  quarter: z.string().optional(),
+  year: z.number().optional(),
+  staffId: z.string().nullable().optional(),
+  spuId: z.string().optional(),
+  subUnitId: z.string().nullable().optional(),
+  universityObjective: z.string().optional(),
+  universityKeyResult: z.string().optional(),
+  keyResults: z.string().optional(),
+  collaborationSpuId: z.string().nullable().optional(),
 });
 
 export const insertOkrSchema = baseInsertOkrSchema.refine(
@@ -264,6 +286,10 @@ export type QuarterlyUpdate = typeof quarterlyUpdates.$inferSelect;
 export type OkrResponsibility = typeof okrResponsibilities.$inferSelect;
 export type StaffSpuAssignment = typeof staffSpuAssignments.$inferSelect;
 export type LeaderBasicAssignment = typeof leaderBasicAssignments.$inferSelect;
+export type EditLog = typeof editLogs.$inferSelect;
+
+export const insertEditLogSchema = createInsertSchema(editLogs).omit({ id: true, editedAt: true });
+export type InsertEditLog = z.infer<typeof insertEditLogSchema>;
 
 export type UserRole = typeof USER_ROLES[number];
 

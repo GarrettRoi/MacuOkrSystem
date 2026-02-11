@@ -878,37 +878,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/okrs/:id", requireAdmin, async (req, res) => {
     try {
-      // Check if OKR exists
       const existingOkr = await storage.getOkr(req.params.id);
       if (!existingOkr) {
         return res.status(404).json({ error: "OKR not found" });
       }
       
-      // Validate using dedicated update schema (already allows partial updates)
-      const parsed = updateOkrSchema.safeParse(req.body);
+      const { reason, editedBy, editedByName, ...updateFields } = req.body;
+      
+      const parsed = updateOkrSchema.safeParse(updateFields);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
       
-      // Filter out undefined values to prevent overwriting existing data
       const updates: Record<string, any> = {};
+      const changedFields: string[] = [];
+      const previousValues: Record<string, any> = {};
+      const newValues: Record<string, any> = {};
+      
       for (const [key, value] of Object.entries(parsed.data)) {
         if (value !== undefined) {
+          const existingVal = (existingOkr as any)[key];
+          if (JSON.stringify(existingVal) !== JSON.stringify(value)) {
+            changedFields.push(key);
+            previousValues[key] = existingVal;
+            newValues[key] = value;
+          }
           updates[key] = value;
         }
       }
       
-      // Reject empty updates
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });
       }
       
-      console.log("PUT /api/okrs/:id - Updates:", updates);
       const updatedOkr = await storage.updateOkr(req.params.id, updates);
+      
+      if (changedFields.length > 0 && reason) {
+        await storage.createEditLog({
+          okrId: req.params.id,
+          editedBy: editedBy || null,
+          editedByName: editedByName || null,
+          reason,
+          changedFields: JSON.stringify(changedFields),
+          previousValues: JSON.stringify(previousValues),
+          newValues: JSON.stringify(newValues),
+        });
+      }
+      
       res.json(updatedOkr);
     } catch (error) {
       console.error("PUT /api/okrs/:id - Error:", error);
       res.status(500).json({ error: "Failed to update OKR", details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get("/api/edit-logs", requireAdmin, async (_req, res) => {
+    try {
+      const logs = await storage.getAllEditLogs();
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch edit logs" });
     }
   });
 
@@ -998,54 +1027,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/quarterly-updates/:id", requireAdmin, async (req, res) => {
     try {
-      // Check if update exists
       const existingUpdate = await storage.getQuarterlyUpdate(req.params.id);
       if (!existingUpdate) {
         return res.status(404).json({ error: "Quarterly update not found" });
       }
       
-      // Validate using dedicated update schema
-      const parsed = updateQuarterlyUpdateSchema.safeParse(req.body);
+      const { reason, editedBy, editedByName, ...updateFields } = req.body;
+      
+      const parsed = updateQuarterlyUpdateSchema.safeParse(updateFields);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
       
-      // Filter out undefined values to prevent overwriting existing data
       const updates: Record<string, any> = {};
+      const changedFields: string[] = [];
+      const previousValues: Record<string, any> = {};
+      const newValues: Record<string, any> = {};
+      
       for (const [key, value] of Object.entries(parsed.data)) {
         if (value !== undefined) {
+          const existingVal = (existingUpdate as any)[key];
+          if (JSON.stringify(existingVal) !== JSON.stringify(value)) {
+            changedFields.push(key);
+            previousValues[key] = existingVal;
+            newValues[key] = value;
+          }
           updates[key] = value;
         }
       }
       
-      // Auto-calculate averageScore from keyResultScores if provided
       if (updates.keyResultScores && typeof updates.keyResultScores === 'string') {
         try {
           const scores = JSON.parse(updates.keyResultScores);
           if (Array.isArray(scores) && scores.length > 0) {
-            // Validate each score object has required fields
             const validScores = scores.every(
-              (kr) => typeof kr.score === 'number' && kr.score >= 0 && kr.score <= 100
+              (kr: any) => typeof kr.score === 'number' && kr.score >= 0 && kr.score <= 100
             );
             if (!validScores) {
               return res.status(400).json({ error: "Invalid key result scores: each score must be 0-100" });
             }
-            // Calculate average
             const total = scores.reduce((sum: number, kr: any) => sum + kr.score, 0);
             updates.averageScore = Math.round(total / scores.length);
           }
         } catch (e) {
-          console.error("Failed to parse or calculate average score:", e);
           return res.status(400).json({ error: "Invalid keyResultScores format" });
         }
       }
       
-      // Reject empty updates
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });
       }
       
       const updatedUpdate = await storage.updateQuarterlyUpdate(req.params.id, updates);
+      
+      if (changedFields.length > 0 && reason) {
+        await storage.createEditLog({
+          okrId: existingUpdate.okrId,
+          editedBy: editedBy || null,
+          editedByName: editedByName || null,
+          reason,
+          changedFields: JSON.stringify(changedFields),
+          previousValues: JSON.stringify(previousValues),
+          newValues: JSON.stringify(newValues),
+        });
+      }
+      
       res.json(updatedUpdate);
     } catch (error) {
       res.status(500).json({ error: "Failed to update quarterly update" });
