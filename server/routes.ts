@@ -1622,6 +1622,339 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Score Import Preview endpoint - parses score CSV and matches to existing OKRs
+  app.post("/api/import/scores/preview", requireAdmin, async (req, res) => {
+    try {
+      const { csvData } = req.body;
+      if (!csvData || typeof csvData !== 'string') {
+        return res.status(400).json({ error: "CSV data is required" });
+      }
+
+      const rows = parseCSV(csvData);
+      if (rows.length < 2) {
+        return res.status(400).json({ error: "CSV must have at least a header row and one data row" });
+      }
+
+      const headers = rows[0];
+      const dataRows = rows.slice(1);
+
+      const getColIndex = (patterns: string[]): number => {
+        for (const pattern of patterns) {
+          const idx = headers.findIndex(h => h.toLowerCase().includes(pattern.toLowerCase()));
+          if (idx !== -1) return idx;
+        }
+        return -1;
+      };
+
+      const colTimestamp = getColIndex(['Timestamp']);
+      const colName = getColIndex(['Your Name', 'Name']);
+      const colQuarterYear = getColIndex(['year and quarter', 'quarter you will score']);
+      const colSpu = getColIndex(['parent SPU', 'SPU']);
+      const colSubUnit = getColIndex(['sub-unit', 'sub unit', 'division']);
+      const colCollabSpu = getColIndex(['collaborated', 'collaboration']);
+      const colKeyResultLetters = getColIndex(['Key Result letters']);
+      const colOkrNumber = getColIndex(['numbered OKR', 'OKR are you scoring']);
+      const colKR1 = getColIndex(['Key Result 1']);
+      const colKR2 = getColIndex(['Key Result 2']);
+      const colKR3 = getColIndex(['Key Result 3']);
+      const colKR4 = getColIndex(['Key Result 4']);
+      const colOverflowKR = getColIndex(['more than 4 Key Results']);
+      const colAverage = getColIndex(['Average score']);
+      const colNotes = getColIndex(['summarize', 'outcomes']);
+
+      const missingColumns: string[] = [];
+      if (colName === -1) missingColumns.push('Your Name');
+      if (colQuarterYear === -1) missingColumns.push('Quarter/Year');
+      if (colSpu === -1) missingColumns.push('Parent SPU');
+      if (colOkrNumber === -1) missingColumns.push('OKR Number');
+
+      if (missingColumns.length > 0) {
+        return res.status(400).json({
+          error: "Missing required columns",
+          missingColumns,
+          detectedHeaders: headers,
+          message: `CSV is missing required columns: ${missingColumns.join(', ')}.`
+        });
+      }
+
+      const allOkrs = await storage.getAllOkrs();
+      const allSpus = await storage.getAllSpus();
+      const allSubUnits = await storage.getAllSubUnits();
+
+      const spuNameMap = new Map<string, string>();
+      for (const spu of allSpus) {
+        spuNameMap.set(spu.name.toLowerCase().trim(), spu.id);
+      }
+
+      const subUnitMap = new Map<string, { id: string; spuId: string }>();
+      for (const su of allSubUnits) {
+        subUnitMap.set(`${su.spuId}:${su.name.toLowerCase().trim()}`, { id: su.id, spuId: su.spuId });
+      }
+
+      const fuzzyMatchSpu = (csvName: string): string | null => {
+        const lower = csvName.toLowerCase().trim();
+        if (spuNameMap.has(lower)) return spuNameMap.get(lower)!;
+        const spuEntries = Array.from(spuNameMap.entries());
+        for (const [name, id] of spuEntries) {
+          if (name.includes(lower) || lower.includes(name)) return id;
+        }
+        const csvWords = lower.split(/[\s,]+/).filter(w => w.length > 2);
+        for (const [name, id] of spuEntries) {
+          const matchCount = csvWords.filter(w => name.includes(w)).length;
+          if (matchCount >= Math.max(1, csvWords.length * 0.5)) return id;
+        }
+        return null;
+      };
+
+      const fuzzyMatchSubUnit = (csvName: string, spuId: string): string | null => {
+        const lower = csvName.toLowerCase().trim();
+        const key = `${spuId}:${lower}`;
+        if (subUnitMap.has(key)) return subUnitMap.get(key)!.id;
+        const subEntries = Array.from(subUnitMap.entries());
+        for (const [mapKey, val] of subEntries) {
+          if (!mapKey.startsWith(`${spuId}:`)) continue;
+          const name = mapKey.split(':')[1];
+          if (name.includes(lower) || lower.includes(name)) return val.id;
+        }
+        return null;
+      };
+
+      const parseOverflowKR = (text: string): Array<{ krNumber: number; score: number }> => {
+        if (!text || !text.trim()) return [];
+        const results: Array<{ krNumber: number; score: number }> = [];
+        const patterns = text.match(/KR\s*(\d+)\s*[:\-=]\s*(\d+)/gi);
+        if (patterns) {
+          for (const match of patterns) {
+            const parts = match.match(/KR\s*(\d+)\s*[:\-=]\s*(\d+)/i);
+            if (parts) {
+              results.push({ krNumber: parseInt(parts[1]), score: Math.min(100, Math.max(0, parseInt(parts[2]))) });
+            }
+          }
+        }
+        return results;
+      };
+
+      const parseAverageScore = (text: string): number | null => {
+        if (!text || !text.trim()) return null;
+        const cleaned = text.replace('%', '').trim();
+        const num = parseFloat(cleaned);
+        return isNaN(num) ? null : Math.round(num);
+      };
+
+      const previewRows: any[] = [];
+
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const scorerName = (row[colName] || '').trim();
+        const quarterYearText = (row[colQuarterYear] || '').trim();
+        const okrNumberText = (row[colOkrNumber] || '').trim();
+        const spuText = (row[colSpu] || '').trim();
+        const subUnitText = colSubUnit !== -1 ? (row[colSubUnit] || '').trim() : '';
+        const timestampText = colTimestamp !== -1 ? (row[colTimestamp] || '').trim() : '';
+        const keyResultLetters = colKeyResultLetters !== -1 ? (row[colKeyResultLetters] || '').trim() : '';
+        const kr1Score = colKR1 !== -1 ? (row[colKR1] || '').trim() : '';
+        const kr2Score = colKR2 !== -1 ? (row[colKR2] || '').trim() : '';
+        const kr3Score = colKR3 !== -1 ? (row[colKR3] || '').trim() : '';
+        const kr4Score = colKR4 !== -1 ? (row[colKR4] || '').trim() : '';
+        const overflowKRText = colOverflowKR !== -1 ? (row[colOverflowKR] || '').trim() : '';
+        const averageText = colAverage !== -1 ? (row[colAverage] || '').trim() : '';
+        const notesText = colNotes !== -1 ? (row[colNotes] || '').trim() : '';
+
+        if (!scorerName && !spuText && !okrNumberText) continue;
+
+        const { quarter, year } = parseQuarterYear(quarterYearText);
+        const okrNumber = mapOkrNumber(okrNumberText);
+
+        const spuNames = spuText.split(',').map((s: string) => s.trim()).filter(Boolean);
+        const primarySpuName = spuNames[0] || spuText;
+        const matchedSpuId = fuzzyMatchSpu(primarySpuName);
+        const cleanSubUnit = subUnitText.toLowerCase() === 'n/a' ? '' : subUnitText;
+        const matchedSubUnitId = cleanSubUnit && matchedSpuId ? fuzzyMatchSubUnit(cleanSubUnit, matchedSpuId) : null;
+
+        const krScores: Array<{ krNumber: number; score: number }> = [];
+        if (kr1Score && !isNaN(parseInt(kr1Score))) krScores.push({ krNumber: 1, score: Math.min(100, Math.max(0, parseInt(kr1Score))) });
+        if (kr2Score && !isNaN(parseInt(kr2Score))) krScores.push({ krNumber: 2, score: Math.min(100, Math.max(0, parseInt(kr2Score))) });
+        if (kr3Score && !isNaN(parseInt(kr3Score))) krScores.push({ krNumber: 3, score: Math.min(100, Math.max(0, parseInt(kr3Score))) });
+        if (kr4Score && !isNaN(parseInt(kr4Score))) krScores.push({ krNumber: 4, score: Math.min(100, Math.max(0, parseInt(kr4Score))) });
+        const overflowScores = parseOverflowKR(overflowKRText);
+        krScores.push(...overflowScores);
+
+        const averageScore = parseAverageScore(averageText);
+        const computedAverage = krScores.length > 0
+          ? Math.round(krScores.reduce((sum, kr) => sum + kr.score, 0) / krScores.length)
+          : averageScore;
+
+        let matchedOkrId: string | null = null;
+        let matchedOkrInfo: string = '';
+        const rowErrors: string[] = [];
+        const rowWarnings: string[] = [];
+
+        if (!matchedSpuId) {
+          rowErrors.push(`SPU not found: "${primarySpuName}"`);
+        } else {
+          const candidates = allOkrs.filter(o =>
+            o.spuId === matchedSpuId &&
+            o.quarter === quarter &&
+            o.year === year &&
+            o.okrNumber === okrNumber
+          );
+
+          if (matchedSubUnitId) {
+            const subMatches = candidates.filter(o => o.subUnitId === matchedSubUnitId);
+            if (subMatches.length === 1) {
+              matchedOkrId = subMatches[0].id;
+              matchedOkrInfo = `Matched by SPU + Sub-unit + Quarter + OKR#`;
+            } else if (subMatches.length > 1) {
+              matchedOkrId = subMatches[0].id;
+              matchedOkrInfo = `Multiple matches (${subMatches.length}), using first`;
+              rowWarnings.push(`Multiple OKR matches found`);
+            }
+          }
+
+          if (!matchedOkrId) {
+            if (candidates.length === 1) {
+              matchedOkrId = candidates[0].id;
+              matchedOkrInfo = `Matched by SPU + Quarter + OKR#`;
+            } else if (candidates.length > 1) {
+              matchedOkrId = candidates[0].id;
+              matchedOkrInfo = `Multiple matches (${candidates.length}), using first`;
+              rowWarnings.push(`Multiple OKR matches found`);
+            } else {
+              rowErrors.push(`No matching OKR found for ${okrNumber} in ${quarter} ${year}`);
+            }
+          }
+        }
+
+        if (!scorerName) rowErrors.push('Missing scorer name');
+        if (krScores.length === 0 && averageScore === null) rowErrors.push('No scores found');
+
+        previewRows.push({
+          rowIndex: i + 2,
+          scorerName,
+          timestamp: timestampText,
+          quarter,
+          year,
+          okrNumber,
+          spuName: spuText,
+          subUnitName: cleanSubUnit,
+          keyResultLetters,
+          krScores,
+          overflowKRText,
+          averageScore: computedAverage ?? averageScore,
+          notes: notesText,
+          matchedOkrId,
+          matchedOkrInfo,
+          errors: rowErrors,
+          warnings: rowWarnings,
+          include: rowErrors.length === 0 && matchedOkrId !== null,
+        });
+      }
+
+      res.json({
+        success: true,
+        totalRows: dataRows.length,
+        parsedRows: previewRows.length,
+        skippedEmpty: dataRows.length - previewRows.length,
+        matchedRows: previewRows.filter(r => r.matchedOkrId !== null).length,
+        unmatchedRows: previewRows.filter(r => r.matchedOkrId === null).length,
+        detectedHeaders: headers,
+        rows: previewRows,
+      });
+
+    } catch (error: any) {
+      console.error("Score import preview error:", error);
+      res.status(500).json({ error: "Failed to parse score CSV", details: error.message });
+    }
+  });
+
+  // Score Import confirm endpoint - creates quarterly updates for matched OKRs
+  app.post("/api/import/scores/confirm", requireAdmin, async (req, res) => {
+    try {
+      const { rows } = req.body;
+      if (!rows || !Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ error: "No rows to import" });
+      }
+
+      const allStaff = await storage.getAllStaff();
+      const staffByName = new Map<string, any>();
+      for (const s of allStaff) {
+        staffByName.set(s.name.toLowerCase().trim(), s);
+      }
+
+      const fuzzyMatchStaff = (name: string): any | null => {
+        const lower = name.toLowerCase().trim();
+        if (staffByName.has(lower)) return staffByName.get(lower);
+        const staffEntries = Array.from(staffByName.entries());
+        for (const [staffName, staffObj] of staffEntries) {
+          if (staffName.includes(lower) || lower.includes(staffName)) return staffObj;
+        }
+        const nameParts = lower.split(/\s+/);
+        if (nameParts.length >= 2) {
+          for (const [staffName, staffObj] of staffEntries) {
+            const staffParts = staffName.split(/\s+/);
+            if (staffParts.length >= 2 && nameParts[nameParts.length - 1] === staffParts[staffParts.length - 1] && nameParts[0] === staffParts[0]) {
+              return staffObj;
+            }
+          }
+        }
+        return null;
+      };
+
+      const results = {
+        scoresCreated: 0,
+        rowsSkipped: 0,
+        errors: [] as string[],
+      };
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        try {
+          if (!row.include || !row.matchedOkrId) {
+            results.rowsSkipped++;
+            continue;
+          }
+
+          const matchedStaff = fuzzyMatchStaff(row.scorerName);
+          const keyResultScoresJson = row.krScores && row.krScores.length > 0
+            ? JSON.stringify(row.krScores.map((kr: any) => ({
+                keyResultNumber: kr.krNumber,
+                description: `Key Result ${kr.krNumber}`,
+                score: kr.score,
+              })))
+            : null;
+
+          await storage.createQuarterlyUpdate({
+            okrId: row.matchedOkrId,
+            staffId: matchedStaff?.id || null,
+            scorerName: row.scorerName,
+            quarter: row.quarter,
+            year: row.year,
+            progress: row.averageScore ?? 0,
+            keyResultScores: keyResultScoresJson,
+            averageScore: row.averageScore ?? 0,
+            additionalKeyResults: row.overflowKRText || null,
+            notes: row.notes || '',
+          });
+          results.scoresCreated++;
+
+        } catch (rowError: any) {
+          results.errors.push(`Row ${row.rowIndex}: ${rowError.message}`);
+        }
+      }
+
+      const errorCount = results.errors.length;
+      let message = `Score import completed: ${results.scoresCreated} quarterly updates created.`;
+      if (results.rowsSkipped > 0) message += ` ${results.rowsSkipped} rows skipped.`;
+      if (errorCount > 0) message += ` ${errorCount} error(s).`;
+
+      res.json({ success: true, results, message });
+
+    } catch (error: any) {
+      console.error("Score import error:", error);
+      res.status(500).json({ error: "Failed to import scores", details: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

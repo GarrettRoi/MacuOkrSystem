@@ -34,6 +34,8 @@ PostgreSQL is used as the database, accessed via Drizzle ORM and Neon Database's
     - **Employee Progress**: Detailed, filterable spreadsheet-style view of OKR progress per employee, showing objective statements, strategic alignments, responsible parties, and progress percentages.
     - **Admin**: Management interface for staff, departments, and sub-departments.
     - **Export**: CSV data export functionality.
+    - **CSV Import (OKRs)**: 3-step import flow (upload → preview/edit → confirm) for OKR submission spreadsheets. Backend endpoints: POST `/api/import/csv/preview` and `/api/import/csv/confirm`.
+    - **CSV Import (Scores)**: Separate 3-step import flow for OKR score/quarterly update spreadsheets. Matches scores to existing OKRs by SPU, sub-unit, quarter, year, and OKR number using fuzzy matching. Parses KR scores (1-4) plus overflow KR column. Backend endpoints: POST `/api/import/scores/preview` and `/api/import/scores/confirm`.
 
 ## External Dependencies
 

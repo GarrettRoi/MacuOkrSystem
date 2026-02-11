@@ -84,6 +84,14 @@ export default function Data() {
   const [importSummary, setImportSummary] = useState<any>(null);
   const [editingImportRow, setEditingImportRow] = useState<number | null>(null);
 
+  // Score import states
+  const [scoreImportDialogOpen, setScoreImportDialogOpen] = useState(false);
+  const [scoreImportFile, setScoreImportFile] = useState<File | null>(null);
+  const [scoreImportStep, setScoreImportStep] = useState<"upload" | "preview" | "importing">("upload");
+  const [scoreImportPreviewData, setScoreImportPreviewData] = useState<any[]>([]);
+  const [scoreImportSummary, setScoreImportSummary] = useState<any>(null);
+  const [editingScoreRow, setEditingScoreRow] = useState<number | null>(null);
+
   // Edit reason dialog
   const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
   const [editReason, setEditReason] = useState("");
@@ -315,12 +323,82 @@ export default function Data() {
     },
   });
 
+  const previewScoreMutation = useMutation({
+    mutationFn: async (csvData: string) => {
+      const res = await apiRequest("POST", "/api/import/scores/preview", { csvData });
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      setScoreImportPreviewData(data.rows || []);
+      setScoreImportSummary({
+        totalRows: data.totalRows,
+        parsedRows: data.parsedRows,
+        skippedEmpty: data.skippedEmpty,
+        matchedRows: data.matchedRows,
+        unmatchedRows: data.unmatchedRows,
+        detectedHeaders: data.detectedHeaders,
+      });
+      setScoreImportStep("preview");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Parse Score CSV",
+        description: error?.message || "Could not parse the score CSV file. Please check the format.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const confirmScoreImportMutation = useMutation({
+    mutationFn: async (rows: any[]) => {
+      const res = await apiRequest("POST", "/api/import/scores/confirm", { rows });
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quarterly-updates"] });
+      setScoreImportDialogOpen(false);
+      resetScoreImportState();
+
+      const errors = data.results?.errors || [];
+      if (errors.length > 0) {
+        toast({
+          title: "Score Import Completed with Issues",
+          description: data.message,
+          variant: "default",
+        });
+        console.error("Score import errors:", errors);
+      } else {
+        toast({
+          title: "Score Import Successful",
+          description: data.message,
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Score Import Failed",
+        description: error?.message || "Failed to import scores.",
+        variant: "destructive",
+      });
+      setScoreImportStep("preview");
+    },
+  });
+
   const resetImportState = () => {
     setImportFile(null);
     setImportStep("upload");
     setImportPreviewData([]);
     setImportSummary(null);
     setEditingImportRow(null);
+  };
+
+  const resetScoreImportState = () => {
+    setScoreImportFile(null);
+    setScoreImportStep("upload");
+    setScoreImportPreviewData([]);
+    setScoreImportSummary(null);
+    setEditingScoreRow(null);
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -342,7 +420,60 @@ export default function Data() {
       return;
     }
     setImportStep("importing");
-    confirmImportMutation.mutate(importPreviewData);
+    confirmImportMutation.mutate(includedRows);
+  };
+
+  const handleScoreFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setScoreImportFile(file);
+  };
+
+  const handlePreviewScores = async () => {
+    if (!scoreImportFile) return;
+    const csvData = await scoreImportFile.text();
+    previewScoreMutation.mutate(csvData);
+  };
+
+  const handleConfirmScoreImport = async () => {
+    const includedRows = scoreImportPreviewData.filter(r => r.include);
+    if (includedRows.length === 0) {
+      toast({ title: "No Rows Selected", description: "Please include at least one row to import.", variant: "destructive" });
+      return;
+    }
+    setScoreImportStep("importing");
+    confirmScoreImportMutation.mutate(includedRows);
+  };
+
+  const updateScoreRow = (index: number, field: string, value: any) => {
+    setScoreImportPreviewData(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const toggleScoreRow = (index: number) => {
+    setScoreImportPreviewData(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], include: !updated[index].include };
+      return updated;
+    });
+  };
+
+  const updateScoreKrScore = (rowIndex: number, krIndex: number, newScore: number) => {
+    setScoreImportPreviewData(prev => {
+      const updated = [...prev];
+      const row = { ...updated[rowIndex] };
+      const krScores = [...(row.krScores || [])];
+      krScores[krIndex] = { ...krScores[krIndex], score: Math.min(100, Math.max(0, newScore)) };
+      row.krScores = krScores;
+      row.averageScore = krScores.length > 0
+        ? Math.round(krScores.reduce((sum: number, kr: any) => sum + kr.score, 0) / krScores.length)
+        : row.averageScore;
+      updated[rowIndex] = row;
+      return updated;
+    });
   };
 
   const updateImportRow = (index: number, field: string, value: any) => {
@@ -542,7 +673,15 @@ export default function Data() {
                 data-testid="button-import-csv"
               >
                 <Upload className="h-4 w-4 mr-2" />
-                Import CSV
+                Import OKRs
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setScoreImportDialogOpen(true)}
+                data-testid="button-import-scores"
+              >
+                <FileUp className="h-4 w-4 mr-2" />
+                Import Scores
               </Button>
             </div>
           </div>
@@ -1710,6 +1849,316 @@ export default function Data() {
               <div className="text-center space-y-3">
                 <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
                 <p className="text-sm text-muted-foreground">Processing {importPreviewData.filter(r => r.include).length} rows...</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      {/* Score Import Dialog */}
+      <Dialog open={scoreImportDialogOpen} onOpenChange={(open) => { if (!open) { setScoreImportDialogOpen(false); resetScoreImportState(); } }}>
+        <DialogContent className={scoreImportStep === "preview" ? "max-w-[95vw] max-h-[90vh] overflow-y-auto" : "max-w-2xl"}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileUp className="h-5 w-5" />
+              {scoreImportStep === "upload" && "Import OKR Scores from CSV"}
+              {scoreImportStep === "preview" && "Review Score Import Data"}
+              {scoreImportStep === "importing" && "Importing Scores..."}
+            </DialogTitle>
+            <DialogDescription>
+              {scoreImportStep === "upload" && "Upload a CSV file from the OKR scoring form responses. Scores will be matched to existing OKRs by SPU, quarter, year, and OKR number."}
+              {scoreImportStep === "preview" && `${scoreImportPreviewData.filter(r => r.include).length} of ${scoreImportPreviewData.length} rows selected for import. Click a row to edit scores, or uncheck to exclude.`}
+              {scoreImportStep === "importing" && "Please wait while the scores are being imported..."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {scoreImportStep === "upload" && (
+            <div className="space-y-4 py-4">
+              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleScoreFileSelect}
+                  className="hidden"
+                  id="score-csv-file-input"
+                  data-testid="input-score-csv-file"
+                />
+                <label htmlFor="score-csv-file-input" className="cursor-pointer">
+                  <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    {scoreImportFile ? (
+                      <span className="text-foreground font-medium">{scoreImportFile.name}</span>
+                    ) : (
+                      <>Click to select a score CSV file</>
+                    )}
+                  </p>
+                </label>
+              </div>
+              <div className="bg-muted/50 rounded-md p-4 text-sm">
+                <p className="font-medium mb-2">Expected CSV columns:</p>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground text-xs">
+                  <li>Timestamp, Your Name</li>
+                  <li>Year and Quarter, Which numbered OKR</li>
+                  <li>Parent SPU, Sub-unit</li>
+                  <li>Key Result Scores (1-4)</li>
+                  <li>Overflow Key Results (KR5+)</li>
+                  <li>Average Score, Qualitative Notes</li>
+                </ul>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setScoreImportDialogOpen(false); resetScoreImportState(); }} data-testid="button-cancel-score-import">
+                  Cancel
+                </Button>
+                <Button onClick={handlePreviewScores} disabled={!scoreImportFile || previewScoreMutation.isPending} data-testid="button-preview-scores">
+                  {previewScoreMutation.isPending ? "Parsing..." : "Preview Scores"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {scoreImportStep === "preview" && (
+            <div className="space-y-4">
+              {scoreImportSummary && (
+                <div className="flex items-center gap-4 flex-wrap text-sm">
+                  <Badge variant="outline">{scoreImportSummary.totalRows} total rows</Badge>
+                  <Badge variant="outline">{scoreImportPreviewData.length} parsed</Badge>
+                  {scoreImportSummary.skippedEmpty > 0 && (
+                    <Badge variant="secondary">{scoreImportSummary.skippedEmpty} empty rows skipped</Badge>
+                  )}
+                  <Badge className="bg-green-600 text-white">{scoreImportSummary.matchedRows} matched to OKRs</Badge>
+                  {scoreImportSummary.unmatchedRows > 0 && (
+                    <Badge variant="destructive">{scoreImportSummary.unmatchedRows} unmatched</Badge>
+                  )}
+                  <Badge className="bg-primary text-primary-foreground">{scoreImportPreviewData.filter(r => r.include).length} selected for import</Badge>
+                </div>
+              )}
+
+              <div className="border rounded-md overflow-x-auto max-h-[60vh]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="sticky top-0 bg-background z-50">
+                      <TableHead className="w-10">
+                        <input
+                          type="checkbox"
+                          checked={scoreImportPreviewData.every(r => r.include)}
+                          onChange={(e) => {
+                            setScoreImportPreviewData(prev => prev.map(r => ({ ...r, include: e.target.checked })));
+                          }}
+                          data-testid="checkbox-select-all-scores"
+                        />
+                      </TableHead>
+                      <TableHead className="w-10">Row</TableHead>
+                      <TableHead>Scorer</TableHead>
+                      <TableHead>Quarter</TableHead>
+                      <TableHead>Year</TableHead>
+                      <TableHead>OKR #</TableHead>
+                      <TableHead>SPU</TableHead>
+                      <TableHead>Sub-unit</TableHead>
+                      <TableHead>KR Scores</TableHead>
+                      <TableHead>Avg</TableHead>
+                      <TableHead>Match Status</TableHead>
+                      <TableHead className="w-10">Edit</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {scoreImportPreviewData.map((row, idx) => (
+                      <Fragment key={`score-row-${idx}`}>
+                        <TableRow
+                          className={`${!row.include ? "opacity-40" : ""} ${row.errors.length > 0 ? "bg-destructive/5" : ""} ${row.matchedOkrId ? "" : "bg-amber-500/5"}`}
+                          data-testid={`row-score-import-${idx}`}
+                        >
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={row.include}
+                              onChange={() => toggleScoreRow(idx)}
+                              data-testid={`checkbox-score-row-${idx}`}
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{row.rowIndex}</TableCell>
+                          <TableCell className="text-sm font-medium max-w-[120px] truncate">{row.scorerName}</TableCell>
+                          <TableCell className="text-sm">{row.quarter}</TableCell>
+                          <TableCell className="text-sm">{row.year}</TableCell>
+                          <TableCell className="text-sm">{row.okrNumber}</TableCell>
+                          <TableCell className="text-sm max-w-[150px] truncate">{row.spuName}</TableCell>
+                          <TableCell className="text-sm max-w-[100px] truncate">{row.subUnitName || "-"}</TableCell>
+                          <TableCell className="text-sm">
+                            {row.krScores && row.krScores.length > 0
+                              ? row.krScores.map((kr: any) => `KR${kr.krNumber}: ${kr.score}`).join(", ")
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium">{row.averageScore != null ? `${row.averageScore}%` : "-"}</TableCell>
+                          <TableCell className="text-sm">
+                            {row.matchedOkrId ? (
+                              <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300">Matched</Badge>
+                            ) : (
+                              <Badge variant="destructive" className="text-xs">No Match</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditingScoreRow(editingScoreRow === idx ? null : idx)}
+                              data-testid={`button-edit-score-row-${idx}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                        {editingScoreRow === idx && (
+                          <TableRow key={`score-edit-${idx}`}>
+                            <TableCell colSpan={12} className="bg-muted/30 p-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Scorer Name</label>
+                                  <Input
+                                    value={row.scorerName}
+                                    onChange={(e) => updateScoreRow(idx, "scorerName", e.target.value)}
+                                    data-testid={`input-score-name-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Quarter</label>
+                                  <Select value={row.quarter} onValueChange={(v) => updateScoreRow(idx, "quarter", v)}>
+                                    <SelectTrigger data-testid={`select-score-quarter-${idx}`}><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Q1">Q1</SelectItem>
+                                      <SelectItem value="Q2">Q2</SelectItem>
+                                      <SelectItem value="Q3">Q3</SelectItem>
+                                      <SelectItem value="Q4">Q4</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Year</label>
+                                  <Input
+                                    type="number"
+                                    value={row.year}
+                                    onChange={(e) => updateScoreRow(idx, "year", parseInt(e.target.value) || 2024)}
+                                    data-testid={`input-score-year-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">OKR Number</label>
+                                  <Select value={row.okrNumber} onValueChange={(v) => updateScoreRow(idx, "okrNumber", v)}>
+                                    <SelectTrigger data-testid={`select-score-okr-${idx}`}><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      {okrNumbers.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">SPU</label>
+                                  <Input
+                                    value={row.spuName}
+                                    onChange={(e) => updateScoreRow(idx, "spuName", e.target.value)}
+                                    data-testid={`input-score-spu-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Sub-unit</label>
+                                  <Input
+                                    value={row.subUnitName}
+                                    onChange={(e) => updateScoreRow(idx, "subUnitName", e.target.value)}
+                                    data-testid={`input-score-subunit-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">Key Result Scores</label>
+                                  <div className="flex flex-wrap gap-3">
+                                    {row.krScores && row.krScores.map((kr: any, krIdx: number) => (
+                                      <div key={krIdx} className="flex items-center gap-1">
+                                        <span className="text-xs text-muted-foreground">KR{kr.krNumber}:</span>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          max={100}
+                                          value={kr.score}
+                                          onChange={(e) => updateScoreKrScore(idx, krIdx, parseInt(e.target.value) || 0)}
+                                          className="w-20"
+                                          data-testid={`input-score-kr-${idx}-${krIdx}`}
+                                        />
+                                      </div>
+                                    ))}
+                                    {(!row.krScores || row.krScores.length === 0) && (
+                                      <span className="text-xs text-muted-foreground">No key result scores found</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Average Score (%)</label>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={row.averageScore ?? ""}
+                                    onChange={(e) => updateScoreRow(idx, "averageScore", parseInt(e.target.value) || 0)}
+                                    data-testid={`input-score-avg-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2">
+                                  <label className="text-xs font-medium text-muted-foreground">Match Info</label>
+                                  <p className="text-xs text-muted-foreground">{row.matchedOkrInfo || "No match found"}</p>
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">Qualitative Notes</label>
+                                  <Textarea
+                                    value={row.notes}
+                                    onChange={(e) => updateScoreRow(idx, "notes", e.target.value)}
+                                    rows={3}
+                                    data-testid={`input-score-notes-${idx}`}
+                                  />
+                                </div>
+                                {row.errors.length > 0 && (
+                                  <div className="md:col-span-2 lg:col-span-3">
+                                    <div className="flex items-center gap-2 text-destructive text-xs">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      {row.errors.join(", ")}
+                                    </div>
+                                  </div>
+                                )}
+                                {row.warnings && row.warnings.length > 0 && (
+                                  <div className="md:col-span-2 lg:col-span-3">
+                                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      {row.warnings.join(", ")}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex justify-end mt-3">
+                                <Button variant="outline" size="sm" onClick={() => setEditingScoreRow(null)} data-testid={`button-close-edit-score-${idx}`}>
+                                  Done Editing
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <DialogFooter className="flex-col sm:flex-row gap-2">
+                <Button variant="outline" onClick={() => { setScoreImportStep("upload"); setScoreImportPreviewData([]); setScoreImportSummary(null); }} data-testid="button-back-to-score-upload">
+                  Back
+                </Button>
+                <Button variant="outline" onClick={() => { setScoreImportDialogOpen(false); resetScoreImportState(); }} data-testid="button-cancel-score-import">
+                  Cancel
+                </Button>
+                <Button onClick={handleConfirmScoreImport} disabled={confirmScoreImportMutation.isPending || scoreImportPreviewData.filter(r => r.include).length === 0} data-testid="button-confirm-score-import">
+                  Import {scoreImportPreviewData.filter(r => r.include).length} Score{scoreImportPreviewData.filter(r => r.include).length !== 1 ? "s" : ""}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {scoreImportStep === "importing" && (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center space-y-3">
+                <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+                <p className="text-sm text-muted-foreground">Processing {scoreImportPreviewData.filter(r => r.include).length} scores...</p>
               </div>
             </div>
           )}
