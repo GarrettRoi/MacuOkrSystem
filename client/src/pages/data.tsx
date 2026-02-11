@@ -79,7 +79,10 @@ export default function Data() {
   // Import states
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importPreview, setImportPreview] = useState<string>("");
+  const [importStep, setImportStep] = useState<"upload" | "preview" | "importing">("upload");
+  const [importPreviewData, setImportPreviewData] = useState<any[]>([]);
+  const [importSummary, setImportSummary] = useState<any>(null);
+  const [editingImportRow, setEditingImportRow] = useState<number | null>(null);
 
   // Edit reason dialog
   const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
@@ -248,9 +251,34 @@ export default function Data() {
     },
   });
 
-  const importCsvMutation = useMutation({
+  const previewCsvMutation = useMutation({
     mutationFn: async (csvData: string) => {
-      return await apiRequest("POST", "/api/import/csv", { csvData });
+      const res = await apiRequest("POST", "/api/import/csv/preview", { csvData });
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      setImportPreviewData(data.rows || []);
+      setImportSummary({
+        totalRows: data.totalRows,
+        parsedRows: data.parsedRows,
+        skippedEmpty: data.skippedEmpty,
+        detectedHeaders: data.detectedHeaders,
+      });
+      setImportStep("preview");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Parse CSV",
+        description: error?.message || "Could not parse the CSV file. Please check the format.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const confirmImportMutation = useMutation({
+    mutationFn: async (rows: any[]) => {
+      const res = await apiRequest("POST", "/api/import/csv/confirm", { rows });
+      return await res.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
@@ -260,55 +288,77 @@ export default function Data() {
       queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
       queryClient.invalidateQueries({ queryKey: ["/api/years"] });
       setImportDialogOpen(false);
-      setImportFile(null);
-      setImportPreview("");
-      
-      // Show warnings if any
-      const warnings = data.results?.warnings || [];
+      resetImportState();
+
       const errors = data.results?.errors || [];
-      if (warnings.length > 0 || errors.length > 0) {
+      if (errors.length > 0) {
         toast({
           title: "Import Completed with Issues",
-          description: `${data.message}${warnings.length > 0 ? ` Check console for ${warnings.length} warning(s).` : ''}`,
+          description: data.message,
           variant: "default",
         });
-        if (warnings.length > 0) {
-          console.warn("Import warnings:", warnings);
-        }
-        if (errors.length > 0) {
-          console.error("Import errors:", errors);
-        }
+        console.error("Import errors:", errors);
       } else {
         toast({
           title: "Import Successful",
-          description: data.message || "CSV data has been imported successfully.",
+          description: data.message,
         });
       }
     },
     onError: (error: any) => {
       toast({
         title: "Import Failed",
-        description: error?.message || "Failed to import CSV data. Please check the file format.",
+        description: error?.message || "Failed to import data.",
         variant: "destructive",
       });
+      setImportStep("preview");
     },
   });
+
+  const resetImportState = () => {
+    setImportFile(null);
+    setImportStep("upload");
+    setImportPreviewData([]);
+    setImportSummary(null);
+    setEditingImportRow(null);
+  };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    
     setImportFile(file);
-    const text = await file.text();
-    // Show first 5 lines as preview
-    const lines = text.split('\n').slice(0, 5);
-    setImportPreview(lines.join('\n'));
   };
 
-  const handleImport = async () => {
+  const handlePreviewCsv = async () => {
     if (!importFile) return;
     const csvData = await importFile.text();
-    importCsvMutation.mutate(csvData);
+    previewCsvMutation.mutate(csvData);
+  };
+
+  const handleConfirmImport = async () => {
+    const includedRows = importPreviewData.filter(r => r.include);
+    if (includedRows.length === 0) {
+      toast({ title: "No Rows Selected", description: "Please include at least one row to import.", variant: "destructive" });
+      return;
+    }
+    setImportStep("importing");
+    confirmImportMutation.mutate(importPreviewData);
+  };
+
+  const updateImportRow = (index: number, field: string, value: any) => {
+    setImportPreviewData(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const toggleImportRow = (index: number) => {
+    setImportPreviewData(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], include: !updated[index].include };
+      return updated;
+    });
   };
 
   const handleDeleteSingle = (okrId: string) => {
@@ -1352,78 +1402,317 @@ export default function Data() {
       </Dialog>
 
       {/* Import CSV Dialog */}
-      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={importDialogOpen} onOpenChange={(open) => { if (!open) { setImportDialogOpen(false); resetImportState(); } }}>
+        <DialogContent className={importStep === "preview" ? "max-w-[95vw] max-h-[90vh] overflow-y-auto" : "max-w-2xl"}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileUp className="h-5 w-5" />
-              Import OKR Data from CSV
+              {importStep === "upload" && "Import OKR Data from CSV"}
+              {importStep === "preview" && "Review Import Data"}
+              {importStep === "importing" && "Importing..."}
             </DialogTitle>
             <DialogDescription>
-              Upload a CSV file containing OKR submission data. The system will automatically create staff members, SPUs, sub-units, OKRs, and quarterly updates from the data.
+              {importStep === "upload" && "Upload a CSV file from the OKR tracking spreadsheet. You'll be able to review and fix data before importing."}
+              {importStep === "preview" && `${importPreviewData.filter(r => r.include).length} of ${importPreviewData.length} rows selected for import. Click a row to edit, or uncheck to exclude.`}
+              {importStep === "importing" && "Please wait while the data is being imported..."}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileSelect}
-                className="hidden"
-                id="csv-file-input"
-                data-testid="input-csv-file"
-              />
-              <label htmlFor="csv-file-input" className="cursor-pointer">
-                <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  {importFile ? (
-                    <span className="text-foreground font-medium">{importFile.name}</span>
-                  ) : (
-                    <>Click to select a CSV file or drag and drop</>
-                  )}
-                </p>
-              </label>
-            </div>
-            
-            {importPreview && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Preview (first 5 lines):</p>
-                <div className="bg-muted rounded-md p-3 overflow-x-auto">
-                  <pre className="text-xs whitespace-pre-wrap">{importPreview}</pre>
-                </div>
+
+          {importStep === "upload" && (
+            <div className="space-y-4 py-4">
+              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  id="csv-file-input"
+                  data-testid="input-csv-file"
+                />
+                <label htmlFor="csv-file-input" className="cursor-pointer">
+                  <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    {importFile ? (
+                      <span className="text-foreground font-medium">{importFile.name}</span>
+                    ) : (
+                      <>Click to select a CSV file</>
+                    )}
+                  </p>
+                </label>
               </div>
-            )}
-            
-            <div className="bg-muted/50 rounded-md p-4 text-sm">
-              <p className="font-medium mb-2">Expected CSV columns:</p>
-              <ul className="list-disc list-inside space-y-1 text-muted-foreground text-xs">
-                <li>Timestamp, Your Name, Quarter/Year</li>
-                <li>Parent SPU, Sub-unit, Collaboration SPU</li>
-                <li>Key Result letters, OKR Number</li>
-                <li>Key Result 1-4 scores, Average score, Notes</li>
-              </ul>
+              <div className="bg-muted/50 rounded-md p-4 text-sm">
+                <p className="font-medium mb-2">Expected CSV columns:</p>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground text-xs">
+                  <li>Timestamp, Email Address, Your Name</li>
+                  <li>Year and Quarter, Numbered OKR</li>
+                  <li>Parent SPU, Sub-unit, Collaboration SPU</li>
+                  <li>University Strategic Objective, University Key Result</li>
+                  <li>Objective Statement, Key Result Statements (1-3)</li>
+                  <li>Responsible Parties</li>
+                </ul>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setImportDialogOpen(false); resetImportState(); }} data-testid="button-cancel-import">
+                  Cancel
+                </Button>
+                <Button onClick={handlePreviewCsv} disabled={!importFile || previewCsvMutation.isPending} data-testid="button-preview-csv">
+                  {previewCsvMutation.isPending ? "Parsing..." : "Preview Data"}
+                </Button>
+              </DialogFooter>
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setImportDialogOpen(false);
-                setImportFile(null);
-                setImportPreview("");
-              }}
-              data-testid="button-cancel-import"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleImport}
-              disabled={!importFile || importCsvMutation.isPending}
-              data-testid="button-confirm-import"
-            >
-              {importCsvMutation.isPending ? "Importing..." : "Import Data"}
-            </Button>
-          </DialogFooter>
+          )}
+
+          {importStep === "preview" && (
+            <div className="space-y-4">
+              {importSummary && (
+                <div className="flex items-center gap-4 flex-wrap text-sm">
+                  <Badge variant="outline">{importSummary.totalRows} total rows</Badge>
+                  <Badge variant="outline">{importPreviewData.length} parsed</Badge>
+                  {importSummary.skippedEmpty > 0 && (
+                    <Badge variant="secondary">{importSummary.skippedEmpty} empty rows skipped</Badge>
+                  )}
+                  <Badge className="bg-primary text-primary-foreground">{importPreviewData.filter(r => r.include).length} selected for import</Badge>
+                  {importPreviewData.some(r => r.errors.length > 0) && (
+                    <Badge variant="destructive">{importPreviewData.filter(r => r.errors.length > 0).length} with warnings</Badge>
+                  )}
+                </div>
+              )}
+
+              <div className="border rounded-md overflow-x-auto max-h-[60vh]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="sticky top-0 bg-background z-50">
+                      <TableHead className="w-10">
+                        <input
+                          type="checkbox"
+                          checked={importPreviewData.every(r => r.include)}
+                          onChange={(e) => {
+                            setImportPreviewData(prev => prev.map(r => ({ ...r, include: e.target.checked })));
+                          }}
+                          data-testid="checkbox-select-all-import"
+                        />
+                      </TableHead>
+                      <TableHead className="w-10">Row</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Quarter</TableHead>
+                      <TableHead>Year</TableHead>
+                      <TableHead>OKR #</TableHead>
+                      <TableHead>SPU</TableHead>
+                      <TableHead>Sub-unit</TableHead>
+                      <TableHead>Objective Statement</TableHead>
+                      <TableHead>KR 1</TableHead>
+                      <TableHead className="w-10">Edit</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {importPreviewData.map((row, idx) => (
+                      <>
+                        <TableRow
+                          key={`row-${idx}`}
+                          className={`${!row.include ? "opacity-40" : ""} ${row.errors.length > 0 ? "bg-destructive/5" : ""}`}
+                          data-testid={`row-import-${idx}`}
+                        >
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={row.include}
+                              onChange={() => toggleImportRow(idx)}
+                              data-testid={`checkbox-import-row-${idx}`}
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{row.rowIndex}</TableCell>
+                          <TableCell className="text-sm font-medium max-w-[120px] truncate">{row.staffName}</TableCell>
+                          <TableCell className="text-sm">{row.quarter}</TableCell>
+                          <TableCell className="text-sm">{row.year}</TableCell>
+                          <TableCell className="text-sm">{row.okrNumber}</TableCell>
+                          <TableCell className="text-sm max-w-[150px] truncate">{row.spuName}</TableCell>
+                          <TableCell className="text-sm max-w-[100px] truncate">{row.subUnitName || "-"}</TableCell>
+                          <TableCell className="text-sm max-w-[200px] truncate">{row.objectiveStatement || "-"}</TableCell>
+                          <TableCell className="text-sm max-w-[150px] truncate">{row.keyResult1 || "-"}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditingImportRow(editingImportRow === idx ? null : idx)}
+                              data-testid={`button-edit-import-row-${idx}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                        {editingImportRow === idx && (
+                          <TableRow key={`edit-${idx}`}>
+                            <TableCell colSpan={11} className="bg-muted/30 p-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Staff Name</label>
+                                  <Input
+                                    value={row.staffName}
+                                    onChange={(e) => updateImportRow(idx, "staffName", e.target.value)}
+                                    data-testid={`input-import-name-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Quarter</label>
+                                  <Select value={row.quarter} onValueChange={(v) => updateImportRow(idx, "quarter", v)}>
+                                    <SelectTrigger data-testid={`select-import-quarter-${idx}`}><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Q1">Q1</SelectItem>
+                                      <SelectItem value="Q2">Q2</SelectItem>
+                                      <SelectItem value="Q3">Q3</SelectItem>
+                                      <SelectItem value="Q4">Q4</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Year</label>
+                                  <Input
+                                    type="number"
+                                    value={row.year}
+                                    onChange={(e) => updateImportRow(idx, "year", parseInt(e.target.value) || 2024)}
+                                    data-testid={`input-import-year-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">OKR Number</label>
+                                  <Select value={row.okrNumber} onValueChange={(v) => updateImportRow(idx, "okrNumber", v)}>
+                                    <SelectTrigger data-testid={`select-import-okr-${idx}`}><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      {okrNumbers.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Parent SPU</label>
+                                  <Input
+                                    value={row.spuName}
+                                    onChange={(e) => updateImportRow(idx, "spuName", e.target.value)}
+                                    data-testid={`input-import-spu-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Sub-unit</label>
+                                  <Input
+                                    value={row.subUnitName}
+                                    onChange={(e) => updateImportRow(idx, "subUnitName", e.target.value)}
+                                    data-testid={`input-import-subunit-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">Collaboration SPU</label>
+                                  <Input
+                                    value={row.collaborationSpu}
+                                    onChange={(e) => updateImportRow(idx, "collaborationSpu", e.target.value)}
+                                    data-testid={`input-import-collab-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">University Objective</label>
+                                  <Textarea
+                                    value={row.universityObjective}
+                                    onChange={(e) => updateImportRow(idx, "universityObjective", e.target.value)}
+                                    rows={2}
+                                    data-testid={`input-import-uni-obj-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">University Key Result</label>
+                                  <Textarea
+                                    value={row.universityKeyResult}
+                                    onChange={(e) => updateImportRow(idx, "universityKeyResult", e.target.value)}
+                                    rows={2}
+                                    data-testid={`input-import-uni-kr-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">Objective Statement</label>
+                                  <Textarea
+                                    value={row.objectiveStatement}
+                                    onChange={(e) => updateImportRow(idx, "objectiveStatement", e.target.value)}
+                                    rows={3}
+                                    data-testid={`input-import-obj-stmt-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">Key Result 1</label>
+                                  <Textarea
+                                    value={row.keyResult1}
+                                    onChange={(e) => updateImportRow(idx, "keyResult1", e.target.value)}
+                                    rows={2}
+                                    data-testid={`input-import-kr1-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">Key Result 2</label>
+                                  <Textarea
+                                    value={row.keyResult2}
+                                    onChange={(e) => updateImportRow(idx, "keyResult2", e.target.value)}
+                                    rows={2}
+                                    data-testid={`input-import-kr2-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">Key Result 3 / Additional</label>
+                                  <Textarea
+                                    value={row.keyResult3}
+                                    onChange={(e) => updateImportRow(idx, "keyResult3", e.target.value)}
+                                    rows={2}
+                                    data-testid={`input-import-kr3-${idx}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                  <label className="text-xs font-medium text-muted-foreground">Responsible Parties</label>
+                                  <Input
+                                    value={row.responsibleParties}
+                                    onChange={(e) => updateImportRow(idx, "responsibleParties", e.target.value)}
+                                    data-testid={`input-import-responsible-${idx}`}
+                                  />
+                                </div>
+                                {row.errors.length > 0 && (
+                                  <div className="md:col-span-2 lg:col-span-3">
+                                    <div className="flex items-center gap-2 text-destructive text-xs">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      {row.errors.join(", ")}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex justify-end mt-3">
+                                <Button variant="outline" size="sm" onClick={() => setEditingImportRow(null)} data-testid={`button-close-edit-import-${idx}`}>
+                                  Done Editing
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <DialogFooter className="flex-col sm:flex-row gap-2">
+                <Button variant="outline" onClick={() => { setImportStep("upload"); setImportPreviewData([]); setImportSummary(null); }} data-testid="button-back-to-upload">
+                  Back
+                </Button>
+                <Button variant="outline" onClick={() => { setImportDialogOpen(false); resetImportState(); }} data-testid="button-cancel-import">
+                  Cancel
+                </Button>
+                <Button onClick={handleConfirmImport} disabled={confirmImportMutation.isPending || importPreviewData.filter(r => r.include).length === 0} data-testid="button-confirm-import">
+                  Import {importPreviewData.filter(r => r.include).length} Row{importPreviewData.filter(r => r.include).length !== 1 ? "s" : ""}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {importStep === "importing" && (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center space-y-3">
+                <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
+                <p className="text-sm text-muted-foreground">Processing {importPreviewData.filter(r => r.include).length} rows...</p>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

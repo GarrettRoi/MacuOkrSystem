@@ -1278,62 +1278,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // CSV Import endpoint
-  app.post("/api/import/csv", requireAdmin, async (req, res) => {
+  // CSV parsing helper
+  const parseCSV = (text: string): string[][] => {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentField = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (inQuotes) {
+        if (char === '"' && nextChar === '"') {
+          currentField += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = false;
+        } else {
+          currentField += char;
+        }
+      } else {
+        if (char === '"') {
+          inQuotes = true;
+        } else if (char === ',') {
+          currentRow.push(currentField);
+          currentField = '';
+        } else if (char === '\n' || (char === '\r' && nextChar === '\n')) {
+          if (char === '\r') i++;
+          currentRow.push(currentField);
+          if (currentRow.length > 1 || currentRow[0] !== '') {
+            rows.push(currentRow);
+          }
+          currentRow = [];
+          currentField = '';
+        } else {
+          currentField += char;
+        }
+      }
+    }
+    if (currentField || currentRow.length > 0) {
+      currentRow.push(currentField);
+      rows.push(currentRow);
+    }
+    return rows;
+  };
+
+  // Map OKR number text to format
+  const mapOkrNumber = (text: string): string => {
+    const normalized = text.trim().toUpperCase();
+    if (normalized.includes('1ST') || normalized === '1') return 'OKR 1';
+    if (normalized.includes('2ND') || normalized === '2') return 'OKR 2';
+    if (normalized.includes('3RD') || normalized === '3') return 'OKR 3';
+    if (normalized.includes('4TH') || normalized === '4') return 'OKR 4';
+    if (normalized.includes('5TH') || normalized === '5') return 'OKR 5';
+    const numMatch = normalized.match(/(\d+)/);
+    if (numMatch) {
+      const num = Math.min(parseInt(numMatch[1]), 5);
+      if (num >= 1) return `OKR ${num}`;
+    }
+    return 'OKR 1';
+  };
+
+  // Parse quarter and year from text like "Q1: June 2024 - August 2024"
+  const parseQuarterYear = (text: string): { quarter: string; year: number } => {
+    const quarterMatch = text.match(/Q([1-4])/i);
+    const yearMatch = text.match(/20\d{2}/);
+    return {
+      quarter: quarterMatch ? `Q${quarterMatch[1]}` : 'Q1',
+      year: yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear(),
+    };
+  };
+
+  // CSV Preview endpoint - parses CSV and returns structured data for review
+  app.post("/api/import/csv/preview", requireAdmin, async (req, res) => {
     try {
       const { csvData } = req.body;
       if (!csvData || typeof csvData !== 'string') {
         return res.status(400).json({ error: "CSV data is required" });
       }
-
-      // Parse CSV - handle multiline fields properly
-      const parseCSV = (text: string): string[][] => {
-        const rows: string[][] = [];
-        let currentRow: string[] = [];
-        let currentField = '';
-        let inQuotes = false;
-
-        for (let i = 0; i < text.length; i++) {
-          const char = text[i];
-          const nextChar = text[i + 1];
-
-          if (inQuotes) {
-            if (char === '"' && nextChar === '"') {
-              currentField += '"';
-              i++;
-            } else if (char === '"') {
-              inQuotes = false;
-            } else {
-              currentField += char;
-            }
-          } else {
-            if (char === '"') {
-              inQuotes = true;
-            } else if (char === ',') {
-              currentRow.push(currentField);
-              currentField = '';
-            } else if (char === '\n' || (char === '\r' && nextChar === '\n')) {
-              if (char === '\r') i++;
-              currentRow.push(currentField);
-              if (currentRow.length > 1 || currentRow[0] !== '') {
-                rows.push(currentRow);
-              }
-              currentRow = [];
-              currentField = '';
-            } else {
-              currentField += char;
-            }
-          }
-        }
-        
-        // Push last field and row
-        if (currentField || currentRow.length > 0) {
-          currentRow.push(currentField);
-          rows.push(currentRow);
-        }
-
-        return rows;
-      };
 
       const rows = parseCSV(csvData);
       if (rows.length < 2) {
@@ -1343,7 +1366,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const headers = rows[0];
       const dataRows = rows.slice(1);
 
-      // Map columns by header name with fallback patterns
       const getColIndex = (patterns: string[]): number => {
         for (const pattern of patterns) {
           const idx = headers.findIndex(h => h.toLowerCase().includes(pattern.toLowerCase()));
@@ -1352,34 +1374,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return -1;
       };
 
+      const colTimestamp = getColIndex(['Timestamp']);
+      const colEmail = getColIndex(['Email']);
       const colName = getColIndex(['Your Name', 'Name']);
-      const colQuarterYear = getColIndex(['year and quarter', 'quarter', 'period']);
-      const colSpu = getColIndex(['parent SPU', 'SPU', 'Department', 'School']);
+      const colQuarterYear = getColIndex(['year and quarter', 'quarter']);
+      const colOkrNumber = getColIndex(['numbered OKR', 'OKR number', 'Which numbered']);
+      const colSpu = getColIndex(['parent SPU', 'SPU']);
       const colSubUnit = getColIndex(['sub-unit', 'sub unit', 'division']);
-      const colCollabSpu = getColIndex(['collaborated', 'collaboration']);
-      const colKeyResultLetters = getColIndex(['Key Result letters', 'Key Result letter', 'KR letter']);
-      const colOkrNumber = getColIndex(['numbered OKR', 'OKR number', 'Which OKR']);
-      const colKR1 = getColIndex(['Key Result 1', 'KR1', 'KR 1']);
-      const colKR2 = getColIndex(['Key Result 2', 'KR2', 'KR 2']);
-      const colKR3 = getColIndex(['Key Result 3', 'KR3', 'KR 3']);
-      const colKR4 = getColIndex(['Key Result 4', 'KR4', 'KR 4']);
-      const colAdditionalKRs = getColIndex(['more than 4', 'additional', 'extra KR']);
-      const colAvgScore = getColIndex(['Average score', 'Average', 'Score']);
-      const colNotes = getColIndex(['summarize', 'outcomes', 'notes', 'summary']);
+      const colCollabSpu = getColIndex(['collaborating', 'collaboration']);
+      const colUniObjective = getColIndex(['Strategic Objective', 'University Level Strategic']);
+      const colUniKeyResult = getColIndex(['University-Level Key Result', 'Key Result for your OKR']);
+      const colObjectiveStmt = getColIndex(['Objective Statement', 'Write your Objective']);
+      const colKR1 = getColIndex(['first Key Result', 'Key Result Statement']);
+      const colKR2 = getColIndex(['second Key Result']);
+      const colKR3 = getColIndex(['remaining Key Result', 'any remaining']);
+      const colResponsible = getColIndex(['individuals who are working', 'responsible', 'working on this']);
 
-      // Validate required columns
       const missingColumns: string[] = [];
-      if (colName === -1) missingColumns.push('Name (Your Name)');
+      if (colName === -1) missingColumns.push('Your Name');
       if (colQuarterYear === -1) missingColumns.push('Quarter/Year');
-      if (colSpu === -1) missingColumns.push('SPU/Department');
+      if (colSpu === -1) missingColumns.push('Parent SPU');
       if (colOkrNumber === -1) missingColumns.push('OKR Number');
 
       if (missingColumns.length > 0) {
-        return res.status(400).json({ 
-          error: "Missing required columns", 
+        return res.status(400).json({
+          error: "Missing required columns",
           missingColumns,
-          message: `CSV is missing required columns: ${missingColumns.join(', ')}. Please ensure your CSV has columns for staff name, quarter/year, SPU, and OKR number.`
+          detectedHeaders: headers,
+          message: `CSV is missing required columns: ${missingColumns.join(', ')}.`
         });
+      }
+
+      const previewRows: any[] = [];
+      const warnings: string[] = [];
+
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const staffName = (row[colName] || '').trim();
+        const quarterYearText = (row[colQuarterYear] || '').trim();
+        const okrNumberText = (row[colOkrNumber] || '').trim();
+        const spuText = (row[colSpu] || '').trim();
+        const subUnitText = colSubUnit !== -1 ? (row[colSubUnit] || '').trim() : '';
+        const collabSpuText = colCollabSpu !== -1 ? (row[colCollabSpu] || '').trim() : '';
+        const uniObjective = colUniObjective !== -1 ? (row[colUniObjective] || '').trim() : '';
+        const uniKeyResult = colUniKeyResult !== -1 ? (row[colUniKeyResult] || '').trim() : '';
+        const objectiveStmt = colObjectiveStmt !== -1 ? (row[colObjectiveStmt] || '').trim() : '';
+        const kr1Text = colKR1 !== -1 ? (row[colKR1] || '').trim() : '';
+        const kr2Text = colKR2 !== -1 ? (row[colKR2] || '').trim() : '';
+        const kr3Text = colKR3 !== -1 ? (row[colKR3] || '').trim() : '';
+        const responsibleText = colResponsible !== -1 ? (row[colResponsible] || '').trim() : '';
+        const emailText = colEmail !== -1 ? (row[colEmail] || '').trim() : '';
+        const timestampText = colTimestamp !== -1 ? (row[colTimestamp] || '').trim() : '';
+
+        if (!staffName && !spuText && !okrNumberText) {
+          continue;
+        }
+
+        const { quarter, year } = parseQuarterYear(quarterYearText);
+        const okrNumber = mapOkrNumber(okrNumberText);
+
+        const rowErrors: string[] = [];
+        if (!staffName) rowErrors.push('Missing staff name');
+        if (!spuText) rowErrors.push('Missing SPU');
+        if (!okrNumberText) rowErrors.push('Missing OKR number');
+        if (!objectiveStmt) rowErrors.push('Missing objective statement');
+
+        const cleanSubUnit = subUnitText.toLowerCase() === 'n/a' ? '' : subUnitText;
+
+        previewRows.push({
+          rowIndex: i + 2,
+          staffName,
+          email: emailText,
+          timestamp: timestampText,
+          quarter,
+          year,
+          okrNumber,
+          spuName: spuText,
+          subUnitName: cleanSubUnit,
+          collaborationSpu: collabSpuText,
+          universityObjective: uniObjective,
+          universityKeyResult: uniKeyResult,
+          objectiveStatement: objectiveStmt,
+          keyResult1: kr1Text,
+          keyResult2: kr2Text,
+          keyResult3: kr3Text,
+          responsibleParties: responsibleText,
+          errors: rowErrors,
+          include: rowErrors.length === 0,
+        });
+      }
+
+      res.json({
+        success: true,
+        totalRows: dataRows.length,
+        parsedRows: previewRows.length,
+        skippedEmpty: dataRows.length - previewRows.length,
+        detectedHeaders: headers,
+        rows: previewRows,
+        warnings,
+      });
+
+    } catch (error: any) {
+      console.error("CSV preview error:", error);
+      res.status(500).json({ error: "Failed to parse CSV", details: error.message });
+    }
+  });
+
+  // CSV Import confirm endpoint - imports reviewed/corrected data
+  app.post("/api/import/csv/confirm", requireAdmin, async (req, res) => {
+    try {
+      const { rows } = req.body;
+      if (!rows || !Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ error: "No rows to import" });
       }
 
       const results = {
@@ -1388,123 +1494,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         staffCreated: 0,
         yearsCreated: 0,
         okrsCreated: 0,
-        updatesCreated: 0,
         rowsSkipped: 0,
-        warnings: [] as string[],
         errors: [] as string[],
       };
 
-      // Cache for created/found entities
       const spuCache = new Map<string, any>();
       const subUnitCache = new Map<string, any>();
       const staffCache = new Map<string, any>();
       const yearCache = new Map<number, any>();
 
-      // Map OKR number text to format
-      const mapOkrNumber = (text: string, rowNum: number): { okrNumber: string; warning?: string } => {
-        const normalized = text.trim().toUpperCase();
-        if (normalized.includes('1ST') || normalized === '1') return { okrNumber: 'OKR 1' };
-        if (normalized.includes('2ND') || normalized === '2') return { okrNumber: 'OKR 2' };
-        if (normalized.includes('3RD') || normalized === '3') return { okrNumber: 'OKR 3' };
-        if (normalized.includes('4TH') || normalized === '4') return { okrNumber: 'OKR 4' };
-        if (normalized.includes('5TH') || normalized === '5') return { okrNumber: 'OKR 5' };
-        if (normalized.includes('6TH') || normalized === '6') {
-          return { okrNumber: 'OKR 5', warning: `Row ${rowNum}: OKR number "6TH" mapped to "OKR 5" (max is 5)` };
-        }
-        // Try to extract number directly
-        const numMatch = normalized.match(/(\d+)/);
-        if (numMatch) {
-          const num = parseInt(numMatch[1]);
-          if (num >= 1 && num <= 5) return { okrNumber: `OKR ${num}` };
-          if (num > 5) return { okrNumber: 'OKR 5', warning: `Row ${rowNum}: OKR number "${num}" mapped to "OKR 5" (max is 5)` };
-        }
-        return { okrNumber: 'OKR 1', warning: `Row ${rowNum}: Unrecognized OKR number "${text}" defaulted to "OKR 1"` };
-      };
-
-      // Parse quarter and year from text like "Q1: June 2024 - August 2024"
-      const parseQuarterYear = (text: string): { quarter: string; year: number } => {
-        const quarterMatch = text.match(/Q([1-4])/i);
-        const yearMatch = text.match(/20\d{2}/);
-        return {
-          quarter: quarterMatch ? `Q${quarterMatch[1]}` : 'Q1',
-          year: yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear(),
-        };
-      };
-
-      // Map key result letter to university objective and key result
-      const mapKeyResultLetter = (letters: string): { objective: string; keyResult: string } => {
-        const firstLetter = letters.split(',')[0].trim();
-        const objNum = parseInt(firstLetter.charAt(0)) || 1;
-        const krLetter = firstLetter.charAt(2)?.toUpperCase() || 'A';
-        
-        const objectives = [
-          "Objective 1: We will humbly CREATE transformative opportunities for the holistic growth of students, faculty, staff, alums, and our community from a Christ-centered, biblical worldview and Wesleyan perspective.",
-          "Objective 2: We will joyfully COLLABORATE to align our organizational structures, facilities, and resources effectively and efficiently to achieve sustainability and future expansion.",
-          "Objective 3: We will boldly INNOVATE to provide relevant, attainable, dynamic opportunities for learning and growth.",
-        ];
-        
-        const keyResults: Record<string, string> = {
-          '1.A': "KR 1.A : Wisdom. Identify and develop metrics for measuring wisdom and increase the associated results for each stakeholder group within defined periods.",
-          '1.B': "KR 1.B : Stature. Ensure a minimum of 20 annual wellness programs, diversifying department engagement in creating mental and physical health initiatives serving all stakeholders to at least 30% in 2025, 50% in 2026, and 80% by May 31 2027.",
-          '1.C': "KR 1.C : Favor with God. Increase spiritual formation metrics by 2% annually.",
-          '1.D': "KR 1.D : Favor with man. Double the number of interpersonal training opportunities in 3 years.",
-          '2.A': "KR 2.A: Stewardship of resources: Implement a resource utilization audit with at least 75% of identified opportunities acted upon.",
-          '2.B': "KR 2.B: Technology. Replace 50% of manual processes with technology.",
-          '2.C': "KR 2.C: Processes and procedures. Evaluate and refine 100% of current processes and procedures for optimization and efficiency.",
-          '2.D': "KR 2.D: People and departments. Increase student and employee satisfaction scores by 2% annually.",
-          '3.A': "KR 3.A: Strategic Partnerships. Establish 1-2 partnerships per SPU per year.",
-          '3.B': "KR 3.B: Relevant program offerings. Create 9-12 new academic, co-curricular, or administrative program offerings.",
-          '3.C': "KR 3:C: Engage with cutting edge technology. Incorporate technology into academic, co-curricular, and administrative programs.",
-          '3.D': "KR 3.D: New and expanded financial resources. Increase alternative revenue funding for learning and growth by 10% annually.",
-        };
-
-        const krKey = `${objNum}.${krLetter}`;
-        
-        return {
-          objective: objectives[Math.min(objNum - 1, 2)] || objectives[0],
-          keyResult: keyResults[krKey] || keyResults['1.A'],
-        };
-      };
-
-      // Process each row
-      for (let rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
-        const row = dataRows[rowIdx];
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
         try {
-          const staffName = (row[colName] || '').trim();
-          const quarterYearText = row[colQuarterYear] || '';
-          const spuNames = (row[colSpu] || '').split(',').map(s => s.trim()).filter(Boolean);
-          const subUnitName = (row[colSubUnit] || '').trim();
-          const collabSpuName = (row[colCollabSpu] || '').trim();
-          const keyResultLetters = (row[colKeyResultLetters] || '').trim();
-          const okrNumberText = (row[colOkrNumber] || '').trim();
-          const kr1Score = parseFloat(row[colKR1]) || 0;
-          const kr2Score = parseFloat(row[colKR2]) || 0;
-          const kr3Score = parseFloat(row[colKR3]) || 0;
-          const kr4Score = parseFloat(row[colKR4]) || 0;
-          const additionalKRs = (row[colAdditionalKRs] || '').trim();
-          const avgScoreText = (row[colAvgScore] || '').replace('%', '').trim();
-          const notes = (row[colNotes] || '').trim();
-
-          if (!staffName || !spuNames.length || !okrNumberText) {
+          if (!row.include) {
             results.rowsSkipped++;
-            continue; // Skip incomplete rows
+            continue;
           }
 
-          const { quarter, year } = parseQuarterYear(quarterYearText);
-          const { okrNumber, warning: okrWarning } = mapOkrNumber(okrNumberText, rowIdx + 2);
-          if (okrWarning) {
-            results.warnings.push(okrWarning);
-          }
-          const primarySpuName = spuNames[0];
+          const { staffName, quarter, year, okrNumber, spuName, subUnitName, collaborationSpu,
+                  universityObjective, universityKeyResult, objectiveStatement,
+                  keyResult1, keyResult2, keyResult3, responsibleParties } = row;
 
-          // Find or create year
+          if (!staffName || !spuName || !okrNumber) {
+            results.rowsSkipped++;
+            results.errors.push(`Row ${row.rowIndex}: Missing required fields (name, SPU, or OKR number)`);
+            continue;
+          }
+
           if (!yearCache.has(year)) {
             const yearRecord = await storage.findOrCreateYear(year);
             yearCache.set(year, yearRecord);
-            if (!await storage.getYearByValue(year)) results.yearsCreated++;
+            results.yearsCreated++;
           }
 
-          // Find or create primary SPU
+          const spuNames = spuName.split(',').map((s: string) => s.trim()).filter(Boolean);
+          const primarySpuName = spuNames[0];
+
           let primarySpu;
           if (spuCache.has(primarySpuName.toLowerCase())) {
             primarySpu = spuCache.get(primarySpuName.toLowerCase());
@@ -1515,7 +1540,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!existingBefore) results.spusCreated++;
           }
 
-          // Find or create sub-unit if provided
           let subUnit = null;
           if (subUnitName) {
             const cacheKey = `${primarySpuName.toLowerCase()}:${subUnitName.toLowerCase()}`;
@@ -1529,20 +1553,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          // Find or create collaboration SPU
           let collabSpu = null;
-          if (collabSpuName) {
-            if (spuCache.has(collabSpuName.toLowerCase())) {
-              collabSpu = spuCache.get(collabSpuName.toLowerCase());
+          if (collaborationSpu) {
+            if (spuCache.has(collaborationSpu.toLowerCase())) {
+              collabSpu = spuCache.get(collaborationSpu.toLowerCase());
             } else {
-              const existingBefore = await storage.getSpuByName(collabSpuName);
-              collabSpu = await storage.findOrCreateSpu(collabSpuName);
-              spuCache.set(collabSpuName.toLowerCase(), collabSpu);
+              const existingBefore = await storage.getSpuByName(collaborationSpu);
+              collabSpu = await storage.findOrCreateSpu(collaborationSpu);
+              spuCache.set(collaborationSpu.toLowerCase(), collabSpu);
               if (!existingBefore) results.spusCreated++;
             }
           }
 
-          // Find or create staff
           let staffRecord;
           if (staffCache.has(staffName.toLowerCase())) {
             staffRecord = staffCache.get(staffName.toLowerCase());
@@ -1553,46 +1575,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!existingBefore) results.staffCreated++;
           }
 
-          // Get university objective and key result from letter code
-          const { objective, keyResult } = mapKeyResultLetter(keyResultLetters);
-
-          // Build key results array from scores
           const keyResultsArray: { description: string; percentage: number }[] = [];
-          const scores = [kr1Score, kr2Score, kr3Score, kr4Score].filter(s => s > 0 || row[colKR1 + keyResultsArray.length]);
-          
-          // Create key results based on provided scores
-          if (kr1Score !== undefined && row[colKR1] !== undefined && row[colKR1] !== '') {
-            keyResultsArray.push({ description: "Key Result 1", percentage: 25 });
-          }
-          if (kr2Score !== undefined && row[colKR2] !== undefined && row[colKR2] !== '') {
-            keyResultsArray.push({ description: "Key Result 2", percentage: 25 });
-          }
-          if (kr3Score !== undefined && row[colKR3] !== undefined && row[colKR3] !== '') {
-            keyResultsArray.push({ description: "Key Result 3", percentage: 25 });
-          }
-          if (kr4Score !== undefined && row[colKR4] !== undefined && row[colKR4] !== '') {
-            keyResultsArray.push({ description: "Key Result 4", percentage: 25 });
-          }
+          if (keyResult1) keyResultsArray.push({ description: keyResult1, percentage: 100 });
+          if (keyResult2) keyResultsArray.push({ description: keyResult2, percentage: 100 });
+          if (keyResult3) keyResultsArray.push({ description: keyResult3, percentage: 100 });
 
-          // If no key results parsed, create at least one
           if (keyResultsArray.length === 0) {
-            keyResultsArray.push({ description: "Key Result 1", percentage: 100 });
+            keyResultsArray.push({ description: 'Key Result 1', percentage: 100 });
           }
 
-          // Normalize percentages to sum to 100
-          const totalPercentage = keyResultsArray.reduce((sum, kr) => sum + kr.percentage, 0);
-          if (totalPercentage !== 100) {
-            keyResultsArray.forEach(kr => {
-              kr.percentage = Math.round((kr.percentage / totalPercentage) * 100);
-            });
-            // Adjust last to ensure exactly 100
-            const newTotal = keyResultsArray.reduce((sum, kr) => sum + kr.percentage, 0);
-            if (newTotal !== 100 && keyResultsArray.length > 0) {
-              keyResultsArray[keyResultsArray.length - 1].percentage += 100 - newTotal;
-            }
-          }
+          const perKr = Math.floor(100 / keyResultsArray.length);
+          keyResultsArray.forEach((kr, idx) => {
+            kr.percentage = idx === keyResultsArray.length - 1 ? 100 - perKr * (keyResultsArray.length - 1) : perKr;
+          });
 
-          // Create OKR
           const okr = await storage.createOkr({
             staffId: staffRecord.id,
             spuId: primarySpu.id,
@@ -1601,66 +1597,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             quarter,
             year,
             collaborationSpuId: collabSpu?.id || null,
-            universityObjective: objective,
-            universityKeyResult: keyResult,
-            objectiveStatement: notes.substring(0, 500) || `Imported OKR for ${keyResultLetters}`,
+            universityObjective: universityObjective || '',
+            universityKeyResult: universityKeyResult || '',
+            objectiveStatement: objectiveStatement || `Imported OKR`,
             keyResults: JSON.stringify(keyResultsArray),
           });
           results.okrsCreated++;
 
-          // Create quarterly update with scores
-          const keyResultScores = [];
-          if (kr1Score !== undefined && (kr1Score > 0 || row[colKR1] !== '')) {
-            keyResultScores.push({ keyResultNumber: 1, description: "Key Result 1", score: kr1Score || 0 });
-          }
-          if (kr2Score !== undefined && (kr2Score > 0 || row[colKR2] !== '')) {
-            keyResultScores.push({ keyResultNumber: 2, description: "Key Result 2", score: kr2Score || 0 });
-          }
-          if (kr3Score !== undefined && (kr3Score > 0 || row[colKR3] !== '')) {
-            keyResultScores.push({ keyResultNumber: 3, description: "Key Result 3", score: kr3Score || 0 });
-          }
-          if (kr4Score !== undefined && (kr4Score > 0 || row[colKR4] !== '')) {
-            keyResultScores.push({ keyResultNumber: 4, description: "Key Result 4", score: kr4Score || 0 });
-          }
-
-          if (keyResultScores.length === 0) {
-            keyResultScores.push({ keyResultNumber: 1, description: "Key Result 1", score: parseFloat(avgScoreText) || 0 });
-          }
-
-          const avgScore = keyResultScores.length > 0 
-            ? Math.round(keyResultScores.reduce((sum, kr) => sum + kr.score, 0) / keyResultScores.length)
-            : parseFloat(avgScoreText) || 0;
-
-          await storage.createQuarterlyUpdate({
-            okrId: okr.id,
-            staffId: staffRecord.id,
-            quarter,
-            year,
-            progress: avgScore,
-            keyResultScores: JSON.stringify(keyResultScores),
-            averageScore: avgScore,
-            additionalKeyResults: additionalKRs || null,
-            notes: notes || 'Imported from CSV',
-          });
-          results.updatesCreated++;
-
         } catch (rowError: any) {
-          results.errors.push(`Row ${rowIdx + 2}: ${rowError.message}`);
+          results.errors.push(`Row ${row.rowIndex}: ${rowError.message}`);
         }
       }
 
-      const warningCount = results.warnings.length;
       const errorCount = results.errors.length;
-      let message = `Import completed: ${results.okrsCreated} OKRs, ${results.updatesCreated} updates, ${results.staffCreated} staff, ${results.spusCreated} SPUs, ${results.subUnitsCreated} sub-units, ${results.yearsCreated} years created.`;
-      if (results.rowsSkipped > 0) message += ` (${results.rowsSkipped} rows skipped)`;
-      if (warningCount > 0) message += ` (${warningCount} warnings)`;
-      if (errorCount > 0) message += ` (${errorCount} errors)`;
-      
-      res.json({
-        success: true,
-        results,
-        message,
-      });
+      let message = `Import completed: ${results.okrsCreated} OKRs created, ${results.staffCreated} new staff, ${results.spusCreated} new SPUs, ${results.subUnitsCreated} new sub-units.`;
+      if (results.rowsSkipped > 0) message += ` ${results.rowsSkipped} rows skipped.`;
+      if (errorCount > 0) message += ` ${errorCount} error(s).`;
+
+      res.json({ success: true, results, message });
 
     } catch (error: any) {
       console.error("CSV import error:", error);
