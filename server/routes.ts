@@ -839,6 +839,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/okrs/search", requireAdmin, async (req, res) => {
+    try {
+      const { spuId, subUnitId, quarter, year, q } = req.query;
+      let okrs = await storage.getAllOkrsWithDetails();
+
+      if (spuId && spuId !== "all") {
+        okrs = okrs.filter(o => o.spuId === spuId);
+      }
+      if (subUnitId && subUnitId !== "all") {
+        okrs = okrs.filter(o => o.subUnitId === subUnitId);
+      }
+      if (quarter && quarter !== "all") {
+        okrs = okrs.filter(o => o.quarter === quarter);
+      }
+      if (year && year !== "all") {
+        okrs = okrs.filter(o => String(o.year) === year);
+      }
+      if (q && typeof q === 'string' && q.trim()) {
+        const search = q.toLowerCase().trim();
+        okrs = okrs.filter(o =>
+          o.objectiveStatement.toLowerCase().includes(search) ||
+          o.okrNumber.toLowerCase().includes(search) ||
+          (o.keyResults && o.keyResults.toLowerCase().includes(search)) ||
+          (o.spu?.name && o.spu.name.toLowerCase().includes(search)) ||
+          (o.subUnit?.name && o.subUnit.name.toLowerCase().includes(search)) ||
+          (o.staff && o.staff.name.toLowerCase().includes(search))
+        );
+      }
+
+      const results = okrs.slice(0, 50).map(o => ({
+        id: o.id,
+        okrNumber: o.okrNumber,
+        objectiveStatement: o.objectiveStatement,
+        keyResults: o.keyResults,
+        quarter: o.quarter,
+        year: o.year,
+        spuName: o.spu?.name || '',
+        subUnitName: o.subUnit?.name || '',
+        staffName: o.staff?.name || '',
+      }));
+
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to search OKRs" });
+    }
+  });
+
   app.get("/api/okrs/:staffId", async (req, res) => {
     try {
       const okrs = await storage.getOkrsByStaff(req.params.staffId);
@@ -2019,53 +2066,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Score import error:", error);
       res.status(500).json({ error: "Failed to import scores", details: error.message });
-    }
-  });
-
-  app.get("/api/okrs/search", requireAdmin, async (req, res) => {
-    try {
-      const { spuId, subUnitId, quarter, year, q } = req.query;
-      let okrs = await storage.getAllOkrsWithDetails();
-
-      if (spuId && spuId !== "all") {
-        okrs = okrs.filter(o => o.spuId === spuId);
-      }
-      if (subUnitId && subUnitId !== "all") {
-        okrs = okrs.filter(o => o.subUnitId === subUnitId);
-      }
-      if (quarter && quarter !== "all") {
-        okrs = okrs.filter(o => o.quarter === quarter);
-      }
-      if (year && year !== "all") {
-        okrs = okrs.filter(o => String(o.year) === year);
-      }
-      if (q && typeof q === 'string' && q.trim()) {
-        const search = q.toLowerCase().trim();
-        okrs = okrs.filter(o =>
-          o.objectiveStatement.toLowerCase().includes(search) ||
-          o.okrNumber.toLowerCase().includes(search) ||
-          (o.keyResults && o.keyResults.toLowerCase().includes(search)) ||
-          (o.spu?.name && o.spu.name.toLowerCase().includes(search)) ||
-          (o.subUnit?.name && o.subUnit.name.toLowerCase().includes(search)) ||
-          (o.staff && o.staff.name.toLowerCase().includes(search))
-        );
-      }
-
-      const results = okrs.slice(0, 50).map(o => ({
-        id: o.id,
-        okrNumber: o.okrNumber,
-        objectiveStatement: o.objectiveStatement,
-        keyResults: o.keyResults,
-        quarter: o.quarter,
-        year: o.year,
-        spuName: o.spu?.name || '',
-        subUnitName: o.subUnit?.name || '',
-        staffName: o.staff?.name || '',
-      }));
-
-      res.json(results);
-    } catch (error: any) {
-      res.status(500).json({ error: "Failed to search OKRs" });
     }
   });
 
