@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Home, FileText, TrendingUp, BarChart3, Settings, Download, LogOut, LineChart } from "lucide-react";
+import { Home, FileText, TrendingUp, BarChart3, Settings, Download, LogOut, Award } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
 
 interface AppHeaderProps {
@@ -17,8 +17,7 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
     { path: "/", icon: Home, label: "Home", adminOnly: false },
     { path: "/submit-okr", icon: FileText, label: "Submit OKR", adminOnly: false },
     { path: "/quarterly-update", icon: TrendingUp, label: "Score OKR", adminOnly: false },
-    { path: "/dashboard", icon: BarChart3, label: "Dashboard", adminOnly: false },
-    { path: "/trends", icon: LineChart, label: "Trends", adminOnly: false },
+    { path: "/university-achievement", icon: Award, label: "Achievement", adminOnly: false },
     { path: "/admin", icon: Settings, label: "Admin", adminOnly: true },
     { path: "/export", icon: Download, label: "Export", adminOnly: false },
   ];

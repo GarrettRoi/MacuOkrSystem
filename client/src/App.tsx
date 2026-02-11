@@ -9,10 +9,9 @@ import StaffSelection from "@/pages/staff-selection";
 import Home from "@/pages/home";
 import SubmitOkr from "@/pages/submit-okr";
 import QuarterlyUpdate from "@/pages/quarterly-update";
-import Dashboard from "@/pages/dashboard";
+import UniversityAchievement from "@/pages/university-achievement";
 import Admin from "@/pages/admin";
 import Export from "@/pages/export";
-import Trends from "@/pages/trends";
 import Data from "@/pages/data";
 import EmployeeProgress from "@/pages/employee-progress";
 import MyOkrs from "@/pages/my-okrs";
@@ -25,11 +24,10 @@ function Router({ staff, isAdmin }: { staff: StaffWithDetails; isAdmin: boolean 
       <Route path="/" component={() => <Home staff={staff} isAdmin={isAdmin} />} />
       <Route path="/submit-okr" component={() => <SubmitOkr staff={staff} />} />
       <Route path="/quarterly-update" component={() => <QuarterlyUpdate staff={staff} />} />
-      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/university-achievement" component={UniversityAchievement} />
       <Route path="/employee-progress" component={() => <EmployeeProgress staff={staff} />} />
       <Route path="/my-okrs" component={() => <MyOkrs staff={staff} />} />
       <Route path="/data" component={Data} />
-      <Route path="/trends" component={Trends} />
       {(isAdmin || staff.role === "leader" || staff.role === "super_admin") && (
         <Route path="/admin" component={() => <Admin staff={staff} />} />
       )}

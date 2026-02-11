@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, TrendingUp, BarChart3, Settings, Download, LineChart, Database, Users, ClipboardList } from "lucide-react";
+import { FileText, TrendingUp, BarChart3, Settings, Download, Database, Users, ClipboardList } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
 import { getSortableName } from "@/lib/utils";
 
@@ -40,30 +40,21 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       adminOnly: false,
     },
     {
-      title: "View Dashboard",
-      description: "Track progress and performance across all SPUs",
+      title: "University Achievement",
+      description: "Dashboard and historical trends for all SPUs",
       icon: BarChart3,
-      path: "/dashboard",
+      path: "/university-achievement",
       color: "text-purple-600",
       bg: "bg-purple-50",
       adminOnly: false,
     },
     {
-      title: "University Achievement",
-      description: "Comprehensive view of OKR progress by employee with filtering",
+      title: "Employee Progress",
+      description: "Comprehensive view of OKR progress by SPU with filtering",
       icon: Users,
       path: "/employee-progress",
       color: "text-pink-600",
       bg: "bg-pink-50",
-      adminOnly: false,
-    },
-    {
-      title: "Historical Trends",
-      description: "Year-over-year comparison and quarterly trend analysis",
-      icon: LineChart,
-      path: "/trends",
-      color: "text-indigo-600",
-      bg: "bg-indigo-50",
       adminOnly: false,
     },
     {
