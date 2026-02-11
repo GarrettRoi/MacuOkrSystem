@@ -1143,7 +1143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (planningYear && planningYear !== "All") {
-        const startYearSetting = await storage.getAppSetting("strategicPlanStartYear");
+        const startYearSetting = await storage.getSetting("strategicPlanStartYear");
         const startYear = startYearSetting ? parseInt(startYearSetting) : 2024;
         const pyNum = parseInt(planningYear as string);
         okrs = okrs.filter((okr) => getPlanningYear(okr.quarter, okr.year, startYear) === pyNum);
@@ -1715,7 +1715,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const allOkrs = await storage.getAllOkrs();
+      const allOkrsDetailed = await storage.getAllOkrsWithDetails();
+      const allOkrs = allOkrsDetailed;
       const allSpus = await storage.getAllSpus();
       const allSubUnits = await storage.getAllSubUnits();
 
@@ -1824,8 +1825,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         let matchedOkrId: string | null = null;
         let matchedOkrInfo: string = '';
+        let matchedOkrDetails: any = null;
         const rowErrors: string[] = [];
         const rowWarnings: string[] = [];
+
+        const formatOkrDetails = (okr: any) => ({
+          id: okr.id,
+          okrNumber: okr.okrNumber,
+          objectiveStatement: okr.objectiveStatement,
+          keyResults: okr.keyResults,
+          quarter: okr.quarter,
+          year: okr.year,
+          spuName: okr.spu?.name || '',
+          subUnitName: okr.subUnit?.name || '',
+          staffName: okr.staff?.name || '',
+        });
+
+        let candidateOkrs: any[] = [];
 
         if (!matchedSpuId) {
           rowErrors.push(`SPU not found: "${primarySpuName}"`);
@@ -1842,9 +1858,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (subMatches.length === 1) {
               matchedOkrId = subMatches[0].id;
               matchedOkrInfo = `Matched by SPU + Sub-unit + Quarter + OKR#`;
+              matchedOkrDetails = formatOkrDetails(subMatches[0]);
             } else if (subMatches.length > 1) {
               matchedOkrId = subMatches[0].id;
               matchedOkrInfo = `Multiple matches (${subMatches.length}), using first`;
+              matchedOkrDetails = formatOkrDetails(subMatches[0]);
               rowWarnings.push(`Multiple OKR matches found`);
             }
           }
@@ -1853,14 +1871,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (candidates.length === 1) {
               matchedOkrId = candidates[0].id;
               matchedOkrInfo = `Matched by SPU + Quarter + OKR#`;
+              matchedOkrDetails = formatOkrDetails(candidates[0]);
             } else if (candidates.length > 1) {
               matchedOkrId = candidates[0].id;
               matchedOkrInfo = `Multiple matches (${candidates.length}), using first`;
+              matchedOkrDetails = formatOkrDetails(candidates[0]);
               rowWarnings.push(`Multiple OKR matches found`);
             } else {
               rowErrors.push(`No matching OKR found for ${okrNumber} in ${quarter} ${year}`);
             }
           }
+
+          const nearbyOkrs = allOkrs.filter(o =>
+            o.spuId === matchedSpuId &&
+            o.quarter === quarter &&
+            o.year === year
+          );
+          candidateOkrs = nearbyOkrs.map(formatOkrDetails);
         }
 
         if (!scorerName) rowErrors.push('Missing scorer name');
@@ -1882,6 +1909,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           notes: notesText,
           matchedOkrId,
           matchedOkrInfo,
+          matchedOkrDetails,
+          candidateOkrs,
           errors: rowErrors,
           warnings: rowWarnings,
           include: rowErrors.length === 0 && matchedOkrId !== null,
@@ -1990,6 +2019,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Score import error:", error);
       res.status(500).json({ error: "Failed to import scores", details: error.message });
+    }
+  });
+
+  app.get("/api/okrs/search", requireAdmin, async (req, res) => {
+    try {
+      const { spuId, subUnitId, quarter, year, q } = req.query;
+      let okrs = await storage.getAllOkrsWithDetails();
+
+      if (spuId && spuId !== "all") {
+        okrs = okrs.filter(o => o.spuId === spuId);
+      }
+      if (subUnitId && subUnitId !== "all") {
+        okrs = okrs.filter(o => o.subUnitId === subUnitId);
+      }
+      if (quarter && quarter !== "all") {
+        okrs = okrs.filter(o => o.quarter === quarter);
+      }
+      if (year && year !== "all") {
+        okrs = okrs.filter(o => String(o.year) === year);
+      }
+      if (q && typeof q === 'string' && q.trim()) {
+        const search = q.toLowerCase().trim();
+        okrs = okrs.filter(o =>
+          o.objectiveStatement.toLowerCase().includes(search) ||
+          o.okrNumber.toLowerCase().includes(search) ||
+          (o.keyResults && o.keyResults.toLowerCase().includes(search)) ||
+          (o.spu?.name && o.spu.name.toLowerCase().includes(search)) ||
+          (o.subUnit?.name && o.subUnit.name.toLowerCase().includes(search)) ||
+          (o.staff && o.staff.name.toLowerCase().includes(search))
+        );
+      }
+
+      const results = okrs.slice(0, 50).map(o => ({
+        id: o.id,
+        okrNumber: o.okrNumber,
+        objectiveStatement: o.objectiveStatement,
+        keyResults: o.keyResults,
+        quarter: o.quarter,
+        year: o.year,
+        spuName: o.spu?.name || '',
+        subUnitName: o.subUnit?.name || '',
+        staffName: o.staff?.name || '',
+      }));
+
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to search OKRs" });
     }
   });
 

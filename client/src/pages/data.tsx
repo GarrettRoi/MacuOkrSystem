@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog } from "@shared/schema";
 import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
@@ -92,6 +92,11 @@ export default function Data() {
   const [scoreImportPreviewData, setScoreImportPreviewData] = useState<any[]>([]);
   const [scoreImportSummary, setScoreImportSummary] = useState<any>(null);
   const [editingScoreRow, setEditingScoreRow] = useState<number | null>(null);
+  const [linkingScoreRow, setLinkingScoreRow] = useState<number | null>(null);
+  const [okrSearchQuery, setOkrSearchQuery] = useState("");
+  const [okrSearchSpu, setOkrSearchSpu] = useState("all");
+  const [okrSearchQuarter, setOkrSearchQuarter] = useState("all");
+  const [okrSearchYear, setOkrSearchYear] = useState("all");
 
   // Edit reason dialog
   const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
@@ -136,6 +141,66 @@ export default function Data() {
   const planStartYear = planStartYearData?.startYear || 2024;
 
   const [showEditLogs, setShowEditLogs] = useState(false);
+
+  const okrSearchParams = useMemo(() => {
+    const params = new URLSearchParams();
+    if (okrSearchSpu !== "all") params.append("spuId", okrSearchSpu);
+    if (okrSearchQuarter !== "all") params.append("quarter", okrSearchQuarter);
+    if (okrSearchYear !== "all") params.append("year", okrSearchYear);
+    if (okrSearchQuery.trim()) params.append("q", okrSearchQuery.trim());
+    return params.toString();
+  }, [okrSearchSpu, okrSearchQuarter, okrSearchYear, okrSearchQuery]);
+
+  const { data: searchedOkrs, isLoading: isSearchingOkrs } = useQuery<any[]>({
+    queryKey: ["/api/okrs/search", okrSearchParams],
+    queryFn: async () => {
+      const res = await fetch(`/api/okrs/search?${okrSearchParams}`);
+      if (!res.ok) throw new Error("Search failed");
+      return res.json();
+    },
+    enabled: linkingScoreRow !== null,
+  });
+
+  const linkOkrToScoreRow = (rowIdx: number, okr: any) => {
+    setScoreImportPreviewData(prev => {
+      const updated = [...prev];
+      updated[rowIdx] = {
+        ...updated[rowIdx],
+        matchedOkrId: okr.id,
+        matchedOkrInfo: `Manually linked to ${okr.okrNumber}`,
+        matchedOkrDetails: okr,
+        errors: updated[rowIdx].errors.filter((e: string) => !e.startsWith('No matching OKR')),
+        include: true,
+      };
+      return updated;
+    });
+    setLinkingScoreRow(null);
+    toast({ title: "OKR Linked", description: `Linked to ${okr.okrNumber}: ${okr.objectiveStatement.substring(0, 60)}...` });
+  };
+
+  const unlinkOkrFromScoreRow = (rowIdx: number) => {
+    setScoreImportPreviewData(prev => {
+      const updated = [...prev];
+      updated[rowIdx] = {
+        ...updated[rowIdx],
+        matchedOkrId: null,
+        matchedOkrInfo: '',
+        matchedOkrDetails: null,
+        errors: [...updated[rowIdx].errors, `No matching OKR found for ${updated[rowIdx].okrNumber} in ${updated[rowIdx].quarter} ${updated[rowIdx].year}`],
+        include: false,
+      };
+      return updated;
+    });
+  };
+
+  const parseKeyResultsForDisplay = (krText: string | null): string[] => {
+    if (!krText) return [];
+    try {
+      const parsed = JSON.parse(krText);
+      if (Array.isArray(parsed)) return parsed.map((kr: any) => typeof kr === 'string' ? kr : kr.description || '');
+    } catch {}
+    return [krText];
+  };
 
   // Filter the data
   const filteredOkrs = useMemo(() => {
@@ -412,6 +477,7 @@ export default function Data() {
     setScoreImportPreviewData([]);
     setScoreImportSummary(null);
     setEditingScoreRow(null);
+    setLinkingScoreRow(null);
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -2004,8 +2070,9 @@ export default function Data() {
                       <TableHead>Sub-unit</TableHead>
                       <TableHead>KR Scores</TableHead>
                       <TableHead>Avg</TableHead>
+                      <TableHead>Objective</TableHead>
                       <TableHead>Match Status</TableHead>
-                      <TableHead className="w-10">Edit</TableHead>
+                      <TableHead className="w-20">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2036,6 +2103,15 @@ export default function Data() {
                               : "-"}
                           </TableCell>
                           <TableCell className="text-sm font-medium">{row.averageScore != null ? `${row.averageScore}%` : "-"}</TableCell>
+                          <TableCell className="text-sm max-w-[200px]">
+                            {row.matchedOkrDetails ? (
+                              <span className="text-xs text-muted-foreground line-clamp-2" title={row.matchedOkrDetails.objectiveStatement}>
+                                {row.matchedOkrDetails.objectiveStatement}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">-</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-sm">
                             {row.matchedOkrId ? (
                               <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300">Matched</Badge>
@@ -2044,19 +2120,49 @@ export default function Data() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setEditingScoreRow(editingScoreRow === idx ? null : idx)}
-                              data-testid={`button-edit-score-row-${idx}`}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setEditingScoreRow(editingScoreRow === idx ? null : idx)}
+                                title="View/Edit details"
+                                data-testid={`button-edit-score-row-${idx}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {!row.matchedOkrId ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setLinkingScoreRow(idx);
+                                    setOkrSearchSpu("all");
+                                    setOkrSearchQuarter(row.quarter || "all");
+                                    setOkrSearchYear(row.year ? String(row.year) : "all");
+                                    setOkrSearchQuery("");
+                                  }}
+                                  title="Link to OKR"
+                                  data-testid={`button-link-score-row-${idx}`}
+                                >
+                                  <Link className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => unlinkOkrFromScoreRow(idx)}
+                                  title="Unlink OKR"
+                                  data-testid={`button-unlink-score-row-${idx}`}
+                                >
+                                  <Unlink className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                         {editingScoreRow === idx && (
                           <TableRow key={`score-edit-${idx}`}>
-                            <TableCell colSpan={12} className="bg-muted/30 p-4">
+                            <TableCell colSpan={13} className="bg-muted/30 p-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 <div className="space-y-1">
                                   <label className="text-xs font-medium text-muted-foreground">Scorer Name</label>
@@ -2149,6 +2255,72 @@ export default function Data() {
                                   <label className="text-xs font-medium text-muted-foreground">Match Info</label>
                                   <p className="text-xs text-muted-foreground">{row.matchedOkrInfo || "No match found"}</p>
                                 </div>
+                                {row.matchedOkrDetails && (
+                                  <div className="space-y-2 md:col-span-2 lg:col-span-3 border rounded-md p-3 bg-green-50/50 dark:bg-green-950/20">
+                                    <label className="text-xs font-medium text-green-700 dark:text-green-300">Matched OKR Details</label>
+                                    <div className="text-xs space-y-1">
+                                      <p><span className="font-medium">OKR:</span> {row.matchedOkrDetails.okrNumber} ({row.matchedOkrDetails.quarter} {row.matchedOkrDetails.year})</p>
+                                      <p><span className="font-medium">SPU:</span> {row.matchedOkrDetails.spuName}{row.matchedOkrDetails.subUnitName ? ` / ${row.matchedOkrDetails.subUnitName}` : ''}</p>
+                                      <p><span className="font-medium">Staff:</span> {row.matchedOkrDetails.staffName || 'N/A'}</p>
+                                      <p><span className="font-medium">Objective:</span> {row.matchedOkrDetails.objectiveStatement}</p>
+                                      {row.matchedOkrDetails.keyResults && (
+                                        <div>
+                                          <span className="font-medium">Key Results:</span>
+                                          <ul className="list-disc list-inside ml-2 mt-1">
+                                            {parseKeyResultsForDisplay(row.matchedOkrDetails.keyResults).map((kr: string, kri: number) => (
+                                              <li key={kri}>{kr}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                                {!row.matchedOkrId && row.candidateOkrs && row.candidateOkrs.length > 0 && (
+                                  <div className="space-y-2 md:col-span-2 lg:col-span-3 border rounded-md p-3 bg-amber-50/50 dark:bg-amber-950/20">
+                                    <label className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                      Nearby OKRs in same SPU ({row.candidateOkrs.length} found for {row.quarter} {row.year})
+                                    </label>
+                                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                      {row.candidateOkrs.map((candidate: any, ci: number) => (
+                                        <div key={ci} className="flex items-start gap-2 text-xs border-b pb-2 last:border-0">
+                                          <div className="flex-1 min-w-0">
+                                            <p className="font-medium">{candidate.okrNumber}{candidate.subUnitName ? ` (${candidate.subUnitName})` : ''} - {candidate.staffName}</p>
+                                            <p className="text-muted-foreground truncate" title={candidate.objectiveStatement}>{candidate.objectiveStatement}</p>
+                                          </div>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => linkOkrToScoreRow(idx, candidate)}
+                                            data-testid={`button-link-candidate-${idx}-${ci}`}
+                                          >
+                                            <Link className="h-3 w-3 mr-1" />
+                                            Link
+                                          </Button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {!row.matchedOkrId && (
+                                  <div className="md:col-span-2 lg:col-span-3">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setLinkingScoreRow(idx);
+                                        setOkrSearchSpu("all");
+                                        setOkrSearchQuarter(row.quarter || "all");
+                                        setOkrSearchYear(row.year ? String(row.year) : "all");
+                                        setOkrSearchQuery("");
+                                      }}
+                                      data-testid={`button-search-link-${idx}`}
+                                    >
+                                      <Search className="h-3 w-3 mr-1" />
+                                      Search all OKRs to link
+                                    </Button>
+                                  </div>
+                                )}
                                 <div className="space-y-1 md:col-span-2 lg:col-span-3">
                                   <label className="text-xs font-medium text-muted-foreground">Qualitative Notes</label>
                                   <Textarea
@@ -2211,6 +2383,125 @@ export default function Data() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={linkingScoreRow !== null} onOpenChange={(open) => { if (!open) setLinkingScoreRow(null); }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Search and Link OKR
+            </DialogTitle>
+            <DialogDescription>
+              {linkingScoreRow !== null && scoreImportPreviewData[linkingScoreRow] && (
+                <>
+                  Finding an OKR to link to Row {scoreImportPreviewData[linkingScoreRow].rowIndex}: {scoreImportPreviewData[linkingScoreRow].okrNumber} - {scoreImportPreviewData[linkingScoreRow].spuName} ({scoreImportPreviewData[linkingScoreRow].quarter} {scoreImportPreviewData[linkingScoreRow].year})
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Search</label>
+                <Input
+                  placeholder="Search objectives..."
+                  value={okrSearchQuery}
+                  onChange={(e) => setOkrSearchQuery(e.target.value)}
+                  data-testid="input-okr-search-query"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">SPU</label>
+                <Select value={okrSearchSpu} onValueChange={setOkrSearchSpu}>
+                  <SelectTrigger data-testid="select-okr-search-spu"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All SPUs</SelectItem>
+                    {spus?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Quarter</label>
+                <Select value={okrSearchQuarter} onValueChange={setOkrSearchQuarter}>
+                  <SelectTrigger data-testid="select-okr-search-quarter"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Quarters</SelectItem>
+                    {QUARTERS.map(q => <SelectItem key={q.value} value={q.value}>{q.value}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Year</label>
+                <Select value={okrSearchYear} onValueChange={setOkrSearchYear}>
+                  <SelectTrigger data-testid="select-okr-search-year"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Years</SelectItem>
+                    {years?.map(y => <SelectItem key={y.year} value={String(y.year)}>{y.year}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="border rounded-md overflow-y-auto max-h-[40vh]">
+              {isSearchingOkrs ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">Searching...</div>
+              ) : searchedOkrs && searchedOkrs.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="sticky top-0 bg-background z-50">
+                      <TableHead>OKR #</TableHead>
+                      <TableHead>SPU / Sub-unit</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Staff</TableHead>
+                      <TableHead>Objective Statement</TableHead>
+                      <TableHead>Key Results</TableHead>
+                      <TableHead className="w-16">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {searchedOkrs.map((okr: any, oi: number) => (
+                      <TableRow key={okr.id} data-testid={`row-okr-search-${oi}`}>
+                        <TableCell className="text-sm font-medium">{okr.okrNumber}</TableCell>
+                        <TableCell className="text-sm">{okr.spuName}{okr.subUnitName ? ` / ${okr.subUnitName}` : ''}</TableCell>
+                        <TableCell className="text-sm">{okr.quarter} {okr.year}</TableCell>
+                        <TableCell className="text-sm">{okr.staffName}</TableCell>
+                        <TableCell className="text-xs max-w-[200px]">
+                          <span className="line-clamp-3" title={okr.objectiveStatement}>{okr.objectiveStatement}</span>
+                        </TableCell>
+                        <TableCell className="text-xs max-w-[150px]">
+                          <ul className="list-disc list-inside">
+                            {parseKeyResultsForDisplay(okr.keyResults).slice(0, 3).map((kr: string, ki: number) => (
+                              <li key={ki} className="truncate" title={kr}>{kr}</li>
+                            ))}
+                          </ul>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => linkingScoreRow !== null && linkOkrToScoreRow(linkingScoreRow, okr)}
+                            data-testid={`button-select-okr-${oi}`}
+                          >
+                            Link
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  {searchedOkrs && searchedOkrs.length === 0 ? "No OKRs found matching filters" : "Use the filters above to search for OKRs"}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkingScoreRow(null)} data-testid="button-cancel-link">
+              Cancel
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
