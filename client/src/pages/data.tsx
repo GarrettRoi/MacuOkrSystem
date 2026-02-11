@@ -877,7 +877,7 @@ export default function Data() {
                           <TableCell>
                             {getQuarterLabel(okr.quarter)} {okr.year}
                           </TableCell>
-                          <TableCell className="max-w-xs truncate">{okr.objectiveStatement}</TableCell>
+                          <TableCell className="max-w-xs truncate" title={okr.objectiveStatement}>{okr.objectiveStatement}</TableCell>
                           <TableCell>
                             <span className="font-semibold" data-testid={`text-progress-${okr.id}`}>
                               {okr.derivedProgress}%
@@ -1670,14 +1670,14 @@ export default function Data() {
                             />
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{row.rowIndex}</TableCell>
-                          <TableCell className="text-sm font-medium max-w-[120px] truncate">{row.staffName}</TableCell>
+                          <TableCell className="text-sm font-medium max-w-[120px] truncate" title={row.staffName}>{row.staffName}</TableCell>
                           <TableCell className="text-sm">{row.quarter}</TableCell>
                           <TableCell className="text-sm">{row.year}</TableCell>
                           <TableCell className="text-sm">{row.okrNumber}</TableCell>
-                          <TableCell className="text-sm max-w-[150px] truncate">{row.spuName}</TableCell>
-                          <TableCell className="text-sm max-w-[100px] truncate">{row.subUnitName || "-"}</TableCell>
-                          <TableCell className="text-sm max-w-[200px] truncate">{row.objectiveStatement || "-"}</TableCell>
-                          <TableCell className="text-sm max-w-[150px] truncate">{row.keyResult1 || "-"}</TableCell>
+                          <TableCell className="text-sm max-w-[150px] truncate" title={row.spuName}>{row.spuName}</TableCell>
+                          <TableCell className="text-sm max-w-[100px] truncate" title={row.subUnitName || "-"}>{row.subUnitName || "-"}</TableCell>
+                          <TableCell className="text-sm max-w-[200px] truncate" title={row.objectiveStatement || "-"}>{row.objectiveStatement || "-"}</TableCell>
+                          <TableCell className="text-sm max-w-[150px] truncate" title={row.keyResult1 || "-"}>{row.keyResult1 || "-"}</TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
@@ -1985,12 +1985,12 @@ export default function Data() {
                             />
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{row.rowIndex}</TableCell>
-                          <TableCell className="text-sm font-medium max-w-[120px] truncate">{row.scorerName}</TableCell>
+                          <TableCell className="text-sm font-medium max-w-[120px] truncate" title={row.scorerName}>{row.scorerName}</TableCell>
                           <TableCell className="text-sm">{row.quarter}</TableCell>
                           <TableCell className="text-sm">{row.year}</TableCell>
                           <TableCell className="text-sm">{row.okrNumber}</TableCell>
-                          <TableCell className="text-sm max-w-[150px] truncate">{row.spuName}</TableCell>
-                          <TableCell className="text-sm max-w-[100px] truncate">{row.subUnitName || "-"}</TableCell>
+                          <TableCell className="text-sm max-w-[150px] truncate" title={row.spuName}>{row.spuName}</TableCell>
+                          <TableCell className="text-sm max-w-[100px] truncate" title={row.subUnitName || "-"}>{row.subUnitName || "-"}</TableCell>
                           <TableCell className="text-sm">
                             {row.krScores && row.krScores.length > 0
                               ? row.krScores.map((kr: any) => `KR${kr.krNumber}: ${kr.score}`).join(", ")
