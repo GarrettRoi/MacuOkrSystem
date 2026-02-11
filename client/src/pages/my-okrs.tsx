@@ -62,12 +62,18 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   const mySpuOkrs = spuOkrs || [];
 
   const filteredOkrs = useMemo(() => {
-    return mySpuOkrs.filter((okr) => {
-      const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
-      const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
-      const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
-      return yearMatch && quarterMatch && spuMatch;
-    });
+    const quarterOrder: Record<string, number> = { "Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4 };
+    return mySpuOkrs
+      .filter((okr) => {
+        const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
+        const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
+        const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
+        return yearMatch && quarterMatch && spuMatch;
+      })
+      .sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return (quarterOrder[a.quarter] || 0) - (quarterOrder[b.quarter] || 0);
+      });
   }, [mySpuOkrs, yearFilter, quarterFilter, spuFilter]);
 
   const getLatestUpdate = (okrId: string) => {
