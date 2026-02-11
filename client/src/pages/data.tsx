@@ -934,19 +934,29 @@ export default function Data() {
                                               <p className="text-sm font-medium">Notes</p>
                                               <p className="text-sm text-muted-foreground">{update.notes}</p>
                                             </div>
-                                            {update.keyResultScoresParsed && (
-                                              <div className="md:col-span-2">
-                                                <p className="text-sm font-medium">Key Result Scores</p>
-                                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                                  {update.keyResultScoresParsed.map((kr: any, idx: number) => (
-                                                    <div key={idx} className="text-sm">
-                                                      <span className="font-medium">KR{kr.keyResultNumber}:</span>{" "}
-                                                      <span className="text-muted-foreground">{kr.score}%</span>
-                                                    </div>
-                                                  ))}
+                                            {update.keyResultScoresParsed && (() => {
+                                              const okrKrs = parseKeyResultsJson(okr.keyResults);
+                                              return (
+                                                <div className="md:col-span-2">
+                                                  <p className="text-sm font-medium">Key Result Scores</p>
+                                                  <div className="space-y-1 mt-2">
+                                                    {update.keyResultScoresParsed.map((kr: any, idx: number) => {
+                                                      const krDef = okrKrs[kr.keyResultNumber - 1];
+                                                      return (
+                                                        <div key={idx} className="text-sm flex items-baseline gap-2">
+                                                          <span className="font-medium shrink-0">KR{kr.keyResultNumber}: {kr.score}%</span>
+                                                          {krDef?.description && (
+                                                            <span className="text-muted-foreground text-xs truncate" title={krDef.description}>
+                                                              — {krDef.description}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    })}
+                                                  </div>
                                                 </div>
-                                              </div>
-                                            )}
+                                              );
+                                            })()}
                                             <div className="md:col-span-2 text-right">
                                               <Button
                                                 variant="outline"
