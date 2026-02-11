@@ -265,7 +265,12 @@ export default function Data() {
       return await res.json();
     },
     onSuccess: (data: any) => {
-      setImportPreviewData(data.rows || []);
+      const rows = (data.rows || []).slice().sort((a: any, b: any) => {
+        const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return dateA - dateB;
+      });
+      setImportPreviewData(rows);
       setImportSummary({
         totalRows: data.totalRows,
         parsedRows: data.parsedRows,
@@ -1642,6 +1647,7 @@ export default function Data() {
                         />
                       </TableHead>
                       <TableHead className="w-10">Row</TableHead>
+                      <TableHead>Submitted</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Quarter</TableHead>
                       <TableHead>Year</TableHead>
@@ -1670,6 +1676,7 @@ export default function Data() {
                             />
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{row.rowIndex}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap" title={row.timestamp || "-"}>{row.timestamp ? new Date(row.timestamp).toLocaleDateString() : "-"}</TableCell>
                           <TableCell className="text-sm font-medium max-w-[120px] truncate" title={row.staffName}>{row.staffName}</TableCell>
                           <TableCell className="text-sm">{row.quarter}</TableCell>
                           <TableCell className="text-sm">{row.year}</TableCell>
@@ -1691,8 +1698,14 @@ export default function Data() {
                         </TableRow>
                         {editingImportRow === idx && (
                           <TableRow key={`edit-${idx}`}>
-                            <TableCell colSpan={11} className="bg-muted/30 p-4">
+                            <TableCell colSpan={12} className="bg-muted/30 p-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Submitted</label>
+                                  <p className="text-sm py-2 px-3 border rounded-md bg-muted/50 text-muted-foreground">
+                                    {row.timestamp ? new Date(row.timestamp).toLocaleString() : "No date"}
+                                  </p>
+                                </div>
                                 <div className="space-y-1">
                                   <label className="text-xs font-medium text-muted-foreground">Staff Name</label>
                                   <Input
