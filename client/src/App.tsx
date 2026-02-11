@@ -13,7 +13,6 @@ import UniversityAchievement from "@/pages/university-achievement";
 import Admin from "@/pages/admin";
 import Export from "@/pages/export";
 import Data from "@/pages/data";
-import EmployeeProgress from "@/pages/employee-progress";
 import MyOkrs from "@/pages/my-okrs";
 import AppHeader from "@/components/app-header";
 import type { StaffWithDetails } from "@shared/schema";
@@ -25,7 +24,6 @@ function Router({ staff, isAdmin }: { staff: StaffWithDetails; isAdmin: boolean 
       <Route path="/submit-okr" component={() => <SubmitOkr staff={staff} />} />
       <Route path="/quarterly-update" component={() => <QuarterlyUpdate staff={staff} />} />
       <Route path="/university-achievement" component={UniversityAchievement} />
-      <Route path="/employee-progress" component={() => <EmployeeProgress staff={staff} />} />
       <Route path="/my-okrs" component={() => <MyOkrs staff={staff} />} />
       <Route path="/data" component={Data} />
       {(isAdmin || staff.role === "leader" || staff.role === "super_admin") && (
