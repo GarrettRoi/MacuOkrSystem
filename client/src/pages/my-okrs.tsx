@@ -71,8 +71,8 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
         return yearMatch && quarterMatch && spuMatch;
       })
       .sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
-        return (quarterOrder[a.quarter] || 0) - (quarterOrder[b.quarter] || 0);
+        if (a.year !== b.year) return b.year - a.year;
+        return (quarterOrder[b.quarter] || 0) - (quarterOrder[a.quarter] || 0);
       });
   }, [mySpuOkrs, yearFilter, quarterFilter, spuFilter]);
 
