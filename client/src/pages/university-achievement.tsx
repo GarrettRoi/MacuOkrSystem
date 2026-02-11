@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter, Calendar } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, Year } from "@shared/schema";
-import { parseMultiSelectField } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const defaultYear = new Date().getFullYear();
@@ -20,6 +20,7 @@ const YEARS = ["All", String(defaultYear - 1), String(defaultYear), String(defau
 function DashboardTab() {
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
   const [yearFilter, setYearFilter] = useState<string>(String(defaultYear));
+  const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
   const [spuFilter, setSpuFilter] = useState<string>("All");
   const [keywordSearch, setKeywordSearch] = useState<string>("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -37,11 +38,17 @@ function DashboardTab() {
     queryKey: ["/api/spus"],
   });
 
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+  });
+  const planStartYear = planStartYearData?.startYear || 2024;
+
   const isLoading = okrsLoading || updatesLoading || spusLoading;
 
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
+    const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
     const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
     const keywordMatch = !keywordSearch || 
       okr.objectiveStatement.toLowerCase().includes(keywordSearch.toLowerCase()) ||
@@ -49,12 +56,13 @@ function DashboardTab() {
       parseMultiSelectField(okr.universityKeyResult).some(kr => kr.toLowerCase().includes(keywordSearch.toLowerCase())) ||
       okr.okrNumber.toLowerCase().includes(keywordSearch.toLowerCase());
     
-    return quarterMatch && yearMatch && spuMatch && keywordMatch;
+    return quarterMatch && yearMatch && planningYearMatch && spuMatch && keywordMatch;
   }) || [];
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
     setYearFilter(String(defaultYear));
+    setPlanningYearFilter("All");
     setSpuFilter("All");
     setKeywordSearch("");
   };
@@ -62,6 +70,7 @@ function DashboardTab() {
   const activeFilterCount = [
     quarterFilter !== "All",
     yearFilter !== String(defaultYear),
+    planningYearFilter !== "All",
     spuFilter !== "All",
     keywordSearch !== "",
   ].filter(Boolean).length;
@@ -123,6 +132,19 @@ function DashboardTab() {
                 {YEARS.map((y) => (
                   <SelectItem key={y} value={y} data-testid={`option-filter-year-${y}`}>
                     {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={planningYearFilter} onValueChange={setPlanningYearFilter}>
+              <SelectTrigger className="w-40" data-testid="select-filter-planning-year">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Plan Years</SelectItem>
+                {PLANNING_YEARS.map((py) => (
+                  <SelectItem key={py} value={String(py)} data-testid={`option-filter-planning-year-${py}`}>
+                    Year {py}
                   </SelectItem>
                 ))}
               </SelectContent>

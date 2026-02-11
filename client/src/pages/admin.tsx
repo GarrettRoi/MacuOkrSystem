@@ -127,6 +127,13 @@ export default function Admin({ staff }: AdminProps) {
     enabled: staff.role === "super_admin",
   });
 
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+    enabled: staff.role === "super_admin",
+  });
+  const [editingStartYear, setEditingStartYear] = useState<string>("");
+  const planStartYear = planStartYearData?.startYear || 2024;
+
   const { data: universityObjectives, isLoading: objectivesLoading } = useQuery<UniversityObjectiveWithKeyResults[]>({
     queryKey: ["/api/university-objectives"],
     enabled: staff.role === "super_admin",
@@ -227,6 +234,19 @@ export default function Admin({ staff }: AdminProps) {
         description: enabled
           ? "Users must now enter a password to access the system."
           : "Users can now enter without a password by selecting Admin or Staff access.",
+      });
+    },
+  });
+
+  const updateStartYearMutation = useMutation({
+    mutationFn: async (startYear: number) => {
+      return await apiRequest("PUT", "/api/settings/strategic-plan-start-year", { startYear });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/strategic-plan-start-year"] });
+      toast({
+        title: "Strategic Plan Start Year Updated",
+        description: "The planning year calculations have been updated across the system.",
       });
     },
   });
@@ -1971,6 +1991,43 @@ export default function Admin({ staff }: AdminProps) {
                     disabled={togglePasswordLoginMutation.isPending}
                     data-testid="switch-password-login"
                   />
+                </div>
+
+                <div className="p-4 border rounded-md space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-base font-medium" data-testid="text-strategic-plan-label">Strategic Plan Start Year</Label>
+                    <p className="text-sm text-muted-foreground">
+                      The calendar year when Year 1 of the strategic plan begins. This affects how planning years (Year 1-4) are calculated from calendar quarters.
+                      Currently set to <span className="font-semibold">{planStartYear}</span>.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      min={2020}
+                      max={2040}
+                      value={editingStartYear || planStartYear}
+                      onChange={(e) => setEditingStartYear(e.target.value)}
+                      className="w-32"
+                      data-testid="input-strategic-plan-start-year"
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={updateStartYearMutation.isPending || !editingStartYear || parseInt(editingStartYear) === planStartYear}
+                      onClick={() => {
+                        const year = parseInt(editingStartYear);
+                        if (year >= 2020 && year <= 2040) {
+                          updateStartYearMutation.mutate(year);
+                        }
+                      }}
+                      data-testid="button-save-start-year"
+                    >
+                      {updateStartYearMutation.isPending ? "Saving..." : "Save"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Example: If start year is {planStartYear}, then Q3 {planStartYear} = Year 1 Q3, Q1 {planStartYear + 1} = Year 2 Q1.
+                  </p>
                 </div>
               </CardContent>
             </Card>

@@ -17,7 +17,7 @@ import { z } from "zod";
 import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog } from "@shared/schema";
-import { getQuarterLabel, parseMultiSelectField, QUARTERS } from "@shared/schema";
+import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
 
 interface AggregatedOkr extends OkrWithDetails {
@@ -63,6 +63,7 @@ export default function Data() {
   // Filter states
   const [filterStaff, setFilterStaff] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<string>("all");
+  const [filterPlanningYear, setFilterPlanningYear] = useState<string>("all");
   const [filterQuarter, setFilterQuarter] = useState<string>("all");
   const [filterOkrNumber, setFilterOkrNumber] = useState<string>("all");
   const [filterSpu, setFilterSpu] = useState<string>("all");
@@ -129,6 +130,11 @@ export default function Data() {
     queryKey: ["/api/edit-logs"],
   });
 
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+  });
+  const planStartYear = planStartYearData?.startYear || 2024;
+
   const [showEditLogs, setShowEditLogs] = useState(false);
 
   // Filter the data
@@ -138,19 +144,21 @@ export default function Data() {
     return okrsWithUpdates.filter((okr) => {
       if (filterStaff !== "all" && okr.staffId !== filterStaff) return false;
       if (filterYear !== "all" && okr.year.toString() !== filterYear) return false;
+      if (filterPlanningYear !== "all" && getPlanningYear(okr.quarter, okr.year, planStartYear) !== parseInt(filterPlanningYear)) return false;
       if (filterQuarter !== "all" && okr.quarter !== filterQuarter) return false;
       if (filterOkrNumber !== "all" && okr.okrNumber !== filterOkrNumber) return false;
       if (filterSpu !== "all" && okr.spuId !== filterSpu) return false;
       return true;
     });
-  }, [okrsWithUpdates, filterStaff, filterYear, filterQuarter, filterOkrNumber, filterSpu]);
+  }, [okrsWithUpdates, filterStaff, filterYear, filterPlanningYear, filterQuarter, filterOkrNumber, filterSpu, planStartYear]);
 
   // Check if any filters are active
-  const hasActiveFilters = filterStaff !== "all" || filterYear !== "all" || filterQuarter !== "all" || filterOkrNumber !== "all" || filterSpu !== "all";
+  const hasActiveFilters = filterStaff !== "all" || filterYear !== "all" || filterPlanningYear !== "all" || filterQuarter !== "all" || filterOkrNumber !== "all" || filterSpu !== "all";
   
   const clearAllFilters = () => {
     setFilterStaff("all");
     setFilterYear("all");
+    setFilterPlanningYear("all");
     setFilterQuarter("all");
     setFilterOkrNumber("all");
     setFilterSpu("all");
@@ -745,6 +753,24 @@ export default function Data() {
                       {years?.sort((a, b) => b.year - a.year).map((yearItem) => (
                         <SelectItem key={yearItem.id} value={yearItem.year.toString()}>
                           {yearItem.year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Planning Year Filter */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Plan Year</label>
+                  <Select value={filterPlanningYear} onValueChange={setFilterPlanningYear}>
+                    <SelectTrigger data-testid="select-filter-planning-year">
+                      <SelectValue placeholder="All Plan Years" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Plan Years</SelectItem>
+                      {PLANNING_YEARS.map((py) => (
+                        <SelectItem key={py} value={String(py)}>
+                          Year {py}
                         </SelectItem>
                       ))}
                     </SelectContent>

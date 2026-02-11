@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Download, FileSpreadsheet } from "lucide-react";
 import type { OkrWithDetails } from "@shared/schema";
+import { getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const currentYear = new Date().getFullYear();
@@ -16,16 +17,23 @@ export default function Export() {
   const { toast } = useToast();
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
   const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
+  const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
   const [isExporting, setIsExporting] = useState(false);
 
   const { data: okrs } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
   });
 
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+  });
+  const planStartYear = planStartYearData?.startYear || 2024;
+
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
-    return quarterMatch && yearMatch;
+    const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
+    return quarterMatch && yearMatch && planningYearMatch;
   }) || [];
 
   const handleExport = async () => {
@@ -34,6 +42,7 @@ export default function Export() {
       const params = new URLSearchParams();
       if (quarterFilter !== "All") params.append("quarter", quarterFilter);
       if (yearFilter !== "All") params.append("year", yearFilter);
+      if (planningYearFilter !== "All") params.append("planningYear", planningYearFilter);
 
       const response = await fetch(`/api/export/csv?${params.toString()}`);
       
@@ -84,7 +93,7 @@ export default function Export() {
           <div className="bg-muted/50 p-6 rounded-md space-y-4">
             <h3 className="font-semibold text-base">Export Options</h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="export-quarter">Quarter</Label>
                 <Select value={quarterFilter} onValueChange={setQuarterFilter}>
@@ -111,6 +120,23 @@ export default function Export() {
                     {YEARS.map((y) => (
                       <SelectItem key={y} value={y} data-testid={`option-export-year-${y}`}>
                         {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="export-planning-year">Plan Year</Label>
+                <Select value={planningYearFilter} onValueChange={setPlanningYearFilter}>
+                  <SelectTrigger id="export-planning-year" data-testid="select-export-planning-year">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Plan Years</SelectItem>
+                    {PLANNING_YEARS.map((py) => (
+                      <SelectItem key={py} value={String(py)} data-testid={`option-export-planning-year-${py}`}>
+                        Year {py}
                       </SelectItem>
                     ))}
                   </SelectContent>

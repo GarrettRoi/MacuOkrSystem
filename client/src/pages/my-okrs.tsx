@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ArrowLeft, Target, Calendar, Building2, TrendingUp, Filter, X, User, Users } from "lucide-react";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 interface MyOkrsProps {
   staff: StaffWithDetails;
@@ -20,8 +20,14 @@ const YEARS = ["All", String(currentYear - 1), String(currentYear), String(curre
 
 export default function MyOkrs({ staff }: MyOkrsProps) {
   const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
+  const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
   const [spuFilter, setSpuFilter] = useState<string>("All");
+
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+  });
+  const planStartYear = planStartYearData?.startYear || 2024;
 
   // SPU-centric model: Fetch OKRs scoped to user's SPU directly from server
   // Server validates session-based staff belongs to requested SPU
@@ -66,15 +72,16 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     return mySpuOkrs
       .filter((okr) => {
         const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
+        const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
         const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
         const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
-        return yearMatch && quarterMatch && spuMatch;
+        return yearMatch && planningYearMatch && quarterMatch && spuMatch;
       })
       .sort((a, b) => {
         if (a.year !== b.year) return b.year - a.year;
         return (quarterOrder[b.quarter] || 0) - (quarterOrder[a.quarter] || 0);
       });
-  }, [mySpuOkrs, yearFilter, quarterFilter, spuFilter]);
+  }, [mySpuOkrs, yearFilter, planningYearFilter, quarterFilter, spuFilter, planStartYear]);
 
   const getLatestUpdate = (okrId: string) => {
     if (!updates) return null;
@@ -95,12 +102,14 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
 
   const clearFilters = () => {
     setYearFilter(String(currentYear));
+    setPlanningYearFilter("All");
     setQuarterFilter("All");
     setSpuFilter("All");
   };
 
   const activeFilterCount = [
     yearFilter !== String(currentYear),
+    planningYearFilter !== "All",
     quarterFilter !== "All",
     spuFilter !== "All",
   ].filter(Boolean).length;
@@ -189,6 +198,18 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                 <SelectContent>
                   {YEARS.map((y) => (
                     <SelectItem key={y} value={y}>{y === "All" ? "All Years" : y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={planningYearFilter} onValueChange={setPlanningYearFilter}>
+                <SelectTrigger className="w-40" data-testid="select-planning-year">
+                  <SelectValue placeholder="Plan Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Plan Years</SelectItem>
+                  {PLANNING_YEARS.map((py) => (
+                    <SelectItem key={py} value={String(py)}>Year {py}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

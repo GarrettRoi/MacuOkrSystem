@@ -16,7 +16,7 @@ import {
   USER_ROLES,
 } from "@shared/schema";
 import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole } from "@shared/schema";
-import { parseMultiSelectField } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear } from "@shared/schema";
 import { z } from "zod";
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -184,6 +184,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       await storage.setSetting("password_login_enabled", parsed.data.enabled ? "true" : "false");
       res.json({ success: true, enabled: parsed.data.enabled });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update setting" });
+    }
+  });
+
+  // Strategic Plan Start Year
+  app.get("/api/settings/strategic-plan-start-year", async (_req, res) => {
+    try {
+      const value = await storage.getSetting("strategic_plan_start_year");
+      res.json({ startYear: value ? parseInt(value) : 2024 });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch setting" });
+    }
+  });
+
+  app.put("/api/settings/strategic-plan-start-year", async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const staffMember = await storage.getStaff(req.session.selectedStaffId);
+      if (!staffMember || staffMember.role !== "super_admin") {
+        return res.status(403).json({ error: "Only super admins can change this setting" });
+      }
+      const schema = z.object({ startYear: z.number().int().min(2000).max(2100) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      await storage.setSetting("strategic_plan_start_year", String(parsed.data.startYear));
+      res.json({ success: true, startYear: parsed.data.startYear });
     } catch (error) {
       res.status(500).json({ error: "Failed to update setting" });
     }
@@ -1100,7 +1131,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/export/csv", async (req, res) => {
     try {
-      const { quarter, year } = req.query;
+      const { quarter, year, planningYear } = req.query;
       let okrs = await storage.getAllOkrsWithDetails();
       
       if (quarter && quarter !== "All") {
@@ -1109,6 +1140,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (year && year !== "All") {
         okrs = okrs.filter((okr) => String(okr.year) === year);
+      }
+
+      if (planningYear && planningYear !== "All") {
+        const startYearSetting = await storage.getAppSetting("strategicPlanStartYear");
+        const startYear = startYearSetting ? parseInt(startYearSetting) : 2024;
+        const pyNum = parseInt(planningYear as string);
+        okrs = okrs.filter((okr) => getPlanningYear(okr.quarter, okr.year, startYear) === pyNum);
       }
       
       const updates = await storage.getAllQuarterlyUpdates();

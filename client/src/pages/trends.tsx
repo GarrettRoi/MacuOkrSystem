@@ -6,11 +6,13 @@ import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, L
 import { TrendingUp, Calendar, Target } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { OkrWithDetails, Year } from "@shared/schema";
+import { getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 export default function TrendsPage() {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [comparisonYear, setComparisonYear] = useState((currentYear - 1).toString());
+  const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
 
   const { data: okrs, isLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
@@ -21,10 +23,22 @@ export default function TrendsPage() {
     queryKey: ["/api/years"],
   });
 
+  // Fetch strategic plan start year
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+  });
+  const planStartYear = planStartYearData?.startYear || 2024;
+
   // Get sorted years from the admin-managed years
   const years = yearsData
     ? yearsData.map(y => y.year).sort((a, b) => b - a)
     : [];
+
+  // Apply planning year filter to all OKR data
+  const filteredOkrs = okrs?.filter(okr => {
+    if (planningYearFilter === "All") return true;
+    return getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
+  });
 
   // Update selected years when years data loads
   useEffect(() => {
@@ -40,12 +54,12 @@ export default function TrendsPage() {
     }
   }, [years, selectedYear, comparisonYear]);
 
-  const quarterlyData = okrs
+  const quarterlyData = filteredOkrs
     ? ["Q1", "Q2", "Q3", "Q4"].map((quarter) => {
-        const currentYearOkrs = okrs.filter(
+        const currentYearOkrs = filteredOkrs.filter(
           (okr) => okr.year === parseInt(selectedYear) && okr.quarter === quarter
         );
-        const comparisonYearOkrs = okrs.filter(
+        const comparisonYearOkrs = filteredOkrs.filter(
           (okr) => okr.year === parseInt(comparisonYear) && okr.quarter === quarter
         );
 
@@ -66,9 +80,9 @@ export default function TrendsPage() {
       })
     : [];
 
-  const spuTrends = okrs
+  const spuTrends = filteredOkrs
     ? Object.values(
-        okrs.reduce((acc, okr) => {
+        filteredOkrs.reduce((acc, okr) => {
           const spuName = okr.spu?.name || okr.staff?.spu?.name || "Unknown";
           if (!acc[spuName]) {
             acc[spuName] = {
@@ -99,9 +113,9 @@ export default function TrendsPage() {
       }))
     : [];
 
-  const completionRates = okrs
+  const completionRates = filteredOkrs
     ? ["Q1", "Q2", "Q3", "Q4"].map((quarter) => {
-        const currentYearOkrs = okrs.filter(
+        const currentYearOkrs = filteredOkrs.filter(
           (okr) => okr.year === parseInt(selectedYear) && okr.quarter === quarter
         );
         const completedCount = currentYearOkrs.filter((okr) => okr.status === "completed").length;
@@ -118,16 +132,16 @@ export default function TrendsPage() {
       })
     : [];
 
-  const totalOkrs = okrs?.filter((okr) => okr.year === parseInt(selectedYear)).length || 0;
-  const completedOkrs = okrs?.filter(
+  const totalOkrs = filteredOkrs?.filter((okr) => okr.year === parseInt(selectedYear)).length || 0;
+  const completedOkrs = filteredOkrs?.filter(
     (okr) => okr.year === parseInt(selectedYear) && okr.status === "completed"
   ).length || 0;
-  const avgProgress = okrs
+  const avgProgress = filteredOkrs
     ? Math.round(
-        okrs
+        filteredOkrs
           .filter((okr) => okr.year === parseInt(selectedYear))
           .reduce((sum, okr) => sum + Math.min(100, (okr.targetValue || 0) > 0 ? (okr.currentValue / (okr.targetValue || 1)) * 100 : 0), 0) /
-          (okrs.filter((okr) => okr.year === parseInt(selectedYear)).length || 1)
+          (filteredOkrs.filter((okr) => okr.year === parseInt(selectedYear)).length || 1)
       )
     : 0;
 
@@ -168,6 +182,22 @@ export default function TrendsPage() {
                     {years.map((year) => (
                       <SelectItem key={year} value={year.toString()}>
                         {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm text-muted-foreground">Plan Year</label>
+                <Select value={planningYearFilter} onValueChange={setPlanningYearFilter}>
+                  <SelectTrigger className="w-40" data-testid="select-planning-year">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Plan Years</SelectItem>
+                    {PLANNING_YEARS.map((py) => (
+                      <SelectItem key={py} value={String(py)}>
+                        Year {py}
                       </SelectItem>
                     ))}
                   </SelectContent>

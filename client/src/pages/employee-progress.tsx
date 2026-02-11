@@ -8,7 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar, Filter, Building2, Users } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, Year } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
 
 interface SpuGroup {
@@ -30,6 +30,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   // Filter state
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [selectedQuarter, setSelectedQuarter] = useState<string>("");
+  const [selectedPlanningYear, setSelectedPlanningYear] = useState<string>("");
   const [selectedStaffId, setSelectedStaffId] = useState<string>("");
   const [selectedSpuId, setSelectedSpuId] = useState<string>("");
   const [showFilters, setShowFilters] = useState(true);
@@ -48,6 +49,12 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   const { data: spus } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
   });
+
+  // Fetch strategic plan start year
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+  });
+  const planStartYear = planStartYearData?.startYear || 2024;
 
   // Build query params - "all" values should not be added as filters
   const queryParams = new URLSearchParams();
@@ -69,11 +76,12 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   const clearFilters = () => {
     setSelectedYear("");
     setSelectedQuarter("");
+    setSelectedPlanningYear("");
     setSelectedStaffId("");
     setSelectedSpuId("");
   };
 
-  const activeFiltersCount = [selectedYear, selectedQuarter, selectedStaffId, selectedSpuId].filter(v => v && v !== "all").length;
+  const activeFiltersCount = [selectedYear, selectedQuarter, selectedPlanningYear, selectedStaffId, selectedSpuId].filter(v => v && v !== "all").length;
 
   const getKeyResults = (keyResultsJson: string) => {
     try {
@@ -90,7 +98,11 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
 
   const spuGroups: SpuGroup[] = (() => {
     if (!progressSummaries) return [];
-    const allOkrs: EmployeeProgressRecord[] = progressSummaries.flatMap(s => s.okrs);
+    let allOkrs: EmployeeProgressRecord[] = progressSummaries.flatMap(s => s.okrs);
+    if (selectedPlanningYear && selectedPlanningYear !== "all") {
+      const pyNum = parseInt(selectedPlanningYear);
+      allOkrs = allOkrs.filter(r => getPlanningYear(r.okr.quarter, r.okr.year, planStartYear) === pyNum);
+    }
     const spuMap: Record<string, { spuName: string; spuId: string; subMap: Record<string, { subUnitName: string; subUnitId: string | null; okrs: EmployeeProgressRecord[] }> }> = {};
 
     for (const record of allOkrs) {
@@ -189,7 +201,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
           </CardHeader>
           {showFilters && (
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                 {/* Year Filter */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Year</label>
@@ -220,6 +232,24 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       {QUARTERS.map((q) => (
                         <SelectItem key={q.value} value={q.value} data-testid={`option-filter-quarter-${q.value}`}>
                           {q.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Planning Year Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Plan Year</label>
+                  <Select value={selectedPlanningYear} onValueChange={setSelectedPlanningYear}>
+                    <SelectTrigger data-testid="select-filter-planning-year">
+                      <SelectValue placeholder="All plan years" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" data-testid="option-filter-planning-year-all">All plan years</SelectItem>
+                      {PLANNING_YEARS.map((py) => (
+                        <SelectItem key={py} value={String(py)} data-testid={`option-filter-planning-year-${py}`}>
+                          Year {py}
                         </SelectItem>
                       ))}
                     </SelectContent>

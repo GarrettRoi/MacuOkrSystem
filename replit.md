@@ -36,6 +36,7 @@ PostgreSQL is used as the database, accessed via Drizzle ORM and Neon Database's
     - **Export**: CSV data export functionality.
     - **CSV Import (OKRs)**: 3-step import flow (upload → preview/edit → confirm) for OKR submission spreadsheets. Backend endpoints: POST `/api/import/csv/preview` and `/api/import/csv/confirm`.
     - **CSV Import (Scores)**: Separate 3-step import flow for OKR score/quarterly update spreadsheets. Matches scores to existing OKRs by SPU, sub-unit, quarter, year, and OKR number using fuzzy matching. Parses KR scores (1-4) plus overflow KR column. Backend endpoints: POST `/api/import/scores/preview` and `/api/import/scores/confirm`.
+- **Strategic Planning Year Tracking**: Configurable start year (stored in `appSettings` table) maps calendar quarters to planning years (Year 1-4). Logic: Q1/Q2 of calendar year maps to `calendarYear - startYear + 1`; Q3/Q4 maps to `calendarYear - startYear`. Planning year filter available on all data pages (dashboard, my-okrs, university-achievement, data, employee-progress, export, trends). Utility functions `getPlanningYear()`, `getPlanningYearLabel()`, `getCalendarYearsForPlanningYear()` in `shared/schema.ts`. API: GET/PUT `/api/settings/strategic-plan-start-year`. Admin UI for configuring start year in Settings tab.
 
 ## External Dependencies
 

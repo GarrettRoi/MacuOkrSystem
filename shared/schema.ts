@@ -158,6 +158,25 @@ export const getQuarterLabel = (value: string): string => {
   return quarter?.label || value;
 };
 
+export const PLANNING_YEARS = [1, 2, 3, 4] as const;
+
+export function getPlanningYear(quarter: string, calendarYear: number, planStartYear: number): number {
+  if (quarter === "Q1" || quarter === "Q2") {
+    return calendarYear - planStartYear + 1;
+  }
+  return calendarYear - planStartYear;
+}
+
+export function getPlanningYearLabel(planningYear: number): string {
+  return `Year ${planningYear}`;
+}
+
+export function getCalendarYearsForPlanningYear(planningYear: number, planStartYear: number): { q1q2Year: number; q3q4Year: number } {
+  const q1q2Year = planStartYear + planningYear - 1;
+  const q3q4Year = planStartYear + planningYear;
+  return { q1q2Year, q3q4Year };
+}
+
 export const RESPONSIBILITY_ROLES = ["owner", "collaborator"] as const;
 
 export function parseMultiSelectField(value: string): string[] {

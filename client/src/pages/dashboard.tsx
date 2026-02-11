@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
-import { parseMultiSelectField } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const currentYear = new Date().getFullYear();
@@ -21,6 +21,7 @@ const CHART_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--c
 export default function Dashboard() {
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
   const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
+  const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
   const [spuFilter, setSpuFilter] = useState<string>("All");
   const [keywordSearch, setKeywordSearch] = useState<string>("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -38,11 +39,17 @@ export default function Dashboard() {
     queryKey: ["/api/spus"],
   });
 
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+  });
+  const planStartYear = planStartYearData?.startYear || 2024;
+
   const isLoading = okrsLoading || updatesLoading || spusLoading;
 
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
+    const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
     const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
     const keywordMatch = !keywordSearch || 
       okr.objectiveStatement.toLowerCase().includes(keywordSearch.toLowerCase()) ||
@@ -50,12 +57,13 @@ export default function Dashboard() {
       parseMultiSelectField(okr.universityKeyResult).some(kr => kr.toLowerCase().includes(keywordSearch.toLowerCase())) ||
       okr.okrNumber.toLowerCase().includes(keywordSearch.toLowerCase());
     
-    return quarterMatch && yearMatch && spuMatch && keywordMatch;
+    return quarterMatch && yearMatch && planningYearMatch && spuMatch && keywordMatch;
   }) || [];
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
     setYearFilter(String(currentYear));
+    setPlanningYearFilter("All");
     setSpuFilter("All");
     setKeywordSearch("");
   };
@@ -63,6 +71,7 @@ export default function Dashboard() {
   const activeFilterCount = [
     quarterFilter !== "All",
     yearFilter !== String(currentYear),
+    planningYearFilter !== "All",
     spuFilter !== "All",
     keywordSearch !== "",
   ].filter(Boolean).length;
@@ -132,6 +141,19 @@ export default function Dashboard() {
                 {YEARS.map((y) => (
                   <SelectItem key={y} value={y} data-testid={`option-filter-year-${y}`}>
                     {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={planningYearFilter} onValueChange={setPlanningYearFilter}>
+              <SelectTrigger className="w-40" data-testid="select-filter-planning-year">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Plan Years</SelectItem>
+                {PLANNING_YEARS.map((py) => (
+                  <SelectItem key={py} value={String(py)} data-testid={`option-filter-planning-year-${py}`}>
+                    Year {py}
                   </SelectItem>
                 ))}
               </SelectContent>
