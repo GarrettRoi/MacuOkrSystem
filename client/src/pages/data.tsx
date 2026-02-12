@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog } from "@shared/schema";
 import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
@@ -2400,6 +2400,42 @@ export default function Data() {
               )}
             </DialogDescription>
           </DialogHeader>
+          {linkingScoreRow !== null && scoreImportPreviewData[linkingScoreRow] && (() => {
+            const row = scoreImportPreviewData[linkingScoreRow];
+            return (
+              <Card className="bg-muted/30" data-testid="card-score-row-details">
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-xs font-medium text-muted-foreground">Score Row Details</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-sm">
+                    <div><span className="text-muted-foreground">Scorer:</span> <span className="font-medium">{row.scorerName || "—"}</span></div>
+                    <div><span className="text-muted-foreground">SPU:</span> <span className="font-medium">{row.spuName || "—"}</span></div>
+                    <div><span className="text-muted-foreground">Sub-unit:</span> <span className="font-medium">{row.subUnitName || "—"}</span></div>
+                    <div><span className="text-muted-foreground">Period:</span> <span className="font-medium">{row.quarter} {row.year}</span></div>
+                  </div>
+                  {row.krScores && row.krScores.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">KR Scores:</span>
+                      {row.krScores.map((kr: any, ki: number) => (
+                        <Badge key={ki} variant="outline" className="text-xs">KR{kr.krNumber}: {kr.score}</Badge>
+                      ))}
+                      {row.averageScore != null && (
+                        <Badge variant="secondary" className="text-xs">Avg: {row.averageScore}</Badge>
+                      )}
+                    </div>
+                  )}
+                  {row.notes && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Notes:</span>{" "}
+                      <span className="italic text-xs">{row.notes}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               <div className="space-y-1">
