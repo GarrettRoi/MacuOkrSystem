@@ -1564,19 +1564,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const s of allStaff) staffIdToName.set(s.id, s.name.toLowerCase().trim());
       for (const s of allSpus) spuIdToName.set(s.id, s.name.toLowerCase().trim());
       for (const okr of existingOkrs) {
+        const staffName = staffIdToName.get(okr.staffId || '') || '';
+        const spuName = spuIdToName.get(okr.spuId) || '';
         if (okr.submissionTimestamp) {
-          existingTimestamps.add(`${okr.submissionTimestamp.trim()}|${okr.okrNumber}`);
+          existingTimestamps.add(`${okr.submissionTimestamp.trim()}|${staffName}|${spuName}|${okr.year}|${okr.quarter}|${okr.okrNumber}`);
         }
         const key = `${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`;
         existingOkrKeys.add(key);
-        const staffName = staffIdToName.get(okr.staffId || '') || '';
-        const spuName = spuIdToName.get(okr.spuId) || '';
         if (staffName && spuName) {
           existingOkrNameKeys.add(`name:${staffName}|${spuName}|${okr.quarter}|${okr.year}|${okr.okrNumber}`);
         }
       }
 
-      const csvSeenTimestamps = new Map<string, number>();
+      const csvSeenFullKeys = new Map<string, number>();
       const csvSeenKeys = new Map<string, number>();
 
       for (let i = 0; i < dataRows.length; i++) {
@@ -1615,25 +1615,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let isDuplicate = false;
         let duplicateType: string | null = null;
 
+        const spuNames = spuText.split(',').map((s: string) => s.trim()).filter(Boolean);
+        const primarySpuText = (spuNames[0] || spuText).toLowerCase().trim();
+
         if (timestampText) {
-          const timestampOkrKey = `${timestampText}|${okrNumber}`;
-          if (existingTimestamps.has(timestampOkrKey)) {
+          const fullKey = `${timestampText}|${staffName.toLowerCase().trim()}|${primarySpuText}|${year}|${quarter}|${okrNumber}`;
+          if (existingTimestamps.has(fullKey)) {
             isDuplicate = true;
             duplicateType = 'existing';
-            rowErrors.push('Duplicate: This submission timestamp and OKR number already exists in the database');
-          } else if (csvSeenTimestamps.has(timestampOkrKey)) {
+            rowErrors.push('Duplicate: This exact record (timestamp, staff, SPU, year, quarter, OKR#) already exists in the database');
+          } else if (csvSeenFullKeys.has(fullKey)) {
             isDuplicate = true;
             duplicateType = 'csv';
-            rowErrors.push(`Duplicate: Same submission time and OKR number as row ${csvSeenTimestamps.get(timestampOkrKey)} in this file`);
+            rowErrors.push(`Duplicate: Same record as row ${csvSeenFullKeys.get(fullKey)} in this file`);
           }
-          csvSeenTimestamps.set(timestampOkrKey, i + 2);
+          csvSeenFullKeys.set(fullKey, i + 2);
         }
 
         if (!isDuplicate) {
           const resolvedStaffId = fuzzyMatchName(staffName, staffNameToId);
-          const spuNames = spuText.split(',').map((s: string) => s.trim()).filter(Boolean);
           const resolvedSpuId = fuzzyMatchName(spuNames[0] || spuText, spuNameToId);
-          const nameKey = `name:${staffName.toLowerCase().trim()}|${(spuNames[0] || spuText).toLowerCase().trim()}|${quarter}|${year}|${okrNumber}`;
+          const nameKey = `name:${staffName.toLowerCase().trim()}|${primarySpuText}|${quarter}|${year}|${okrNumber}`;
 
           if (resolvedStaffId && resolvedSpuId) {
             const idKey = `${resolvedStaffId}|${resolvedSpuId}|${quarter}|${year}|${okrNumber}`;
@@ -1727,13 +1729,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingOkrs = await storage.getAllOkrs();
       const existingTimestamps = new Set<string>();
       const existingOkrKeys = new Set<string>();
+      const allStaffForDedup = await storage.getAllStaff();
+      const allSpusForDedup = await storage.getAllSpus();
+      const confirmStaffIdToName = new Map<string, string>();
+      const confirmSpuIdToName = new Map<string, string>();
+      for (const s of allStaffForDedup) confirmStaffIdToName.set(s.id, s.name.toLowerCase().trim());
+      for (const s of allSpusForDedup) confirmSpuIdToName.set(s.id, s.name.toLowerCase().trim());
       for (const okr of existingOkrs) {
+        const sName = confirmStaffIdToName.get(okr.staffId || '') || '';
+        const pName = confirmSpuIdToName.get(okr.spuId) || '';
         if (okr.submissionTimestamp) {
-          existingTimestamps.add(`${okr.submissionTimestamp.trim()}|${okr.okrNumber}`);
+          existingTimestamps.add(`${okr.submissionTimestamp.trim()}|${sName}|${pName}|${okr.year}|${okr.quarter}|${okr.okrNumber}`);
         }
         existingOkrKeys.add(`${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`);
       }
-      const importedTimestamps = new Set<string>();
+      const importedFullKeys = new Set<string>();
       const importedKeys = new Set<string>();
 
       const spuCache = new Map<string, any>();
@@ -1829,10 +1839,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           let isConfirmDuplicate = false;
           if (rowTimestamp) {
-            const tsOkrKey = `${rowTimestamp.trim()}|${okrNumber}`;
-            if (existingTimestamps.has(tsOkrKey) || importedTimestamps.has(tsOkrKey)) {
+            const fullKey = `${rowTimestamp.trim()}|${staffName.toLowerCase().trim()}|${primarySpuName.toLowerCase().trim()}|${year}|${quarter}|${okrNumber}`;
+            if (existingTimestamps.has(fullKey) || importedFullKeys.has(fullKey)) {
               isConfirmDuplicate = true;
             }
+            importedFullKeys.add(fullKey);
           }
           if (!isConfirmDuplicate) {
             const confirmDedupKey = `${staffRecord.id}|${primarySpu.id}|${quarter}|${year}|${okrNumber}`;
@@ -1861,7 +1872,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             keyResults: JSON.stringify(keyResultsArray),
             submissionTimestamp: rowTimestamp || null,
           });
-          if (rowTimestamp) importedTimestamps.add(`${rowTimestamp.trim()}|${okrNumber}`);
+          if (rowTimestamp) importedFullKeys.add(`${rowTimestamp.trim()}|${staffName.toLowerCase().trim()}|${primarySpuName.toLowerCase().trim()}|${year}|${quarter}|${okrNumber}`);
           results.okrsCreated++;
 
         } catch (rowError: any) {
