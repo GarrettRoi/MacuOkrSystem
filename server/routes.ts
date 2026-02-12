@@ -1624,15 +1624,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isDuplicate = true;
             duplicateType = 'existing';
             rowErrors.push('Duplicate: This exact record (timestamp, staff, SPU, year, quarter, OKR#) already exists in the database');
+            console.log(`[DEDUP] Row ${i+2} DB-timestamp match: key=${fullKey}`);
           } else if (csvSeenFullKeys.has(fullKey)) {
             isDuplicate = true;
             duplicateType = 'csv';
             rowErrors.push(`Duplicate: Same record as row ${csvSeenFullKeys.get(fullKey)} in this file`);
+            console.log(`[DEDUP] Row ${i+2} CSV-timestamp match with row ${csvSeenFullKeys.get(fullKey)}: key=${fullKey}`);
           }
           csvSeenFullKeys.set(fullKey, i + 2);
         }
 
-        if (!isDuplicate) {
+        if (!isDuplicate && !timestampText) {
           const resolvedStaffId = fuzzyMatchName(staffName, staffNameToId);
           const resolvedSpuId = fuzzyMatchName(spuNames[0] || spuText, spuNameToId);
           const nameKey = `name:${staffName.toLowerCase().trim()}|${primarySpuText}|${quarter}|${year}|${okrNumber}`;
@@ -1643,10 +1645,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               isDuplicate = true;
               duplicateType = 'existing';
               rowErrors.push('Duplicate: This OKR already exists in the database');
+              console.log(`[DEDUP] Row ${i+2} DB-ID match: key=${idKey}`);
             } else if (csvSeenKeys.has(idKey)) {
               isDuplicate = true;
               duplicateType = 'csv';
               rowErrors.push(`Duplicate: Same as row ${csvSeenKeys.get(idKey)} in this file`);
+              console.log(`[DEDUP] Row ${i+2} CSV-ID match with row ${csvSeenKeys.get(idKey)}: key=${idKey}`);
             }
             csvSeenKeys.set(idKey, i + 2);
           } else {
@@ -1654,10 +1658,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               isDuplicate = true;
               duplicateType = 'existing';
               rowErrors.push('Duplicate: This OKR already exists in the database');
+              console.log(`[DEDUP] Row ${i+2} DB-name match: key=${nameKey}`);
             } else if (csvSeenKeys.has(nameKey)) {
               isDuplicate = true;
               duplicateType = 'csv';
               rowErrors.push(`Duplicate: Same as row ${csvSeenKeys.get(nameKey)} in this file`);
+              console.log(`[DEDUP] Row ${i+2} CSV-name match with row ${csvSeenKeys.get(nameKey)}: key=${nameKey}`);
             }
             csvSeenKeys.set(nameKey, i + 2);
           }
@@ -1844,8 +1850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               isConfirmDuplicate = true;
             }
             importedFullKeys.add(fullKey);
-          }
-          if (!isConfirmDuplicate) {
+          } else {
             const confirmDedupKey = `${staffRecord.id}|${primarySpu.id}|${quarter}|${year}|${okrNumber}`;
             if (existingOkrKeys.has(confirmDedupKey) || importedKeys.has(confirmDedupKey)) {
               isConfirmDuplicate = true;
