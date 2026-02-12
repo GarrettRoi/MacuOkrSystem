@@ -1021,6 +1021,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/okrs/:id", requireAdmin, async (req, res) => {
     try {
+      const okr = await storage.getOkr(req.params.id);
+      if (!okr) {
+        return res.status(404).json({ error: "OKR not found" });
+      }
+
+      const reason = req.body?.reason || "No reason provided";
+      const deletedBy = req.body?.deletedBy || null;
+      const deletedByName = req.body?.deletedByName || "Admin";
+
+      const allStaff = await storage.getAllStaff();
+      const allSpus = await storage.getAllSpus();
+      const staffName = allStaff.find(s => s.id === okr.staffId)?.name || "Unknown";
+      const spuName = allSpus.find(s => s.id === okr.spuId)?.name || "Unknown";
+
+      const updates = await storage.getQuarterlyUpdatesByOkr(req.params.id);
+
+      const previousValues: Record<string, any> = {
+        staffName,
+        spuName,
+        okrNumber: okr.okrNumber,
+        quarter: okr.quarter,
+        year: okr.year,
+        objectiveStatement: okr.objectiveStatement,
+        keyResults: okr.keyResults,
+        universityObjective: okr.universityObjective,
+        universityKeyResult: okr.universityKeyResult,
+        quarterlyUpdatesCount: updates.length,
+      };
+
+      await storage.createEditLog({
+        okrId: null,
+        editedBy: deletedBy,
+        editedByName: deletedByName,
+        actionType: "delete",
+        reason,
+        changedFields: JSON.stringify(Object.keys(previousValues)),
+        previousValues: JSON.stringify(previousValues),
+        newValues: JSON.stringify({}),
+      });
+
       await storage.deleteOkr(req.params.id);
       res.status(204).send();
     } catch (error) {

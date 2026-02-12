@@ -117,6 +117,7 @@ export const editLogs = pgTable("edit_logs", {
   okrId: varchar("okr_id").references(() => okrs.id, { onDelete: "set null" }),
   editedBy: varchar("edited_by").references(() => staff.id, { onDelete: "set null" }),
   editedByName: text("edited_by_name"),
+  actionType: text("action_type").notNull().default("edit"),
   reason: text("reason").notNull(),
   changedFields: text("changed_fields").notNull(),
   previousValues: text("previous_values").notNull(),

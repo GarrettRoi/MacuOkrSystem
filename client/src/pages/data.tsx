@@ -75,6 +75,7 @@ export default function Data() {
   // Delete dialog states
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
   const [deleteMode, setDeleteMode] = useState<"single" | "bulk">("single");
   const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
 
@@ -370,12 +371,13 @@ export default function Data() {
   });
 
   const deleteOkrMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return await apiRequest("DELETE", `/api/okrs/${id}`);
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      return await apiRequest("DELETE", `/api/okrs/${id}`, { reason, deletedByName: "Admin" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
       queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/edit-logs"] });
     },
     onError: () => {
       toast({
@@ -660,15 +662,17 @@ export default function Data() {
       return;
     }
 
+    const reason = deleteReason.trim() || "No reason provided";
+
     try {
       if (deleteMode === "single" && singleDeleteId) {
-        await deleteOkrMutation.mutateAsync(singleDeleteId);
+        await deleteOkrMutation.mutateAsync({ id: singleDeleteId, reason });
         toast({
           title: "OKR Deleted",
           description: "The OKR has been permanently deleted.",
         });
       } else if (deleteMode === "bulk") {
-        const deletePromises = Array.from(selectedOkrIds).map(id => deleteOkrMutation.mutateAsync(id));
+        const deletePromises = Array.from(selectedOkrIds).map(id => deleteOkrMutation.mutateAsync({ id, reason }));
         await Promise.all(deletePromises);
         setSelectedOkrIds(new Set());
         toast({
@@ -678,6 +682,7 @@ export default function Data() {
       }
       setDeleteDialogOpen(false);
       setDeleteConfirmText("");
+      setDeleteReason("");
       setSingleDeleteId(null);
     } catch (error) {
       // Error handled by mutation
@@ -1166,9 +1171,9 @@ export default function Data() {
             <div className="flex items-center gap-3">
               <Edit className="h-6 w-6 text-muted-foreground" />
               <div>
-                <CardTitle className="text-lg">Edit Audit Log</CardTitle>
+                <CardTitle className="text-lg">Audit Log</CardTitle>
                 <CardDescription>
-                  Review all changes made to OKRs and quarterly updates ({editLogsData?.length || 0} entries)
+                  Review all edits and deletions of OKRs and quarterly updates ({editLogsData?.length || 0} entries)
                 </CardDescription>
               </div>
             </div>
@@ -1191,13 +1196,20 @@ export default function Data() {
                   try { previousValues = JSON.parse(log.previousValues); } catch {}
                   try { newValues = JSON.parse(log.newValues); } catch {}
 
+                  const isDelete = log.actionType === "delete";
+
                   return (
-                    <Card key={log.id} className="bg-muted/30" data-testid={`card-edit-log-${log.id}`}>
+                    <Card key={log.id} className={isDelete ? "bg-destructive/5 border-destructive/20" : "bg-muted/30"} data-testid={`card-edit-log-${log.id}`}>
                       <CardContent className="pt-4 space-y-2">
                         <div className="flex items-start justify-between gap-4 flex-wrap">
                           <div className="space-y-1">
-                            <p className="text-sm font-medium">
-                              Edited by: {log.editedByName || "Unknown"}
+                            <p className="text-sm font-medium flex items-center gap-2">
+                              {isDelete ? (
+                                <Badge variant="destructive" className="text-xs">Deleted</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">Edited</Badge>
+                              )}
+                              by: {log.editedByName || "Unknown"}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {new Date(log.editedAt).toLocaleString()}
@@ -1213,24 +1225,36 @@ export default function Data() {
                           <p className="text-sm font-medium mb-1">Reason:</p>
                           <p className="text-sm text-muted-foreground">{log.reason}</p>
                         </div>
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">Changes ({changedFields.length} field{changedFields.length !== 1 ? "s" : ""}):</p>
-                          {changedFields.map((field) => (
-                            <div key={field} className="bg-background border rounded-md p-3 text-sm space-y-1">
-                              <p className="font-medium text-xs text-muted-foreground uppercase">{field}</p>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <div>
-                                  <span className="text-xs text-muted-foreground">Before:</span>
-                                  <p className="text-sm break-all">{typeof previousValues[field] === 'string' ? previousValues[field]?.slice(0, 200) : JSON.stringify(previousValues[field])?.slice(0, 200)}</p>
-                                </div>
-                                <div>
-                                  <span className="text-xs text-muted-foreground">After:</span>
-                                  <p className="text-sm break-all">{typeof newValues[field] === 'string' ? newValues[field]?.slice(0, 200) : JSON.stringify(newValues[field])?.slice(0, 200)}</p>
+                        {isDelete ? (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Deleted Record Details:</p>
+                            {changedFields.map((field) => (
+                              <div key={field} className="bg-background border rounded-md p-3 text-sm space-y-1">
+                                <p className="font-medium text-xs text-muted-foreground uppercase">{field}</p>
+                                <p className="text-sm break-all">{typeof previousValues[field] === 'string' ? previousValues[field]?.slice(0, 300) : JSON.stringify(previousValues[field])?.slice(0, 300)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Changes ({changedFields.length} field{changedFields.length !== 1 ? "s" : ""}):</p>
+                            {changedFields.map((field) => (
+                              <div key={field} className="bg-background border rounded-md p-3 text-sm space-y-1">
+                                <p className="font-medium text-xs text-muted-foreground uppercase">{field}</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  <div>
+                                    <span className="text-xs text-muted-foreground">Before:</span>
+                                    <p className="text-sm break-all">{typeof previousValues[field] === 'string' ? previousValues[field]?.slice(0, 200) : JSON.stringify(previousValues[field])?.slice(0, 200)}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-xs text-muted-foreground">After:</span>
+                                    <p className="text-sm break-all">{typeof newValues[field] === 'string' ? newValues[field]?.slice(0, 200) : JSON.stringify(newValues[field])?.slice(0, 200)}</p>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
@@ -1257,6 +1281,16 @@ export default function Data() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reason for deletion</label>
+              <Textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Why are you deleting this record? (recorded in audit log)"
+                rows={2}
+                data-testid="input-delete-reason"
+              />
+            </div>
             <div className="bg-destructive/10 border border-destructive/20 rounded-md p-4">
               <p className="text-sm font-medium text-destructive">
                 To confirm, type "{deleteMode === "single" ? "DELETE" : `DELETE ${selectedOkrIds.size}`}" below:
@@ -1275,6 +1309,7 @@ export default function Data() {
               onClick={() => {
                 setDeleteDialogOpen(false);
                 setDeleteConfirmText("");
+                setDeleteReason("");
                 setSingleDeleteId(null);
               }}
               data-testid="button-cancel-delete"
