@@ -99,6 +99,32 @@ export default function Data() {
   const [okrSearchQuarter, setOkrSearchQuarter] = useState("all");
   const [okrSearchYear, setOkrSearchYear] = useState("all");
 
+  // Badge cycling state for import previews
+  const [importCycleIndex, setImportCycleIndex] = useState<Record<string, number>>({});
+  const [scoreCycleIndex, setScoreCycleIndex] = useState<Record<string, number>>({});
+
+  const cycleToRow = (
+    data: any[],
+    filterFn: (r: any) => boolean,
+    category: string,
+    cycleState: Record<string, number>,
+    setCycleState: (s: Record<string, number>) => void,
+    rowPrefix: string
+  ) => {
+    const matchingIndices = data.map((r, i) => filterFn(r) ? i : -1).filter(i => i >= 0);
+    if (matchingIndices.length === 0) return;
+    const currentPos = cycleState[category] ?? -1;
+    const nextIdx = matchingIndices.findIndex(i => i > currentPos);
+    const targetIdx = nextIdx >= 0 ? matchingIndices[nextIdx] : matchingIndices[0];
+    setCycleState({ ...cycleState, [category]: targetIdx });
+    const el = document.querySelector(`[data-testid="${rowPrefix}-${targetIdx}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-primary");
+      setTimeout(() => el.classList.remove("ring-2", "ring-primary"), 1500);
+    }
+  };
+
   // Edit reason dialog
   const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
   const [editReason, setEditReason] = useState("");
@@ -497,6 +523,7 @@ export default function Data() {
     setImportPreviewData([]);
     setImportSummary(null);
     setEditingImportRow(null);
+    setImportCycleIndex({});
   };
 
   const resetScoreImportState = () => {
@@ -506,6 +533,7 @@ export default function Data() {
     setScoreImportSummary(null);
     setEditingScoreRow(null);
     setLinkingScoreRow(null);
+    setScoreCycleIndex({});
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1765,10 +1793,20 @@ export default function Data() {
                   )}
                   <Badge className="bg-primary text-primary-foreground">{importPreviewData.filter(r => r.include).length} selected for import</Badge>
                   {importPreviewData.some(r => r.isDuplicate) && (
-                    <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{importPreviewData.filter(r => r.isDuplicate).length} duplicate(s)</Badge>
+                    <Badge
+                      variant="secondary"
+                      className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 cursor-pointer"
+                      onClick={() => cycleToRow(importPreviewData, r => r.isDuplicate, "duplicates", importCycleIndex, setImportCycleIndex, "row-import")}
+                      data-testid="badge-cycle-import-duplicates"
+                    >{importPreviewData.filter(r => r.isDuplicate).length} duplicate(s)</Badge>
                   )}
                   {importPreviewData.some(r => r.errors.length > 0 && !r.isDuplicate) && (
-                    <Badge variant="destructive">{importPreviewData.filter(r => r.errors.length > 0 && !r.isDuplicate).length} with warnings</Badge>
+                    <Badge
+                      variant="destructive"
+                      className="cursor-pointer"
+                      onClick={() => cycleToRow(importPreviewData, r => r.errors.length > 0 && !r.isDuplicate, "warnings", importCycleIndex, setImportCycleIndex, "row-import")}
+                      data-testid="badge-cycle-import-warnings"
+                    >{importPreviewData.filter(r => r.errors.length > 0 && !r.isDuplicate).length} with warnings</Badge>
                   )}
                 </div>
               )}
@@ -2097,11 +2135,21 @@ export default function Data() {
                   )}
                   <Badge className="bg-green-600 text-white">{scoreImportSummary.matchedRows} matched to OKRs</Badge>
                   {scoreImportSummary.unmatchedRows > 0 && (
-                    <Badge variant="destructive">{scoreImportSummary.unmatchedRows} unmatched</Badge>
+                    <Badge
+                      variant="destructive"
+                      className="cursor-pointer"
+                      onClick={() => cycleToRow(scoreImportPreviewData, r => !r.matchedOkrId && !r.isDuplicate, "unmatched", scoreCycleIndex, setScoreCycleIndex, "row-score-import")}
+                      data-testid="badge-cycle-score-unmatched"
+                    >{scoreImportSummary.unmatchedRows} unmatched</Badge>
                   )}
                   <Badge className="bg-primary text-primary-foreground">{scoreImportPreviewData.filter(r => r.include).length} selected for import</Badge>
                   {scoreImportPreviewData.some(r => r.isDuplicate) && (
-                    <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{scoreImportPreviewData.filter(r => r.isDuplicate).length} duplicate(s)</Badge>
+                    <Badge
+                      variant="secondary"
+                      className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 cursor-pointer"
+                      onClick={() => cycleToRow(scoreImportPreviewData, r => r.isDuplicate, "duplicates", scoreCycleIndex, setScoreCycleIndex, "row-score-import")}
+                      data-testid="badge-cycle-score-duplicates"
+                    >{scoreImportPreviewData.filter(r => r.isDuplicate).length} duplicate(s)</Badge>
                   )}
                 </div>
               )}
