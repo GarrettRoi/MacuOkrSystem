@@ -1564,10 +1564,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const s of allStaff) staffIdToName.set(s.id, s.name.toLowerCase().trim());
       for (const s of allSpus) spuIdToName.set(s.id, s.name.toLowerCase().trim());
       for (const okr of existingOkrs) {
-        const sName = staffIdToName.get(okr.staffId || '') || '';
-        if (okr.submissionTimestamp && sName) {
-          existingTimestamps.add(`${okr.submissionTimestamp.trim()}|${sName}`);
+        if (okr.submissionTimestamp) {
+          existingTimestamps.add(okr.submissionTimestamp.trim());
         }
+        const sName = staffIdToName.get(okr.staffId || '') || '';
         const key = `${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`;
         existingOkrKeys.add(key);
         const spuName = spuIdToName.get(okr.spuId) || '';
@@ -1618,20 +1618,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const spuNames = spuText.split(',').map((s: string) => s.trim()).filter(Boolean);
         const primarySpuText = (spuNames[0] || spuText).toLowerCase().trim();
 
-        if (timestampText && staffName) {
-          const tsStaffKey = `${timestampText}|${staffName.toLowerCase().trim()}`;
-          if (existingTimestamps.has(tsStaffKey)) {
+        if (timestampText) {
+          const tsKey = timestampText.trim();
+          if (existingTimestamps.has(tsKey)) {
             isDuplicate = true;
             duplicateType = 'existing';
-            rowErrors.push('Duplicate: This submission (timestamp + staff) already exists in the database');
-            console.log(`[DEDUP] Row ${i+2} DB match: key="${tsStaffKey}"`);
-          } else if (csvSeenTimestamps.has(tsStaffKey)) {
+            rowErrors.push('Duplicate: This submission timestamp already exists in the database');
+            console.log(`[DEDUP] Row ${i+2} DB-timestamp match: ts="${tsKey}"`);
+          } else if (csvSeenTimestamps.has(tsKey)) {
             isDuplicate = true;
             duplicateType = 'csv';
-            rowErrors.push(`Duplicate: Same submission as row ${csvSeenTimestamps.get(tsStaffKey)} in this file`);
-            console.log(`[DEDUP] Row ${i+2} CSV match with row ${csvSeenTimestamps.get(tsStaffKey)}: key="${tsStaffKey}"`);
+            rowErrors.push(`Duplicate: Same submission timestamp as row ${csvSeenTimestamps.get(tsKey)} in this file`);
+            console.log(`[DEDUP] Row ${i+2} CSV-timestamp match with row ${csvSeenTimestamps.get(tsKey)}: ts="${tsKey}"`);
           }
-          csvSeenTimestamps.set(tsStaffKey, i + 2);
+          csvSeenTimestamps.set(tsKey, i + 2);
         }
 
         if (!isDuplicate && !timestampText) {
@@ -1735,13 +1735,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingOkrs = await storage.getAllOkrs();
       const existingTimestamps = new Set<string>();
       const existingOkrKeys = new Set<string>();
-      const allStaffForDedup = await storage.getAllStaff();
-      const confirmStaffIdToName = new Map<string, string>();
-      for (const s of allStaffForDedup) confirmStaffIdToName.set(s.id, s.name.toLowerCase().trim());
       for (const okr of existingOkrs) {
-        const sName = confirmStaffIdToName.get(okr.staffId || '') || '';
-        if (okr.submissionTimestamp && sName) {
-          existingTimestamps.add(`${okr.submissionTimestamp.trim()}|${sName}`);
+        if (okr.submissionTimestamp) {
+          existingTimestamps.add(okr.submissionTimestamp.trim());
         }
         existingOkrKeys.add(`${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`);
       }
@@ -1840,12 +1836,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
 
           let isConfirmDuplicate = false;
-          if (rowTimestamp && staffName) {
-            const tsStaffKey = `${rowTimestamp.trim()}|${staffName.toLowerCase().trim()}`;
-            if (existingTimestamps.has(tsStaffKey) || importedTimestamps.has(tsStaffKey)) {
+          if (rowTimestamp) {
+            const tsKey = rowTimestamp.trim();
+            if (existingTimestamps.has(tsKey) || importedTimestamps.has(tsKey)) {
               isConfirmDuplicate = true;
             }
-            importedTimestamps.add(tsStaffKey);
+            importedTimestamps.add(tsKey);
           } else if (!rowTimestamp) {
             const confirmDedupKey = `${staffRecord.id}|${primarySpu.id}|${quarter}|${year}|${okrNumber}`;
             if (existingOkrKeys.has(confirmDedupKey) || importedKeys.has(confirmDedupKey)) {
@@ -1873,7 +1869,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             keyResults: JSON.stringify(keyResultsArray),
             submissionTimestamp: rowTimestamp || null,
           });
-          if (rowTimestamp && staffName) importedTimestamps.add(`${rowTimestamp.trim()}|${staffName.toLowerCase().trim()}`);
+          if (rowTimestamp) importedTimestamps.add(rowTimestamp.trim());
           results.okrsCreated++;
 
         } catch (rowError: any) {
