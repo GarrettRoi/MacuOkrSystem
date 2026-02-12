@@ -1516,12 +1516,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return null;
       };
 
+      const existingTimestamps = new Set<string>();
       const existingOkrKeys = new Set<string>();
       for (const okr of existingOkrs) {
+        if (okr.submissionTimestamp) {
+          existingTimestamps.add(okr.submissionTimestamp.trim());
+        }
         const key = `${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`;
         existingOkrKeys.add(key);
       }
 
+      const csvSeenTimestamps = new Map<string, number>();
       const csvSeenKeys = new Map<string, number>();
 
       for (let i = 0; i < dataRows.length; i++) {
@@ -1559,23 +1564,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         let isDuplicate = false;
         let duplicateType: string | null = null;
-        const resolvedStaffId = fuzzyMatchName(staffName, staffNameToId);
-        const spuNames = spuText.split(',').map((s: string) => s.trim()).filter(Boolean);
-        const resolvedSpuId = fuzzyMatchName(spuNames[0] || spuText, spuNameToId);
-        const dedupKey = resolvedStaffId && resolvedSpuId
-          ? `${resolvedStaffId}|${resolvedSpuId}|${quarter}|${year}|${okrNumber}`
-          : `name:${staffName.toLowerCase().trim()}|${spuText.toLowerCase().trim()}|${quarter}|${year}|${okrNumber}`;
 
-        if (resolvedStaffId && resolvedSpuId && existingOkrKeys.has(dedupKey)) {
-          isDuplicate = true;
-          duplicateType = 'existing';
-          rowErrors.push('Duplicate: This OKR already exists in the database');
-        } else if (csvSeenKeys.has(dedupKey)) {
-          isDuplicate = true;
-          duplicateType = 'csv';
-          rowErrors.push(`Duplicate: Same as row ${csvSeenKeys.get(dedupKey)} in this file`);
+        if (timestampText) {
+          if (existingTimestamps.has(timestampText)) {
+            isDuplicate = true;
+            duplicateType = 'existing';
+            rowErrors.push('Duplicate: This submission timestamp already exists in the database');
+          } else if (csvSeenTimestamps.has(timestampText)) {
+            isDuplicate = true;
+            duplicateType = 'csv';
+            rowErrors.push(`Duplicate: Same submission time as row ${csvSeenTimestamps.get(timestampText)} in this file`);
+          }
+          csvSeenTimestamps.set(timestampText, i + 2);
+        } else {
+          const resolvedStaffId = fuzzyMatchName(staffName, staffNameToId);
+          const spuNames = spuText.split(',').map((s: string) => s.trim()).filter(Boolean);
+          const resolvedSpuId = fuzzyMatchName(spuNames[0] || spuText, spuNameToId);
+          const dedupKey = resolvedStaffId && resolvedSpuId
+            ? `${resolvedStaffId}|${resolvedSpuId}|${quarter}|${year}|${okrNumber}`
+            : `name:${staffName.toLowerCase().trim()}|${spuText.toLowerCase().trim()}|${quarter}|${year}|${okrNumber}`;
+
+          if (resolvedStaffId && resolvedSpuId && existingOkrKeys.has(dedupKey)) {
+            isDuplicate = true;
+            duplicateType = 'existing';
+            rowErrors.push('Duplicate: This OKR already exists in the database');
+          } else if (csvSeenKeys.has(dedupKey)) {
+            isDuplicate = true;
+            duplicateType = 'csv';
+            rowErrors.push(`Duplicate: Same as row ${csvSeenKeys.get(dedupKey)} in this file`);
+          }
+          csvSeenKeys.set(dedupKey, i + 2);
         }
-        csvSeenKeys.set(dedupKey, i + 2);
 
         previewRows.push({
           rowIndex: i + 2,
@@ -1641,10 +1660,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const existingOkrs = await storage.getAllOkrs();
+      const existingTimestamps = new Set<string>();
       const existingOkrKeys = new Set<string>();
       for (const okr of existingOkrs) {
+        if (okr.submissionTimestamp) {
+          existingTimestamps.add(okr.submissionTimestamp.trim());
+        }
         existingOkrKeys.add(`${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`);
       }
+      const importedTimestamps = new Set<string>();
       const importedKeys = new Set<string>();
 
       const spuCache = new Map<string, any>();
@@ -1662,7 +1686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const { staffName, quarter, year, okrNumber, spuName, subUnitName, collaborationSpu,
                   universityObjective, universityKeyResult, objectiveStatement,
-                  keyResult1, keyResult2, keyResult3, responsibleParties } = row;
+                  keyResult1, keyResult2, keyResult3, responsibleParties, timestamp: rowTimestamp } = row;
 
           if (!staffName || !spuName || !okrNumber) {
             results.rowsSkipped++;
@@ -1738,11 +1762,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             kr.percentage = idx === keyResultsArray.length - 1 ? 100 - perKr * (keyResultsArray.length - 1) : perKr;
           });
 
-          const confirmDedupKey = `${staffRecord.id}|${primarySpu.id}|${quarter}|${year}|${okrNumber}`;
-          if (existingOkrKeys.has(confirmDedupKey) || importedKeys.has(confirmDedupKey)) {
-            results.duplicatesSkipped++;
-            results.rowsSkipped++;
-            continue;
+          if (rowTimestamp) {
+            if (existingTimestamps.has(rowTimestamp.trim()) || importedTimestamps.has(rowTimestamp.trim())) {
+              results.duplicatesSkipped++;
+              results.rowsSkipped++;
+              continue;
+            }
+          } else {
+            const confirmDedupKey = `${staffRecord.id}|${primarySpu.id}|${quarter}|${year}|${okrNumber}`;
+            if (existingOkrKeys.has(confirmDedupKey) || importedKeys.has(confirmDedupKey)) {
+              results.duplicatesSkipped++;
+              results.rowsSkipped++;
+              continue;
+            }
+            importedKeys.add(confirmDedupKey);
           }
 
           const okr = await storage.createOkr({
@@ -1757,8 +1790,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             universityKeyResult: universityKeyResult || '',
             objectiveStatement: objectiveStatement || `Imported OKR`,
             keyResults: JSON.stringify(keyResultsArray),
+            submissionTimestamp: rowTimestamp || null,
           });
-          importedKeys.add(confirmDedupKey);
+          if (rowTimestamp) importedTimestamps.add(rowTimestamp.trim());
           results.okrsCreated++;
 
         } catch (rowError: any) {

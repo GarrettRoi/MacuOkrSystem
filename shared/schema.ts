@@ -84,6 +84,7 @@ export const okrs = pgTable("okrs", {
   currentValue: integer("current_value").notNull().default(0),
   status: text("status").notNull().default("not_started"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  submissionTimestamp: text("submission_timestamp"),
   title: text("title"),
   description: text("description"),
   targetValue: integer("target_value"),
