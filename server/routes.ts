@@ -1493,6 +1493,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const previewRows: any[] = [];
       const warnings: string[] = [];
 
+      const existingOkrs = await storage.getAllOkrsWithDetails();
+      const allSpus = await storage.getAllSpus();
+      const allStaff = await storage.getAllStaff();
+
+      const spuNameToId = new Map<string, string>();
+      for (const spu of allSpus) {
+        spuNameToId.set(spu.name.toLowerCase().trim(), spu.id);
+      }
+      const staffNameToId = new Map<string, string>();
+      for (const s of allStaff) {
+        staffNameToId.set(s.name.toLowerCase().trim(), s.id);
+      }
+
+      const fuzzyMatchName = (name: string, nameMap: Map<string, string>): string | null => {
+        const lower = name.toLowerCase().trim();
+        if (nameMap.has(lower)) return nameMap.get(lower)!;
+        const entries = Array.from(nameMap.entries());
+        for (const [key, id] of entries) {
+          if (key.includes(lower) || lower.includes(key)) return id;
+        }
+        return null;
+      };
+
+      const existingOkrKeys = new Set<string>();
+      for (const okr of existingOkrs) {
+        const key = `${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`;
+        existingOkrKeys.add(key);
+      }
+
+      const csvSeenKeys = new Map<string, number>();
+
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i];
         const staffName = (row[colName] || '').trim();
@@ -1526,6 +1557,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const cleanSubUnit = subUnitText.toLowerCase() === 'n/a' ? '' : subUnitText;
 
+        let isDuplicate = false;
+        let duplicateType: string | null = null;
+        const resolvedStaffId = fuzzyMatchName(staffName, staffNameToId);
+        const spuNames = spuText.split(',').map((s: string) => s.trim()).filter(Boolean);
+        const resolvedSpuId = fuzzyMatchName(spuNames[0] || spuText, spuNameToId);
+        const dedupKey = resolvedStaffId && resolvedSpuId
+          ? `${resolvedStaffId}|${resolvedSpuId}|${quarter}|${year}|${okrNumber}`
+          : `name:${staffName.toLowerCase().trim()}|${spuText.toLowerCase().trim()}|${quarter}|${year}|${okrNumber}`;
+
+        if (resolvedStaffId && resolvedSpuId && existingOkrKeys.has(dedupKey)) {
+          isDuplicate = true;
+          duplicateType = 'existing';
+          rowErrors.push('Duplicate: This OKR already exists in the database');
+        } else if (csvSeenKeys.has(dedupKey)) {
+          isDuplicate = true;
+          duplicateType = 'csv';
+          rowErrors.push(`Duplicate: Same as row ${csvSeenKeys.get(dedupKey)} in this file`);
+        }
+        csvSeenKeys.set(dedupKey, i + 2);
+
         previewRows.push({
           rowIndex: i + 2,
           staffName,
@@ -1545,15 +1596,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           keyResult3: kr3Text,
           responsibleParties: responsibleText,
           errors: rowErrors,
-          include: rowErrors.length === 0,
+          include: rowErrors.length === 0 && !isDuplicate,
+          isDuplicate,
+          duplicateType,
         });
       }
+
+      const duplicateCount = previewRows.filter(r => r.isDuplicate).length;
 
       res.json({
         success: true,
         totalRows: dataRows.length,
         parsedRows: previewRows.length,
         skippedEmpty: dataRows.length - previewRows.length,
+        duplicateRows: duplicateCount,
         detectedHeaders: headers,
         rows: previewRows,
         warnings,
@@ -1580,8 +1636,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         yearsCreated: 0,
         okrsCreated: 0,
         rowsSkipped: 0,
+        duplicatesSkipped: 0,
         errors: [] as string[],
       };
+
+      const existingOkrs = await storage.getAllOkrs();
+      const existingOkrKeys = new Set<string>();
+      for (const okr of existingOkrs) {
+        existingOkrKeys.add(`${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`);
+      }
+      const importedKeys = new Set<string>();
 
       const spuCache = new Map<string, any>();
       const subUnitCache = new Map<string, any>();
@@ -1674,6 +1738,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             kr.percentage = idx === keyResultsArray.length - 1 ? 100 - perKr * (keyResultsArray.length - 1) : perKr;
           });
 
+          const confirmDedupKey = `${staffRecord.id}|${primarySpu.id}|${quarter}|${year}|${okrNumber}`;
+          if (existingOkrKeys.has(confirmDedupKey) || importedKeys.has(confirmDedupKey)) {
+            results.duplicatesSkipped++;
+            results.rowsSkipped++;
+            continue;
+          }
+
           const okr = await storage.createOkr({
             staffId: staffRecord.id,
             spuId: primarySpu.id,
@@ -1687,6 +1758,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             objectiveStatement: objectiveStatement || `Imported OKR`,
             keyResults: JSON.stringify(keyResultsArray),
           });
+          importedKeys.add(confirmDedupKey);
           results.okrsCreated++;
 
         } catch (rowError: any) {
@@ -1696,6 +1768,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const errorCount = results.errors.length;
       let message = `Import completed: ${results.okrsCreated} OKRs created, ${results.staffCreated} new staff, ${results.spusCreated} new SPUs, ${results.subUnitsCreated} new sub-units.`;
+      if (results.duplicatesSkipped > 0) message += ` ${results.duplicatesSkipped} duplicate(s) skipped.`;
       if (results.rowsSkipped > 0) message += ` ${results.rowsSkipped} rows skipped.`;
       if (errorCount > 0) message += ` ${errorCount} error(s).`;
 
@@ -1829,6 +1902,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const previewRows: any[] = [];
 
+      const allQuarterlyUpdates = await storage.getAllQuarterlyUpdates();
+      const existingUpdateKeys = new Set<string>();
+      for (const update of allQuarterlyUpdates) {
+        const key = `${update.okrId}|${update.quarter}|${update.year}`;
+        existingUpdateKeys.add(key);
+      }
+
+      const csvScoreSeenKeys = new Map<string, number>();
+
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i];
         const scorerName = (row[colName] || '').trim();
@@ -1940,6 +2022,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!scorerName) rowErrors.push('Missing scorer name');
         if (krScores.length === 0 && averageScore === null) rowErrors.push('No scores found');
 
+        let isDuplicate = false;
+        let duplicateType: string | null = null;
+
+        if (matchedOkrId) {
+          const scoreKey = `${matchedOkrId}|${quarter}|${year}`;
+          if (existingUpdateKeys.has(scoreKey)) {
+            isDuplicate = true;
+            duplicateType = 'existing';
+            rowErrors.push('Duplicate: A score for this OKR already exists in the database for this period');
+          } else if (csvScoreSeenKeys.has(scoreKey)) {
+            isDuplicate = true;
+            duplicateType = 'csv';
+            rowErrors.push(`Duplicate: Same OKR score as row ${csvScoreSeenKeys.get(scoreKey)} in this file`);
+          }
+          csvScoreSeenKeys.set(scoreKey, i + 2);
+        }
+
         previewRows.push({
           rowIndex: i + 2,
           scorerName,
@@ -1960,9 +2059,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           candidateOkrs,
           errors: rowErrors,
           warnings: rowWarnings,
-          include: rowErrors.length === 0 && matchedOkrId !== null,
+          include: rowErrors.length === 0 && matchedOkrId !== null && !isDuplicate,
+          isDuplicate,
+          duplicateType,
         });
       }
+
+      const duplicateCount = previewRows.filter(r => r.isDuplicate).length;
 
       res.json({
         success: true,
@@ -1971,6 +2074,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         skippedEmpty: dataRows.length - previewRows.length,
         matchedRows: previewRows.filter(r => r.matchedOkrId !== null).length,
         unmatchedRows: previewRows.filter(r => r.matchedOkrId === null).length,
+        duplicateRows: duplicateCount,
         detectedHeaders: headers,
         rows: previewRows,
       });
@@ -2017,8 +2121,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const results = {
         scoresCreated: 0,
         rowsSkipped: 0,
+        duplicatesSkipped: 0,
         errors: [] as string[],
       };
+
+      const allQuarterlyUpdates = await storage.getAllQuarterlyUpdates();
+      const existingScoreKeys = new Set<string>();
+      for (const update of allQuarterlyUpdates) {
+        existingScoreKeys.add(`${update.okrId}|${update.quarter}|${update.year}`);
+      }
+      const importedScoreKeys = new Set<string>();
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
@@ -2037,6 +2149,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               })))
             : null;
 
+          const scoreDedupKey = `${row.matchedOkrId}|${row.quarter}|${row.year}`;
+          if (existingScoreKeys.has(scoreDedupKey) || importedScoreKeys.has(scoreDedupKey)) {
+            results.duplicatesSkipped++;
+            results.rowsSkipped++;
+            continue;
+          }
+
           await storage.createQuarterlyUpdate({
             okrId: row.matchedOkrId,
             staffId: matchedStaff?.id || null,
@@ -2049,6 +2168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             additionalKeyResults: row.overflowKRText || null,
             notes: row.notes || '',
           });
+          importedScoreKeys.add(scoreDedupKey);
           results.scoresCreated++;
 
         } catch (rowError: any) {
@@ -2058,6 +2178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const errorCount = results.errors.length;
       let message = `Score import completed: ${results.scoresCreated} quarterly updates created.`;
+      if (results.duplicatesSkipped > 0) message += ` ${results.duplicatesSkipped} duplicate(s) skipped.`;
       if (results.rowsSkipped > 0) message += ` ${results.rowsSkipped} rows skipped.`;
       if (errorCount > 0) message += ` ${errorCount} error(s).`;
 

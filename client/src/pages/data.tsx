@@ -165,18 +165,43 @@ export default function Data() {
   const linkOkrToScoreRow = (rowIdx: number, okr: any) => {
     setScoreImportPreviewData(prev => {
       const updated = [...prev];
+      const row = updated[rowIdx];
+      const cleanErrors = row.errors.filter((e: string) => !e.startsWith('No matching OKR') && !e.startsWith('Duplicate:'));
+
+      const existingOkr = okrsWithUpdates?.find(o => o.id === okr.id);
+      const hasExistingScore = existingOkr?.quarterlyUpdates?.some(
+        (u: any) => u.quarter === row.quarter && u.year === row.year
+      );
+      const hasCsvDuplicate = updated.some(
+        (r, i) => i !== rowIdx && r.matchedOkrId === okr.id && r.quarter === row.quarter && r.year === row.year
+      );
+
+      const isDuplicate = hasExistingScore || hasCsvDuplicate;
+      if (isDuplicate) {
+        cleanErrors.push(hasExistingScore
+          ? 'Duplicate: A score for this OKR already exists in the database for this period'
+          : `Duplicate: Same OKR score as another row in this file`
+        );
+      }
+
       updated[rowIdx] = {
-        ...updated[rowIdx],
+        ...row,
         matchedOkrId: okr.id,
         matchedOkrInfo: `Manually linked to ${okr.okrNumber}`,
         matchedOkrDetails: okr,
-        errors: updated[rowIdx].errors.filter((e: string) => !e.startsWith('No matching OKR')),
-        include: true,
+        errors: cleanErrors,
+        include: !isDuplicate && cleanErrors.length === 0,
+        isDuplicate,
+        duplicateType: hasExistingScore ? 'existing' : hasCsvDuplicate ? 'csv' : null,
       };
       return updated;
     });
     setLinkingScoreRow(null);
-    toast({ title: "OKR Linked", description: `Linked to ${okr.okrNumber}: ${okr.objectiveStatement.substring(0, 60)}...` });
+    if (okr.objectiveStatement) {
+      toast({ title: "OKR Linked", description: `Linked to ${okr.okrNumber}: ${okr.objectiveStatement.substring(0, 60)}...` });
+    } else {
+      toast({ title: "OKR Linked", description: `Linked to ${okr.okrNumber}` });
+    }
   };
 
   const unlinkOkrFromScoreRow = (rowIdx: number) => {
@@ -1739,8 +1764,11 @@ export default function Data() {
                     <Badge variant="secondary">{importSummary.skippedEmpty} empty rows skipped</Badge>
                   )}
                   <Badge className="bg-primary text-primary-foreground">{importPreviewData.filter(r => r.include).length} selected for import</Badge>
-                  {importPreviewData.some(r => r.errors.length > 0) && (
-                    <Badge variant="destructive">{importPreviewData.filter(r => r.errors.length > 0).length} with warnings</Badge>
+                  {importPreviewData.some(r => r.isDuplicate) && (
+                    <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{importPreviewData.filter(r => r.isDuplicate).length} duplicate(s)</Badge>
+                  )}
+                  {importPreviewData.some(r => r.errors.length > 0 && !r.isDuplicate) && (
+                    <Badge variant="destructive">{importPreviewData.filter(r => r.errors.length > 0 && !r.isDuplicate).length} with warnings</Badge>
                   )}
                 </div>
               )}
@@ -1777,7 +1805,7 @@ export default function Data() {
                       <>
                         <TableRow
                           key={`row-${idx}`}
-                          className={`${!row.include ? "opacity-40" : ""} ${row.errors.length > 0 ? "bg-destructive/5" : ""}`}
+                          className={`${!row.include ? "opacity-40" : ""} ${row.isDuplicate ? "bg-amber-500/10" : row.errors.length > 0 ? "bg-destructive/5" : ""}`}
                           data-testid={`row-import-${idx}`}
                         >
                           <TableCell>
@@ -1788,7 +1816,14 @@ export default function Data() {
                               data-testid={`checkbox-import-row-${idx}`}
                             />
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{row.rowIndex}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              {row.rowIndex}
+                              {row.isDuplicate && (
+                                <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] px-1 py-0">DUP</Badge>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap" title={row.timestamp || "-"}>{row.timestamp ? new Date(row.timestamp).toLocaleDateString() : "-"}</TableCell>
                           <TableCell className="text-sm font-medium max-w-[120px] truncate" title={row.staffName}>{row.staffName}</TableCell>
                           <TableCell className="text-sm">{row.quarter}</TableCell>
@@ -2065,6 +2100,9 @@ export default function Data() {
                     <Badge variant="destructive">{scoreImportSummary.unmatchedRows} unmatched</Badge>
                   )}
                   <Badge className="bg-primary text-primary-foreground">{scoreImportPreviewData.filter(r => r.include).length} selected for import</Badge>
+                  {scoreImportPreviewData.some(r => r.isDuplicate) && (
+                    <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{scoreImportPreviewData.filter(r => r.isDuplicate).length} duplicate(s)</Badge>
+                  )}
                 </div>
               )}
 
@@ -2100,7 +2138,7 @@ export default function Data() {
                     {scoreImportPreviewData.map((row, idx) => (
                       <Fragment key={`score-row-${idx}`}>
                         <TableRow
-                          className={`${!row.include ? "opacity-40" : ""} ${row.errors.length > 0 ? "bg-destructive/5" : ""} ${row.matchedOkrId ? "" : "bg-amber-500/5"}`}
+                          className={`${!row.include ? "opacity-40" : ""} ${row.isDuplicate ? "bg-amber-500/10" : row.errors.length > 0 ? "bg-destructive/5" : ""} ${!row.isDuplicate && row.matchedOkrId ? "" : !row.isDuplicate ? "bg-amber-500/5" : ""}`}
                           data-testid={`row-score-import-${idx}`}
                         >
                           <TableCell>
@@ -2111,7 +2149,14 @@ export default function Data() {
                               data-testid={`checkbox-score-row-${idx}`}
                             />
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{row.rowIndex}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              {row.rowIndex}
+                              {row.isDuplicate && (
+                                <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] px-1 py-0">DUP</Badge>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-sm font-medium max-w-[120px] truncate" title={row.scorerName}>{row.scorerName}</TableCell>
                           <TableCell className="text-sm">{row.quarter}</TableCell>
                           <TableCell className="text-sm">{row.year}</TableCell>
