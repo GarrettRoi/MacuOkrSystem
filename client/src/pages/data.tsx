@@ -67,6 +67,7 @@ export default function Data() {
   const [filterQuarter, setFilterQuarter] = useState<string>("all");
   const [filterOkrNumber, setFilterOkrNumber] = useState<string>("all");
   const [filterSpu, setFilterSpu] = useState<string>("all");
+  const [filterSubUnit, setFilterSubUnit] = useState<string>("all");
   
   // Selection states
   const [selectedOkrIds, setSelectedOkrIds] = useState<Set<string>>(new Set());
@@ -213,12 +214,13 @@ export default function Data() {
       if (filterQuarter !== "all" && okr.quarter !== filterQuarter) return false;
       if (filterOkrNumber !== "all" && okr.okrNumber !== filterOkrNumber) return false;
       if (filterSpu !== "all" && okr.spuId !== filterSpu) return false;
+      if (filterSubUnit !== "all" && okr.subUnitId !== filterSubUnit) return false;
       return true;
     });
-  }, [okrsWithUpdates, filterStaff, filterYear, filterPlanningYear, filterQuarter, filterOkrNumber, filterSpu, planStartYear]);
+  }, [okrsWithUpdates, filterStaff, filterYear, filterPlanningYear, filterQuarter, filterOkrNumber, filterSpu, filterSubUnit, planStartYear]);
 
   // Check if any filters are active
-  const hasActiveFilters = filterStaff !== "all" || filterYear !== "all" || filterPlanningYear !== "all" || filterQuarter !== "all" || filterOkrNumber !== "all" || filterSpu !== "all";
+  const hasActiveFilters = filterStaff !== "all" || filterYear !== "all" || filterPlanningYear !== "all" || filterQuarter !== "all" || filterOkrNumber !== "all" || filterSpu !== "all" || filterSubUnit !== "all";
   
   const clearAllFilters = () => {
     setFilterStaff("all");
@@ -227,6 +229,7 @@ export default function Data() {
     setFilterQuarter("all");
     setFilterOkrNumber("all");
     setFilterSpu("all");
+    setFilterSubUnit("all");
   };
 
   const toggleExpanded = (okrId: string) => {
@@ -788,7 +791,7 @@ export default function Data() {
               </div>
             </CardHeader>
             <CardContent className="pt-0 pb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
                 {/* Staff Filter */}
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Staff</label>
@@ -890,6 +893,24 @@ export default function Data() {
                       {spus?.map((spu) => (
                         <SelectItem key={spu.id} value={spu.id}>
                           {spu.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Sub-unit Filter */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Sub-unit</label>
+                  <Select value={filterSubUnit} onValueChange={setFilterSubUnit}>
+                    <SelectTrigger data-testid="select-filter-sub-unit">
+                      <SelectValue placeholder="All Sub-units" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sub-units</SelectItem>
+                      {(filterSpu !== "all" ? subUnits?.filter(su => su.spuId === filterSpu) : subUnits)?.map((su) => (
+                        <SelectItem key={su.id} value={su.id}>
+                          {su.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -2136,7 +2157,8 @@ export default function Data() {
                                   size="icon"
                                   onClick={() => {
                                     setLinkingScoreRow(idx);
-                                    setOkrSearchSpu("all");
+                                    const matchedSpu = spus?.find(s => s.name.toLowerCase() === row.spuName?.toLowerCase());
+                                    setOkrSearchSpu(matchedSpu?.id || "all");
                                     setOkrSearchQuarter(row.quarter || "all");
                                     setOkrSearchYear(row.year ? String(row.year) : "all");
                                     setOkrSearchQuery("");
@@ -2309,7 +2331,8 @@ export default function Data() {
                                       size="sm"
                                       onClick={() => {
                                         setLinkingScoreRow(idx);
-                                        setOkrSearchSpu("all");
+                                        const matchedSpu = spus?.find(s => s.name.toLowerCase() === row.spuName?.toLowerCase());
+                                        setOkrSearchSpu(matchedSpu?.id || "all");
                                         setOkrSearchQuarter(row.quarter || "all");
                                         setOkrSearchYear(row.year ? String(row.year) : "all");
                                         setOkrSearchQuery("");
