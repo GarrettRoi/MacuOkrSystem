@@ -2185,10 +2185,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             matchedOkrInfo = `${narrowed.length} candidates after ${matchMethod}, using first`;
             matchedOkrDetails = formatOkrDetails(narrowed[0]);
             rowWarnings.push(`Ambiguous: ${narrowed.length} OKRs matched ${matchMethod}`);
+          } else if (allForSpuQY.length > 0) {
+            const okrNum = parseInt(okrNumber.replace(/\D/g, ''));
+            const sorted = [...allForSpuQY].sort((a, b) => {
+              const aNum = parseInt((a.okrNumber || '').replace(/\D/g, '')) || 0;
+              const bNum = parseInt((b.okrNumber || '').replace(/\D/g, '')) || 0;
+              return aNum - bNum;
+            });
+            if (!isNaN(okrNum) && okrNum >= 1 && okrNum <= sorted.length) {
+              const idx = okrNum - 1;
+              matchedOkrId = sorted[idx].id;
+              matchedOkrInfo = `Matched by SPU + Quarter + Year (OKR# ${okrNumber} → position ${okrNum} of ${sorted.length}: ${sorted[idx].okrNumber})`;
+              matchedOkrDetails = formatOkrDetails(sorted[idx]);
+              if (sorted[idx].okrNumber !== okrNumber) {
+                rowWarnings.push(`OKR# remapped: CSV "${okrNumber}" → DB "${sorted[idx].okrNumber}" (by position in SPU)`);
+              }
+            } else {
+              const spuMatch = allSpus.find(s => s.id === matchedSpuId);
+              console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH: scorer="${scorerName}" spu="${primarySpuName}"→"${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | SPU+Q+Y has ${allForSpuQY.length} OKRs (position ${okrNum} out of range), okr#s=[${allForSpuQY.map(o=>`${o.okrNumber}(${o.staff?.name||'?'})`).join(', ')}]`);
+              rowErrors.push(`No matching OKR: ${okrNumber} in ${quarter} ${year} (SPU has ${allForSpuQY.length} OKRs, position out of range)`);
+            }
           } else {
             const spuMatch = allSpus.find(s => s.id === matchedSpuId);
-            console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH: scorer="${scorerName}" spu="${primarySpuName}"→"${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | SPU+Q+Y has ${allForSpuQY.length} OKRs, okr#s=[${allForSpuQY.map(o=>`${o.okrNumber}(${o.staff?.name||'?'})`).join(', ')}]`);
-            rowErrors.push(`No matching OKR found for ${okrNumber} in ${quarter} ${year}`);
+            console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH: scorer="${scorerName}" spu="${primarySpuName}"→"${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | SPU+Q+Y has 0 OKRs`);
+            rowErrors.push(`No OKRs found for this SPU in ${quarter} ${year}`);
           }
 
           candidateOkrs = allForSpuQY.map(formatOkrDetails);
