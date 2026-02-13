@@ -1950,11 +1950,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allOkrs = allOkrsDetailed;
       const allSpus = await storage.getAllSpus();
       const allSubUnits = await storage.getAllSubUnits();
+      const allStaff = await storage.getAllStaff();
 
       const spuNameMap = new Map<string, string>();
       for (const spu of allSpus) {
         spuNameMap.set(spu.name.toLowerCase().trim(), spu.id);
       }
+
+      const fuzzyMatchStaffName = (csvName: string, okrStaffName: string): boolean => {
+        if (!csvName || !okrStaffName) return false;
+        const csvLower = csvName.toLowerCase().trim();
+        const staffLower = okrStaffName.toLowerCase().trim();
+        if (csvLower === staffLower) return true;
+        const csvParts = csvLower.split(/[\s,]+/).filter(w => w.length > 1);
+        const staffParts = staffLower.split(/[\s,]+/).filter(w => w.length > 1);
+        if (csvParts.length >= 2 && staffParts.length >= 2) {
+          const csvFirst = csvParts[0];
+          const csvLast = csvParts[csvParts.length - 1];
+          const staffFirst = staffParts[0];
+          const staffLast = staffParts[staffParts.length - 1];
+          if (csvFirst === staffFirst && csvLast === staffLast) return true;
+          if (csvLast === staffFirst && csvFirst === staffLast) return true;
+        }
+        const matchCount = csvParts.filter(w => staffParts.includes(w)).length;
+        if (matchCount >= Math.max(2, Math.ceil(csvParts.length * 0.6))) return true;
+        return false;
+      };
 
       const subUnitMap = new Map<string, { id: string; spuId: string }>();
       for (const su of allSubUnits) {
@@ -2087,54 +2108,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
           rowErrors.push(`SPU not found: "${primarySpuName}"`);
           console.log(`[SCORE-MATCH] Row ${i+2} SPU not found: "${primarySpuName}"`);
         } else {
-          const candidates = allOkrs.filter(o =>
-            o.spuId === matchedSpuId &&
-            o.quarter === quarter &&
-            o.year === year &&
-            o.okrNumber === okrNumber
-          );
-          if (candidates.length === 0) {
-            const spuMatch = allSpus.find(s => s.id === matchedSpuId);
-            const allForSpu = allOkrs.filter(o => o.spuId === matchedSpuId);
-            const allForSpuQY = allOkrs.filter(o => o.spuId === matchedSpuId && o.quarter === quarter && o.year === year);
-            console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH: spu="${primarySpuName}"→"${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | DB has ${allForSpu.length} OKRs for this SPU, ${allForSpuQY.length} for SPU+Q+Y, okr#s=[${allForSpuQY.map(o=>o.okrNumber).join(',')}]`);
-          }
-
-          if (matchedSubUnitId) {
-            const subMatches = candidates.filter(o => o.subUnitId === matchedSubUnitId);
-            if (subMatches.length === 1) {
-              matchedOkrId = subMatches[0].id;
-              matchedOkrInfo = `Matched by SPU + Sub-unit + Quarter + OKR#`;
-              matchedOkrDetails = formatOkrDetails(subMatches[0]);
-            } else if (subMatches.length > 1) {
-              matchedOkrId = subMatches[0].id;
-              matchedOkrInfo = `Multiple matches (${subMatches.length}), using first`;
-              matchedOkrDetails = formatOkrDetails(subMatches[0]);
-              rowWarnings.push(`Multiple OKR matches found`);
-            }
-          }
-
-          if (!matchedOkrId) {
-            if (candidates.length === 1) {
-              matchedOkrId = candidates[0].id;
-              matchedOkrInfo = `Matched by SPU + Quarter + OKR#`;
-              matchedOkrDetails = formatOkrDetails(candidates[0]);
-            } else if (candidates.length > 1) {
-              matchedOkrId = candidates[0].id;
-              matchedOkrInfo = `Multiple matches (${candidates.length}), using first`;
-              matchedOkrDetails = formatOkrDetails(candidates[0]);
-              rowWarnings.push(`Multiple OKR matches found`);
-            } else {
-              rowErrors.push(`No matching OKR found for ${okrNumber} in ${quarter} ${year}`);
-            }
-          }
-
-          const nearbyOkrs = allOkrs.filter(o =>
+          const allForSpuQY = allOkrs.filter(o =>
             o.spuId === matchedSpuId &&
             o.quarter === quarter &&
             o.year === year
           );
-          candidateOkrs = nearbyOkrs.map(formatOkrDetails);
+
+          const staffCandidates = allForSpuQY.filter(o =>
+            o.okrNumber === okrNumber &&
+            o.staff && fuzzyMatchStaffName(scorerName, o.staff.name)
+          );
+
+          const okrNumCandidates = allForSpuQY.filter(o =>
+            o.okrNumber === okrNumber
+          );
+
+          const staffOnlyCandidates = allForSpuQY.filter(o =>
+            o.staff && fuzzyMatchStaffName(scorerName, o.staff.name)
+          );
+
+          if (staffCandidates.length >= 1) {
+            matchedOkrId = staffCandidates[0].id;
+            matchedOkrInfo = staffCandidates.length === 1
+              ? `Matched by SPU + Staff + Quarter + OKR#`
+              : `Multiple staff matches (${staffCandidates.length}), using first`;
+            matchedOkrDetails = formatOkrDetails(staffCandidates[0]);
+            if (staffCandidates.length > 1) rowWarnings.push(`Multiple OKR matches found`);
+          } else if (staffOnlyCandidates.length > 0) {
+            const okrNum = parseInt(okrNumber.replace(/\D/g, ''));
+            if (!isNaN(okrNum) && okrNum >= 1 && okrNum <= staffOnlyCandidates.length) {
+              const sorted = staffOnlyCandidates.sort((a, b) => {
+                const aNum = parseInt((a.okrNumber || '').replace(/\D/g, '')) || 0;
+                const bNum = parseInt((b.okrNumber || '').replace(/\D/g, '')) || 0;
+                return aNum - bNum;
+              });
+              const idx = okrNum - 1;
+              matchedOkrId = sorted[idx].id;
+              matchedOkrInfo = `Matched by SPU + Staff (OKR# remapped: ${okrNumber} → ${sorted[idx].okrNumber}, person's OKR ${okrNum} of ${sorted.length})`;
+              matchedOkrDetails = formatOkrDetails(sorted[idx]);
+              rowWarnings.push(`OKR# remapped by staff position`);
+            } else {
+              matchedOkrId = staffOnlyCandidates[0].id;
+              matchedOkrInfo = `Matched by SPU + Staff (OKR# ${okrNumber} not found, using staff's first OKR)`;
+              matchedOkrDetails = formatOkrDetails(staffOnlyCandidates[0]);
+              rowWarnings.push(`OKR# mismatch, matched by staff name`);
+            }
+          } else if (matchedSubUnitId) {
+            const subMatches = okrNumCandidates.filter(o => o.subUnitId === matchedSubUnitId);
+            if (subMatches.length >= 1) {
+              matchedOkrId = subMatches[0].id;
+              matchedOkrInfo = `Matched by SPU + Sub-unit + Quarter + OKR#`;
+              matchedOkrDetails = formatOkrDetails(subMatches[0]);
+              if (subMatches.length > 1) rowWarnings.push(`Multiple OKR matches found`);
+            }
+          }
+
+          if (!matchedOkrId) {
+            if (okrNumCandidates.length === 1) {
+              matchedOkrId = okrNumCandidates[0].id;
+              matchedOkrInfo = `Matched by SPU + Quarter + OKR#`;
+              matchedOkrDetails = formatOkrDetails(okrNumCandidates[0]);
+            } else if (okrNumCandidates.length > 1) {
+              matchedOkrId = okrNumCandidates[0].id;
+              matchedOkrInfo = `Multiple matches (${okrNumCandidates.length}), using first`;
+              matchedOkrDetails = formatOkrDetails(okrNumCandidates[0]);
+              rowWarnings.push(`Multiple OKR matches found`);
+            } else {
+              const spuMatch = allSpus.find(s => s.id === matchedSpuId);
+              console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH: scorer="${scorerName}" spu="${primarySpuName}"→"${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | SPU+Q+Y has ${allForSpuQY.length} OKRs, okr#s=[${allForSpuQY.map(o=>`${o.okrNumber}(${o.staff?.name||'?'})`).join(', ')}]`);
+              rowErrors.push(`No matching OKR found for ${okrNumber} in ${quarter} ${year}`);
+            }
+          }
+
+          candidateOkrs = allForSpuQY.map(formatOkrDetails);
         }
 
         if (!scorerName) rowErrors.push('Missing scorer name');
