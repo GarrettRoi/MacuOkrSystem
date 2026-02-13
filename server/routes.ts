@@ -2085,6 +2085,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (!matchedSpuId) {
           rowErrors.push(`SPU not found: "${primarySpuName}"`);
+          console.log(`[SCORE-MATCH] Row ${i+2} SPU not found: "${primarySpuName}"`);
         } else {
           const candidates = allOkrs.filter(o =>
             o.spuId === matchedSpuId &&
@@ -2092,6 +2093,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             o.year === year &&
             o.okrNumber === okrNumber
           );
+          if (candidates.length === 0) {
+            const spuMatch = allSpus.find(s => s.id === matchedSpuId);
+            const allForSpu = allOkrs.filter(o => o.spuId === matchedSpuId);
+            const allForSpuQY = allOkrs.filter(o => o.spuId === matchedSpuId && o.quarter === quarter && o.year === year);
+            console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH: spu="${primarySpuName}"→"${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | DB has ${allForSpu.length} OKRs for this SPU, ${allForSpuQY.length} for SPU+Q+Y, okr#s=[${allForSpuQY.map(o=>o.okrNumber).join(',')}]`);
+          }
 
           if (matchedSubUnitId) {
             const subMatches = candidates.filter(o => o.subUnitId === matchedSubUnitId);
@@ -2177,14 +2184,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const duplicateCount = previewRows.filter(r => r.isDuplicate).length;
+      const matchedCount = previewRows.filter(r => r.matchedOkrId !== null).length;
+      const unmatchedCount = previewRows.filter(r => r.matchedOkrId === null).length;
+      const spuNotFoundCount = previewRows.filter(r => r.errors?.some((e: string) => e.includes('SPU not found'))).length;
+      const noOkrFoundCount = previewRows.filter(r => r.errors?.some((e: string) => e.includes('No matching OKR'))).length;
+      console.log(`[SCORE-SUMMARY] Total: ${previewRows.length}, Matched: ${matchedCount}, Unmatched: ${unmatchedCount}, SPU-not-found: ${spuNotFoundCount}, No-OKR-found: ${noOkrFoundCount}, Duplicates: ${duplicateCount}`);
 
       res.json({
         success: true,
         totalRows: dataRows.length,
         parsedRows: previewRows.length,
         skippedEmpty: dataRows.length - previewRows.length,
-        matchedRows: previewRows.filter(r => r.matchedOkrId !== null).length,
-        unmatchedRows: previewRows.filter(r => r.matchedOkrId === null).length,
+        matchedRows: matchedCount,
+        unmatchedRows: unmatchedCount,
         duplicateRows: duplicateCount,
         detectedHeaders: headers,
         rows: previewRows,
