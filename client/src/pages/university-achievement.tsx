@@ -84,9 +84,20 @@ function DashboardTab() {
     keywordSearch !== "",
   ].filter(Boolean).length;
 
+  const getOkrProgress = (okrId: string): number => {
+    if (!updates) return 0;
+    const okrUpdates = updates.filter(u => u.okrId === okrId);
+    if (okrUpdates.length === 0) return 0;
+    const latest = okrUpdates.sort((a, b) =>
+      new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+    )[0];
+    return latest.progress ?? 0;
+  };
+
   const totalOkrs = filteredOkrs.length;
+  const completedOkrs = filteredOkrs.filter(okr => getOkrProgress(okr.id) >= 100).length;
   const avgProgress = totalOkrs > 0
-    ? Math.round(filteredOkrs.reduce((sum, okr) => sum + okr.currentValue, 0) / totalOkrs)
+    ? Math.round(filteredOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / totalOkrs)
     : 0;
   
   const uniqueStaffWithOkrs = new Set(filteredOkrs.map((okr) => okr.staffId)).size;
@@ -103,7 +114,7 @@ function DashboardTab() {
   const spuProgress = spus?.map((spu) => {
     const spuOkrs = filteredOkrs.filter((okr) => okr.spuId === spu.id);
     const avgProg = spuOkrs.length > 0
-      ? Math.round(spuOkrs.reduce((sum, okr) => sum + okr.currentValue, 0) / spuOkrs.length)
+      ? Math.round(spuOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / spuOkrs.length)
       : 0;
     return {
       name: spu.name,
@@ -376,13 +387,19 @@ function TrendsTab() {
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [comparisonYear, setComparisonYear] = useState((currentYear - 1).toString());
 
-  const { data: okrs, isLoading } = useQuery<OkrWithDetails[]>({
+  const { data: okrs, isLoading: okrsLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
+  });
+
+  const { data: updates } = useQuery<QuarterlyUpdate[]>({
+    queryKey: ["/api/quarterly-updates"],
   });
 
   const { data: yearsData } = useQuery<Year[]>({
     queryKey: ["/api/years"],
   });
+
+  const isLoading = okrsLoading;
 
   const years = yearsData
     ? yearsData.map(y => y.year).sort((a, b) => b - a)
@@ -401,6 +418,16 @@ function TrendsTab() {
     }
   }, [years, selectedYear, comparisonYear]);
 
+  const getOkrProgress = (okrId: string): number => {
+    if (!updates) return 0;
+    const okrUpdates = updates.filter(u => u.okrId === okrId);
+    if (okrUpdates.length === 0) return 0;
+    const latest = okrUpdates.sort((a, b) =>
+      new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+    )[0];
+    return latest.progress ?? 0;
+  };
+
   const quarterlyData = okrs
     ? ["Q1", "Q2", "Q3", "Q4"].map((quarter) => {
         const currentYearOkrs = okrs.filter(
@@ -411,11 +438,11 @@ function TrendsTab() {
         );
 
         const currentAvg = currentYearOkrs.length > 0
-          ? currentYearOkrs.reduce((sum, okr) => sum + Math.min(100, (okr.targetValue || 0) > 0 ? (okr.currentValue / (okr.targetValue || 1)) * 100 : 0), 0) / currentYearOkrs.length
+          ? currentYearOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / currentYearOkrs.length
           : 0;
 
         const comparisonAvg = comparisonYearOkrs.length > 0
-          ? comparisonYearOkrs.reduce((sum, okr) => sum + Math.min(100, (okr.targetValue || 0) > 0 ? (okr.currentValue / (okr.targetValue || 1)) * 100 : 0), 0) / comparisonYearOkrs.length
+          ? comparisonYearOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / comparisonYearOkrs.length
           : 0;
 
         return {
@@ -441,7 +468,7 @@ function TrendsTab() {
             };
           }
 
-          const progressPercent = Math.min(100, (okr.targetValue || 0) > 0 ? (okr.currentValue / (okr.targetValue || 1)) * 100 : 0);
+          const progressPercent = getOkrProgress(okr.id);
           
           if (okr.year === parseInt(selectedYear)) {
             acc[spuName].currentYear += progressPercent;
@@ -465,7 +492,7 @@ function TrendsTab() {
         const currentYearOkrs = okrs.filter(
           (okr) => okr.year === parseInt(selectedYear) && okr.quarter === quarter
         );
-        const completedCount = currentYearOkrs.filter((okr) => okr.status === "completed").length;
+        const completedCount = currentYearOkrs.filter((okr) => getOkrProgress(okr.id) >= 100).length;
         const completionRate = currentYearOkrs.length > 0
           ? Math.round((completedCount / currentYearOkrs.length) * 100)
           : 0;
@@ -481,13 +508,13 @@ function TrendsTab() {
 
   const totalOkrs = okrs?.filter((okr) => okr.year === parseInt(selectedYear)).length || 0;
   const completedOkrs = okrs?.filter(
-    (okr) => okr.year === parseInt(selectedYear) && okr.status === "completed"
+    (okr) => okr.year === parseInt(selectedYear) && getOkrProgress(okr.id) >= 100
   ).length || 0;
   const avgProgress = okrs
     ? Math.round(
         okrs
           .filter((okr) => okr.year === parseInt(selectedYear))
-          .reduce((sum, okr) => sum + Math.min(100, (okr.targetValue || 0) > 0 ? (okr.currentValue / (okr.targetValue || 1)) * 100 : 0), 0) /
+          .reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) /
           (okrs.filter((okr) => okr.year === parseInt(selectedYear)).length || 1)
       )
     : 0;
