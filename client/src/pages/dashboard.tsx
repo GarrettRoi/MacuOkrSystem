@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,14 +13,12 @@ import type { OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
-const currentYear = new Date().getFullYear();
-const YEARS = ["All", String(currentYear - 1), String(currentYear), String(currentYear + 1)];
 
 const CHART_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 export default function Dashboard() {
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
-  const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
+  const [yearFilter, setYearFilter] = useState<string>("All");
   const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
   const [spuFilter, setSpuFilter] = useState<string>("All");
   const [keywordSearch, setKeywordSearch] = useState<string>("");
@@ -46,6 +44,17 @@ export default function Dashboard() {
 
   const isLoading = okrsLoading || updatesLoading || spusLoading;
 
+  const availableYears = okrs
+    ? Array.from(new Set(okrs.map(o => o.year))).sort((a, b) => b - a)
+    : [];
+  const YEARS = ["All", ...availableYears.map(String)];
+
+  useEffect(() => {
+    if (yearFilter === "All" && availableYears.length > 0) {
+      setYearFilter(String(availableYears[0]));
+    }
+  }, [availableYears.length]);
+
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
@@ -62,7 +71,7 @@ export default function Dashboard() {
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
-    setYearFilter(String(currentYear));
+    setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
     setSpuFilter("All");
     setKeywordSearch("");
@@ -70,7 +79,7 @@ export default function Dashboard() {
 
   const activeFilterCount = [
     quarterFilter !== "All",
-    yearFilter !== String(currentYear),
+    yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
     planningYearFilter !== "All",
     spuFilter !== "All",
     keywordSearch !== "",

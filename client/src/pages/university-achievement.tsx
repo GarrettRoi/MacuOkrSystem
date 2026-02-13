@@ -14,12 +14,10 @@ import type { OkrWithDetails, QuarterlyUpdate, Spu, Year } from "@shared/schema"
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
-const defaultYear = new Date().getFullYear();
-const YEARS = ["All", String(defaultYear - 1), String(defaultYear), String(defaultYear + 1)];
 
 function DashboardTab() {
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
-  const [yearFilter, setYearFilter] = useState<string>(String(defaultYear));
+  const [yearFilter, setYearFilter] = useState<string>("All");
   const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
   const [spuFilter, setSpuFilter] = useState<string>("All");
   const [keywordSearch, setKeywordSearch] = useState<string>("");
@@ -45,6 +43,17 @@ function DashboardTab() {
 
   const isLoading = okrsLoading || updatesLoading || spusLoading;
 
+  const availableYears = okrs
+    ? Array.from(new Set(okrs.map(o => o.year))).sort((a, b) => b - a)
+    : [];
+  const YEARS = ["All", ...availableYears.map(String)];
+
+  useEffect(() => {
+    if (yearFilter === "All" && availableYears.length > 0) {
+      setYearFilter(String(availableYears[0]));
+    }
+  }, [availableYears.length]);
+
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
@@ -61,7 +70,7 @@ function DashboardTab() {
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
-    setYearFilter(String(defaultYear));
+    setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
     setSpuFilter("All");
     setKeywordSearch("");
@@ -69,7 +78,7 @@ function DashboardTab() {
 
   const activeFilterCount = [
     quarterFilter !== "All",
-    yearFilter !== String(defaultYear),
+    yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
     planningYearFilter !== "All",
     spuFilter !== "All",
     keywordSearch !== "",

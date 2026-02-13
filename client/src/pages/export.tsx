@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,11 @@ import type { OkrWithDetails } from "@shared/schema";
 import { getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
-const currentYear = new Date().getFullYear();
-const YEARS = ["All", String(currentYear - 1), String(currentYear), String(currentYear + 1)];
 
 export default function Export() {
   const { toast } = useToast();
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
-  const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
+  const [yearFilter, setYearFilter] = useState<string>("All");
   const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
   const [isExporting, setIsExporting] = useState(false);
 
@@ -28,6 +26,17 @@ export default function Export() {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+
+  const availableYears = okrs
+    ? Array.from(new Set(okrs.map(o => o.year))).sort((a, b) => b - a)
+    : [];
+  const YEARS = ["All", ...availableYears.map(String)];
+
+  useEffect(() => {
+    if (yearFilter === "All" && availableYears.length > 0) {
+      setYearFilter(String(availableYears[0]));
+    }
+  }, [availableYears.length]);
 
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;

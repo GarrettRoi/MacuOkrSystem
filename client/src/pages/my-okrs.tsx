@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,11 +15,8 @@ import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLAN
 interface MyOkrsProps {
   staff: StaffWithDetails;
 }
-const currentYear = new Date().getFullYear();
-const YEARS = ["All", String(currentYear - 1), String(currentYear), String(currentYear + 1)];
-
 export default function MyOkrs({ staff }: MyOkrsProps) {
-  const [yearFilter, setYearFilter] = useState<string>(String(currentYear));
+  const [yearFilter, setYearFilter] = useState<string>("All");
   const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
   const [quarterFilter, setQuarterFilter] = useState<string>("All");
   const [spuFilter, setSpuFilter] = useState<string>("All");
@@ -67,6 +64,17 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   // OKRs are already scoped to user's SPU from the server
   const mySpuOkrs = spuOkrs || [];
 
+  const availableYears = mySpuOkrs.length > 0
+    ? Array.from(new Set(mySpuOkrs.map(o => o.year))).sort((a, b) => b - a)
+    : [];
+  const YEARS = ["All", ...availableYears.map(String)];
+
+  useEffect(() => {
+    if (yearFilter === "All" && availableYears.length > 0) {
+      setYearFilter(String(availableYears[0]));
+    }
+  }, [availableYears.length]);
+
   const filteredOkrs = useMemo(() => {
     const quarterOrder: Record<string, number> = { "Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4 };
     return mySpuOkrs
@@ -101,14 +109,14 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   };
 
   const clearFilters = () => {
-    setYearFilter(String(currentYear));
+    setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
     setQuarterFilter("All");
     setSpuFilter("All");
   };
 
   const activeFilterCount = [
-    yearFilter !== String(currentYear),
+    yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
     planningYearFilter !== "All",
     quarterFilter !== "All",
     spuFilter !== "All",
