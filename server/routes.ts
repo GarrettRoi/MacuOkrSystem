@@ -2164,15 +2164,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           if (!matchedOkrId) {
-            if (okrNumCandidates.length === 1) {
+            const distinctStaffIds = new Set(allForSpuQY.map(o => o.staffId).filter(Boolean));
+            const isMultiStaffSpu = distinctStaffIds.size > 1;
+
+            if (okrNumCandidates.length === 1 && !isMultiStaffSpu) {
               matchedOkrId = okrNumCandidates[0].id;
               matchedOkrInfo = `Matched by SPU + Quarter + OKR#`;
               matchedOkrDetails = formatOkrDetails(okrNumCandidates[0]);
+            } else if (okrNumCandidates.length === 1 && isMultiStaffSpu) {
+              const candidate = okrNumCandidates[0];
+              if (candidate.staff && fuzzyMatchStaffName(scorerName, candidate.staff.name)) {
+                matchedOkrId = candidate.id;
+                matchedOkrInfo = `Matched by SPU + Quarter + OKR# (single candidate, staff verified)`;
+                matchedOkrDetails = formatOkrDetails(candidate);
+              } else {
+                const spuMatch = allSpus.find(s => s.id === matchedSpuId);
+                console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH (multi-staff SPU, staff mismatch): scorer="${scorerName}" spu="${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | candidate staff="${candidate.staff?.name}"`);
+                rowErrors.push(`No matching OKR found for ${okrNumber} in ${quarter} ${year} (scorer "${scorerName}" doesn't match OKR owner "${candidate.staff?.name}")`);
+              }
             } else if (okrNumCandidates.length > 1) {
-              matchedOkrId = okrNumCandidates[0].id;
-              matchedOkrInfo = `Multiple matches (${okrNumCandidates.length}), using first`;
-              matchedOkrDetails = formatOkrDetails(okrNumCandidates[0]);
-              rowWarnings.push(`Multiple OKR matches found`);
+              const staffFiltered = okrNumCandidates.filter(o =>
+                o.staff && fuzzyMatchStaffName(scorerName, o.staff.name)
+              );
+              if (staffFiltered.length >= 1) {
+                matchedOkrId = staffFiltered[0].id;
+                matchedOkrInfo = `Matched by SPU + Quarter + OKR# + Staff verification`;
+                matchedOkrDetails = formatOkrDetails(staffFiltered[0]);
+              } else {
+                const spuMatch = allSpus.find(s => s.id === matchedSpuId);
+                console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH (multiple OKR# candidates, no staff match): scorer="${scorerName}" spu="${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | candidates=[${okrNumCandidates.map(o=>`${o.okrNumber}(${o.staff?.name||'?'})`).join(', ')}]`);
+                rowErrors.push(`No matching OKR found for ${okrNumber} in ${quarter} ${year} (multiple OKRs with same number, scorer "${scorerName}" doesn't match any owner)`);
+              }
             } else {
               const spuMatch = allSpus.find(s => s.id === matchedSpuId);
               console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH: scorer="${scorerName}" spu="${primarySpuName}"→"${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | SPU+Q+Y has ${allForSpuQY.length} OKRs, okr#s=[${allForSpuQY.map(o=>`${o.okrNumber}(${o.staff?.name||'?'})`).join(', ')}]`);
@@ -2199,6 +2221,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isDuplicate = true;
             duplicateType = 'csv';
             rowErrors.push(`Duplicate: Same OKR score as row ${csvScoreSeenKeys.get(scoreKey)} in this file`);
+            if (quarter === 'Q3' && year === 2025) {
+              console.log(`[DUP-DEBUG] Row ${i+2} Q3 2025 CSV-internal dup: scorer="${scorerName}" okr#=${okrNumber} matched OKR=${matchedOkrId} - first seen at row ${csvScoreSeenKeys.get(scoreKey)}`);
+            }
+          } else {
+            if (quarter === 'Q3' && year === 2025) {
+              console.log(`[DUP-DEBUG] Row ${i+2} Q3 2025 NOT duplicate: scorer="${scorerName}" okr#=${okrNumber} matched OKR=${matchedOkrId}`);
+            }
           }
           csvScoreSeenKeys.set(scoreKey, i + 2);
         }
@@ -2234,7 +2263,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const unmatchedCount = previewRows.filter(r => r.matchedOkrId === null).length;
       const spuNotFoundCount = previewRows.filter(r => r.errors?.some((e: string) => e.includes('SPU not found'))).length;
       const noOkrFoundCount = previewRows.filter(r => r.errors?.some((e: string) => e.includes('No matching OKR'))).length;
-      console.log(`[SCORE-SUMMARY] Total: ${previewRows.length}, Matched: ${matchedCount}, Unmatched: ${unmatchedCount}, SPU-not-found: ${spuNotFoundCount}, No-OKR-found: ${noOkrFoundCount}, Duplicates: ${duplicateCount}`);
+      const existingDupCount = previewRows.filter(r => r.duplicateType === 'existing').length;
+      const csvDupCount = previewRows.filter(r => r.duplicateType === 'csv').length;
+      console.log(`[SCORE-SUMMARY] Total: ${previewRows.length}, Matched: ${matchedCount}, Unmatched: ${unmatchedCount}, SPU-not-found: ${spuNotFoundCount}, No-OKR-found: ${noOkrFoundCount}, Duplicates: ${duplicateCount} (existing: ${existingDupCount}, csv-internal: ${csvDupCount})`);
+      const q3_2025 = previewRows.filter(r => r.quarter === 'Q3' && r.year === 2025);
+      console.log(`[SCORE-SUMMARY] Q3 2025: total=${q3_2025.length}, matched=${q3_2025.filter((r: any) => r.matchedOkrId).length}, dups=${q3_2025.filter((r: any) => r.isDuplicate).length} (existing=${q3_2025.filter((r: any) => r.duplicateType === 'existing').length}, csv=${q3_2025.filter((r: any) => r.duplicateType === 'csv').length})`);
 
       res.json({
         success: true,
