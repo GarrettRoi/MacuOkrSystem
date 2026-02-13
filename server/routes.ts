@@ -1957,22 +1957,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         spuNameMap.set(spu.name.toLowerCase().trim(), spu.id);
       }
 
+      const nameStartsWith = (a: string, b: string): boolean => {
+        if (a.length < 3 || b.length < 3) return false;
+        return a.startsWith(b) || b.startsWith(a);
+      };
+
+      const levenshtein = (a: string, b: string): number => {
+        const matrix: number[][] = [];
+        for (let i = 0; i <= a.length; i++) matrix[i] = [i];
+        for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+        for (let i = 1; i <= a.length; i++) {
+          for (let j = 1; j <= b.length; j++) {
+            matrix[i][j] = Math.min(
+              matrix[i - 1][j] + 1,
+              matrix[i][j - 1] + 1,
+              matrix[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+            );
+          }
+        }
+        return matrix[a.length][b.length];
+      };
+
+      const fuzzyWordMatch = (a: string, b: string): boolean => {
+        if (a === b) return true;
+        if (nameStartsWith(a, b)) return true;
+        if (a.length >= 4 && b.length >= 4 && levenshtein(a, b) <= 1) return true;
+        return false;
+      };
+
       const fuzzyMatchStaffName = (csvName: string, okrStaffName: string): boolean => {
         if (!csvName || !okrStaffName) return false;
-        const csvLower = csvName.toLowerCase().trim();
-        const staffLower = okrStaffName.toLowerCase().trim();
+        const csvLower = csvName.toLowerCase().trim().replace(/[.@]/g, ' ');
+        const staffLower = okrStaffName.toLowerCase().trim().replace(/[.@]/g, ' ');
         if (csvLower === staffLower) return true;
-        const csvParts = csvLower.split(/[\s,]+/).filter(w => w.length > 1);
-        const staffParts = staffLower.split(/[\s,]+/).filter(w => w.length > 1);
+        const csvParts = csvLower.split(/[\s,]+/).filter(w => w.length > 1 && w !== 'phd' && w !== 'dr' && w !== 'jr' && w !== 'sr' && w !== 'ii' && w !== 'iii');
+        const staffParts = staffLower.split(/[\s,]+/).filter(w => w.length > 1 && w !== 'phd' && w !== 'dr' && w !== 'jr' && w !== 'sr' && w !== 'ii' && w !== 'iii');
         if (csvParts.length >= 2 && staffParts.length >= 2) {
           const csvFirst = csvParts[0];
           const csvLast = csvParts[csvParts.length - 1];
           const staffFirst = staffParts[0];
           const staffLast = staffParts[staffParts.length - 1];
-          if (csvFirst === staffFirst && csvLast === staffLast) return true;
-          if (csvLast === staffFirst && csvFirst === staffLast) return true;
+          if (fuzzyWordMatch(csvFirst, staffFirst) && fuzzyWordMatch(csvLast, staffLast)) return true;
+          if (fuzzyWordMatch(csvLast, staffFirst) && fuzzyWordMatch(csvFirst, staffLast)) return true;
         }
-        const matchCount = csvParts.filter(w => staffParts.includes(w)).length;
+        const matchCount = csvParts.filter(w => staffParts.some(sw => fuzzyWordMatch(w, sw))).length;
         if (matchCount >= Math.max(2, Math.ceil(csvParts.length * 0.6))) return true;
         return false;
       };
@@ -1989,10 +2017,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const [name, id] of spuEntries) {
           if (name.includes(lower) || lower.includes(name)) return id;
         }
-        const csvWords = lower.split(/[\s,]+/).filter(w => w.length > 2);
+        const csvWords = lower.split(/[\s,\-]+/).filter(w => w.length > 2);
         for (const [name, id] of spuEntries) {
-          const matchCount = csvWords.filter(w => name.includes(w)).length;
-          if (matchCount >= Math.max(1, csvWords.length * 0.5)) return id;
+          const nameWords = name.split(/[\s,\-]+/).filter(w => w.length > 2);
+          const matchCount = csvWords.filter(cw => nameWords.some(nw => fuzzyWordMatch(cw, nw))).length;
+          if (matchCount >= Math.max(1, Math.ceil(csvWords.length * 0.6))) return id;
+        }
+        for (const [name, id] of spuEntries) {
+          if (lower.length >= 5 && name.length >= 5 && levenshtein(lower, name) <= 2) return id;
         }
         return null;
       };
@@ -2114,86 +2146,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
             o.year === year
           );
 
-          const staffCandidates = allForSpuQY.filter(o =>
-            o.okrNumber === okrNumber &&
-            o.staff && fuzzyMatchStaffName(scorerName, o.staff.name)
-          );
-
           const okrNumCandidates = allForSpuQY.filter(o =>
             o.okrNumber === okrNumber
           );
 
-          const staffOnlyCandidates = allForSpuQY.filter(o =>
-            o.staff && fuzzyMatchStaffName(scorerName, o.staff.name)
-          );
+          const krCount = krScores.filter(s => s !== null).length;
 
-          if (staffCandidates.length >= 1) {
-            matchedOkrId = staffCandidates[0].id;
-            matchedOkrInfo = staffCandidates.length === 1
-              ? `Matched by SPU + Staff + Quarter + OKR#`
-              : `Multiple staff matches (${staffCandidates.length}), using first`;
-            matchedOkrDetails = formatOkrDetails(staffCandidates[0]);
-            if (staffCandidates.length > 1) rowWarnings.push(`Multiple OKR matches found`);
-          } else if (staffOnlyCandidates.length > 0) {
-            const okrNum = parseInt(okrNumber.replace(/\D/g, ''));
-            if (!isNaN(okrNum) && okrNum >= 1 && okrNum <= staffOnlyCandidates.length) {
-              const sorted = staffOnlyCandidates.sort((a, b) => {
-                const aNum = parseInt((a.okrNumber || '').replace(/\D/g, '')) || 0;
-                const bNum = parseInt((b.okrNumber || '').replace(/\D/g, '')) || 0;
-                return aNum - bNum;
-              });
-              const idx = okrNum - 1;
-              matchedOkrId = sorted[idx].id;
-              matchedOkrInfo = `Matched by SPU + Staff (OKR# remapped: ${okrNumber} → ${sorted[idx].okrNumber}, person's OKR ${okrNum} of ${sorted.length})`;
-              matchedOkrDetails = formatOkrDetails(sorted[idx]);
-              rowWarnings.push(`OKR# remapped by staff position`);
-            } else {
-              matchedOkrId = staffOnlyCandidates[0].id;
-              matchedOkrInfo = `Matched by SPU + Staff (OKR# ${okrNumber} not found, using staff's first OKR)`;
-              matchedOkrDetails = formatOkrDetails(staffOnlyCandidates[0]);
-              rowWarnings.push(`OKR# mismatch, matched by staff name`);
-            }
-          } else if (matchedSubUnitId) {
-            const subMatches = okrNumCandidates.filter(o => o.subUnitId === matchedSubUnitId);
-            if (subMatches.length >= 1) {
-              matchedOkrId = subMatches[0].id;
-              matchedOkrInfo = `Matched by SPU + Sub-unit + Quarter + OKR#`;
-              matchedOkrDetails = formatOkrDetails(subMatches[0]);
-              if (subMatches.length > 1) rowWarnings.push(`Multiple OKR matches found`);
+          let narrowed = okrNumCandidates;
+          let matchMethod = 'SPU + Quarter + Year + OKR#';
+
+          if (narrowed.length > 1 && matchedSubUnitId) {
+            const subFiltered = narrowed.filter(o => o.subUnitId === matchedSubUnitId);
+            if (subFiltered.length >= 1) {
+              narrowed = subFiltered;
+              matchMethod += ' + Sub-unit';
             }
           }
 
-          if (!matchedOkrId) {
-            const distinctStaffIds = new Set(allForSpuQY.map(o => o.staffId).filter(Boolean));
-            const isMultiStaffSpu = distinctStaffIds.size > 1;
+          if (narrowed.length > 1 && krCount > 0) {
+            const krFiltered = narrowed.filter(o => {
+              try {
+                const okrKrs = typeof o.keyResults === 'string' ? JSON.parse(o.keyResults) : o.keyResults;
+                return Array.isArray(okrKrs) && okrKrs.length === krCount;
+              } catch { return false; }
+            });
+            if (krFiltered.length >= 1) {
+              narrowed = krFiltered;
+              matchMethod += ' + KR count';
+            }
+          }
 
-            if (okrNumCandidates.length === 1 && !isMultiStaffSpu) {
-              matchedOkrId = okrNumCandidates[0].id;
-              matchedOkrInfo = `Matched by SPU + Quarter + OKR#`;
-              matchedOkrDetails = formatOkrDetails(okrNumCandidates[0]);
-            } else if (okrNumCandidates.length === 1 && isMultiStaffSpu) {
-              const candidate = okrNumCandidates[0];
-              if (candidate.staff && fuzzyMatchStaffName(scorerName, candidate.staff.name)) {
-                matchedOkrId = candidate.id;
-                matchedOkrInfo = `Matched by SPU + Quarter + OKR# (single candidate, staff verified)`;
-                matchedOkrDetails = formatOkrDetails(candidate);
+          if (narrowed.length > 1) {
+            const staffFiltered = narrowed.filter(o =>
+              o.staff && fuzzyMatchStaffName(scorerName, o.staff.name)
+            );
+            if (staffFiltered.length >= 1) {
+              narrowed = staffFiltered;
+              matchMethod += ` + Staff (${staffFiltered[0].staff?.name})`;
+            }
+          }
+
+          if (narrowed.length === 1) {
+            matchedOkrId = narrowed[0].id;
+            matchedOkrInfo = `Matched by ${matchMethod}`;
+            matchedOkrDetails = formatOkrDetails(narrowed[0]);
+          } else if (narrowed.length > 1) {
+            matchedOkrId = narrowed[0].id;
+            matchedOkrInfo = `${narrowed.length} candidates after ${matchMethod}, using first`;
+            matchedOkrDetails = formatOkrDetails(narrowed[0]);
+            rowWarnings.push(`Ambiguous: ${narrowed.length} OKRs matched ${matchMethod}`);
+          } else if (okrNumCandidates.length === 0) {
+            const staffOnlyCandidates = allForSpuQY.filter(o =>
+              o.staff && fuzzyMatchStaffName(scorerName, o.staff.name)
+            );
+            if (staffOnlyCandidates.length > 0) {
+              const okrNum = parseInt(okrNumber.replace(/\D/g, ''));
+              if (!isNaN(okrNum) && okrNum >= 1 && okrNum <= staffOnlyCandidates.length) {
+                const sorted = [...staffOnlyCandidates].sort((a, b) => {
+                  const aNum = parseInt((a.okrNumber || '').replace(/\D/g, '')) || 0;
+                  const bNum = parseInt((b.okrNumber || '').replace(/\D/g, '')) || 0;
+                  return aNum - bNum;
+                });
+                const idx = okrNum - 1;
+                matchedOkrId = sorted[idx].id;
+                matchedOkrInfo = `Matched by SPU + Staff (OKR# remapped: ${okrNumber} → ${sorted[idx].okrNumber})`;
+                matchedOkrDetails = formatOkrDetails(sorted[idx]);
+                rowWarnings.push(`OKR# remapped by staff position`);
               } else {
-                const spuMatch = allSpus.find(s => s.id === matchedSpuId);
-                console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH (multi-staff SPU, staff mismatch): scorer="${scorerName}" spu="${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | candidate staff="${candidate.staff?.name}"`);
-                rowErrors.push(`No matching OKR found for ${okrNumber} in ${quarter} ${year} (scorer "${scorerName}" doesn't match OKR owner "${candidate.staff?.name}")`);
-              }
-            } else if (okrNumCandidates.length > 1) {
-              const staffFiltered = okrNumCandidates.filter(o =>
-                o.staff && fuzzyMatchStaffName(scorerName, o.staff.name)
-              );
-              if (staffFiltered.length >= 1) {
-                matchedOkrId = staffFiltered[0].id;
-                matchedOkrInfo = `Matched by SPU + Quarter + OKR# + Staff verification`;
-                matchedOkrDetails = formatOkrDetails(staffFiltered[0]);
-              } else {
-                const spuMatch = allSpus.find(s => s.id === matchedSpuId);
-                console.log(`[SCORE-MATCH] Row ${i+2} NO MATCH (multiple OKR# candidates, no staff match): scorer="${scorerName}" spu="${spuMatch?.name}" q=${quarter} y=${year} okr#=${okrNumber} | candidates=[${okrNumCandidates.map(o=>`${o.okrNumber}(${o.staff?.name||'?'})`).join(', ')}]`);
-                rowErrors.push(`No matching OKR found for ${okrNumber} in ${quarter} ${year} (multiple OKRs with same number, scorer "${scorerName}" doesn't match any owner)`);
+                matchedOkrId = staffOnlyCandidates[0].id;
+                matchedOkrInfo = `Matched by SPU + Staff (OKR# ${okrNumber} out of range, using first)`;
+                matchedOkrDetails = formatOkrDetails(staffOnlyCandidates[0]);
+                rowWarnings.push(`OKR# mismatch, matched by staff name`);
               }
             } else {
               const spuMatch = allSpus.find(s => s.id === matchedSpuId);
