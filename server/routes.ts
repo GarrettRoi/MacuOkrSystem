@@ -1565,7 +1565,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const s of allSpus) spuIdToName.set(s.id, s.name.toLowerCase().trim());
       for (const okr of existingOkrs) {
         if (okr.submissionTimestamp) {
-          existingTimestamps.add(okr.submissionTimestamp.trim());
+          const sName = staffIdToName.get(okr.staffId || '') || '';
+          const spuName = spuIdToName.get(okr.spuId) || '';
+          existingTimestamps.add(`${okr.submissionTimestamp.trim()}|${sName}|${spuName}|${okr.okrNumber}`);
         }
         const sName = staffIdToName.get(okr.staffId || '') || '';
         const key = `${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`;
@@ -1619,16 +1621,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const primarySpuText = (spuNames[0] || spuText).toLowerCase().trim();
 
         if (timestampText) {
-          const tsKey = timestampText.trim();
+          const tsKey = `${timestampText.trim()}|${staffName.toLowerCase().trim()}|${primarySpuText}|${okrNumber}`;
           if (existingTimestamps.has(tsKey)) {
             isDuplicate = true;
             duplicateType = 'existing';
-            rowErrors.push('Duplicate: This submission timestamp already exists in the database');
+            rowErrors.push('Duplicate: This OKR already exists in the database');
             console.log(`[DEDUP] Row ${i+2} DB-timestamp match: ts="${tsKey}"`);
           } else if (csvSeenTimestamps.has(tsKey)) {
             isDuplicate = true;
             duplicateType = 'csv';
-            rowErrors.push(`Duplicate: Same submission timestamp as row ${csvSeenTimestamps.get(tsKey)} in this file`);
+            rowErrors.push(`Duplicate: Same OKR as row ${csvSeenTimestamps.get(tsKey)} in this file`);
             console.log(`[DEDUP] Row ${i+2} CSV-timestamp match with row ${csvSeenTimestamps.get(tsKey)}: ts="${tsKey}"`);
           }
           csvSeenTimestamps.set(tsKey, i + 2);
@@ -1733,11 +1735,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const existingOkrs = await storage.getAllOkrs();
+      const allStaffForConfirm = await storage.getAllStaff();
+      const allSpusForConfirm = await storage.getAllSpus();
+      const staffIdToNameConfirm = new Map<string, string>();
+      const spuIdToNameConfirm = new Map<string, string>();
+      for (const s of allStaffForConfirm) staffIdToNameConfirm.set(s.id, s.name.toLowerCase().trim());
+      for (const s of allSpusForConfirm) spuIdToNameConfirm.set(s.id, s.name.toLowerCase().trim());
       const existingTimestamps = new Set<string>();
       const existingOkrKeys = new Set<string>();
       for (const okr of existingOkrs) {
         if (okr.submissionTimestamp) {
-          existingTimestamps.add(okr.submissionTimestamp.trim());
+          const sName = staffIdToNameConfirm.get(okr.staffId || '') || '';
+          const spuName = spuIdToNameConfirm.get(okr.spuId) || '';
+          existingTimestamps.add(`${okr.submissionTimestamp.trim()}|${sName}|${spuName}|${okr.okrNumber}`);
         }
         existingOkrKeys.add(`${okr.staffId}|${okr.spuId}|${okr.quarter}|${okr.year}|${okr.okrNumber}`);
       }
@@ -1837,7 +1847,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           let isConfirmDuplicate = false;
           if (rowTimestamp) {
-            const tsKey = rowTimestamp.trim();
+            const staffNameLower = staffRecord.name.toLowerCase().trim();
+            const spuNameLower = primarySpu.name.toLowerCase().trim();
+            const tsKey = `${rowTimestamp.trim()}|${staffNameLower}|${spuNameLower}|${okrNumber}`;
             if (existingTimestamps.has(tsKey) || importedTimestamps.has(tsKey)) {
               isConfirmDuplicate = true;
             }
