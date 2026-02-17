@@ -204,11 +204,17 @@ export default function Data() {
       );
 
       const isDuplicate = hasExistingScore || hasCsvDuplicate;
+      let duplicateOfRow: number | null = null;
       if (isDuplicate) {
-        cleanErrors.push(hasExistingScore
-          ? 'Duplicate: A score for this OKR already exists in the database for this period'
-          : `Duplicate: Same OKR score as another row in this file`
-        );
+        if (hasExistingScore) {
+          cleanErrors.push('Duplicate: A score for this OKR already exists in the database for this period');
+        } else {
+          const origRow = updated.find(
+            (r, i) => i !== rowIdx && r.matchedOkrId === okr.id && r.quarter === row.quarter && r.year === row.year
+          );
+          duplicateOfRow = origRow?.rowIndex || null;
+          cleanErrors.push(`Duplicate: Same OKR score as row ${duplicateOfRow || '?'} in this file`);
+        }
       }
 
       updated[rowIdx] = {
@@ -220,6 +226,7 @@ export default function Data() {
         include: !isDuplicate && cleanErrors.length === 0,
         isDuplicate,
         duplicateType: hasExistingScore ? 'existing' : hasCsvDuplicate ? 'csv' : null,
+        duplicateOfRow,
       };
       return updated;
     });
@@ -2425,6 +2432,51 @@ export default function Data() {
                                       )}
                                     </div>
                                   </div>
+                                )}
+                                {row.isDuplicate && row.duplicateType === 'csv' && row.duplicateOfRow && (
+                                  (() => {
+                                    const origRow = scoreImportPreviewData.find((r: any) => r.rowIndex === row.duplicateOfRow);
+                                    return (
+                                      <div className="space-y-2 md:col-span-2 lg:col-span-3 border rounded-md p-3 bg-amber-50/50 dark:bg-amber-950/20">
+                                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                          Duplicate Comparison - This row and Row {row.duplicateOfRow} both matched the same database OKR
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-4 text-xs">
+                                          <div className="space-y-1 border rounded p-2 bg-background">
+                                            <p className="font-medium text-amber-700 dark:text-amber-300">This Row ({row.rowIndex})</p>
+                                            <p><span className="font-medium">Scorer:</span> {row.scorerName}</p>
+                                            <p><span className="font-medium">SPU:</span> {row.spuName}</p>
+                                            <p><span className="font-medium">OKR#:</span> {row.okrNumber} | {row.quarter} {row.year}</p>
+                                            <p><span className="font-medium">Scores:</span> {row.krScores?.map((kr: any) => `KR${kr.krNumber}: ${kr.score}`).join(', ') || '-'}</p>
+                                            <p><span className="font-medium">Avg:</span> {row.averageScore != null ? `${row.averageScore}%` : '-'}</p>
+                                            <p><span className="font-medium">Match:</span> {row.matchedOkrInfo}</p>
+                                          </div>
+                                          <div className="space-y-1 border rounded p-2 bg-background">
+                                            <p className="font-medium text-green-700 dark:text-green-300">Row {row.duplicateOfRow} (original)</p>
+                                            {origRow ? (
+                                              <>
+                                                <p><span className="font-medium">Scorer:</span> {origRow.scorerName}</p>
+                                                <p><span className="font-medium">SPU:</span> {origRow.spuName}</p>
+                                                <p><span className="font-medium">OKR#:</span> {origRow.okrNumber} | {origRow.quarter} {origRow.year}</p>
+                                                <p><span className="font-medium">Scores:</span> {origRow.krScores?.map((kr: any) => `KR${kr.krNumber}: ${kr.score}`).join(', ') || '-'}</p>
+                                                <p><span className="font-medium">Avg:</span> {origRow.averageScore != null ? `${origRow.averageScore}%` : '-'}</p>
+                                                <p><span className="font-medium">Match:</span> {origRow.matchedOkrInfo}</p>
+                                              </>
+                                            ) : (
+                                              <p className="text-muted-foreground">Could not find original row</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {origRow && row.matchedOkrDetails && (
+                                          <div className="border rounded p-2 bg-background mt-2">
+                                            <p className="font-medium text-xs mb-1">Shared Matched OKR:</p>
+                                            <p className="text-xs"><span className="font-medium">Staff:</span> {row.matchedOkrDetails.staffName}</p>
+                                            <p className="text-xs"><span className="font-medium">Objective:</span> {row.matchedOkrDetails.objectiveStatement}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()
                                 )}
                                 {!row.matchedOkrId && row.candidateOkrs && row.candidateOkrs.length > 0 && (
                                   <div className="space-y-2 md:col-span-2 lg:col-span-3 border rounded-md p-3 bg-amber-50/50 dark:bg-amber-950/20">

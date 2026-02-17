@@ -2231,6 +2231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         let isDuplicate = false;
         let duplicateType: string | null = null;
+        let duplicateOfRow: number | null = null;
 
         if (matchedOkrId) {
           const scoreKey = `${matchedOkrId}|${quarter}|${year}`;
@@ -2241,14 +2242,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } else if (csvScoreSeenKeys.has(scoreKey)) {
             isDuplicate = true;
             duplicateType = 'csv';
-            rowErrors.push(`Duplicate: Same OKR score as row ${csvScoreSeenKeys.get(scoreKey)} in this file`);
-            if (quarter === 'Q3' && year === 2025) {
-              console.log(`[DUP-DEBUG] Row ${i+2} Q3 2025 CSV-internal dup: scorer="${scorerName}" okr#=${okrNumber} matched OKR=${matchedOkrId} - first seen at row ${csvScoreSeenKeys.get(scoreKey)}`);
-            }
-          } else {
-            if (quarter === 'Q3' && year === 2025) {
-              console.log(`[DUP-DEBUG] Row ${i+2} Q3 2025 NOT duplicate: scorer="${scorerName}" okr#=${okrNumber} matched OKR=${matchedOkrId}`);
-            }
+            duplicateOfRow = csvScoreSeenKeys.get(scoreKey) || null;
+            rowErrors.push(`Duplicate: Same OKR score as row ${duplicateOfRow} in this file`);
           }
           csvScoreSeenKeys.set(scoreKey, i + 2);
         }
@@ -2276,6 +2271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           include: rowErrors.length === 0 && matchedOkrId !== null && !isDuplicate,
           isDuplicate,
           duplicateType,
+          duplicateOfRow,
         });
       }
 
