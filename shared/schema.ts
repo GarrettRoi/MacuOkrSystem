@@ -102,6 +102,8 @@ export const quarterlyUpdates = pgTable("quarterly_updates", {
   averageScore: integer("average_score"),
   additionalKeyResults: text("additional_key_results"),
   notes: text("notes").notNull(),
+  isPrimaryScore: boolean("is_primary_score").notNull().default(true),
+  isCollaborativeScore: boolean("is_collaborative_score").notNull().default(false),
   submittedAt: timestamp("submitted_at").notNull().defaultNow(),
 });
 

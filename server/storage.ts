@@ -735,7 +735,8 @@ export class DatabaseStorage implements IStorage {
     const progressRecords: EmployeeProgressRecord[] = okrResults.map(row => {
       const okrId = row.okrs.id;
       const updates = updatesMap.get(okrId) || [];
-      const latestUpdate = updates.length > 0 ? updates[0] : null;
+      const primaryUpdates = updates.filter(u => u.isPrimaryScore !== false);
+      const latestUpdate = primaryUpdates.length > 0 ? primaryUpdates[0] : (updates.length > 0 ? updates[0] : null);
       const responsibilities = responsibilitiesMap.get(okrId) || [];
 
       return {

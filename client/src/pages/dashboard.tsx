@@ -87,7 +87,7 @@ export default function Dashboard() {
 
   const getOkrProgress = (okrId: string): number => {
     if (!updates) return 0;
-    const okrUpdates = updates.filter(u => u.okrId === okrId);
+    const okrUpdates = updates.filter(u => u.okrId === okrId && u.isPrimaryScore !== false);
     if (okrUpdates.length === 0) return 0;
     const latest = okrUpdates.sort((a, b) =>
       new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()

@@ -1097,15 +1097,26 @@ export default function Data() {
                                   <p className="text-sm text-muted-foreground">No quarterly updates yet</p>
                                 ) : (
                                   <div className="space-y-2">
-                                    {okr.quarterlyUpdates.map((update) => (
-                                      <Card key={update.id} className="bg-background" data-testid={`card-update-${update.id}`}>
+                                    {okr.quarterlyUpdates.map((update: any) => (
+                                      <Card key={update.id} className={`bg-background ${update.isCollaborativeScore ? 'border-blue-300 dark:border-blue-700' : ''}`} data-testid={`card-update-${update.id}`}>
                                         <CardContent className="pt-4">
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                               <p className="text-sm font-medium">Quarter/Year</p>
-                                              <p className="text-sm text-muted-foreground">
-                                                {getQuarterLabel(update.quarter)} {update.year}
-                                              </p>
+                                              <div className="flex items-center gap-1 flex-wrap">
+                                                <p className="text-sm text-muted-foreground">
+                                                  {getQuarterLabel(update.quarter)} {update.year}
+                                                </p>
+                                                {update.isPrimaryScore === false && (
+                                                  <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px] px-1 py-0">Secondary</Badge>
+                                                )}
+                                                {update.isPrimaryScore !== false && update.isCollaborativeScore && (
+                                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1 py-0">Primary</Badge>
+                                                )}
+                                                {update.isCollaborativeScore && (
+                                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1 py-0">COLLAB</Badge>
+                                                )}
+                                              </div>
                                             </div>
                                             <div>
                                               <p className="text-sm font-medium">Average Score</p>
@@ -1140,16 +1151,42 @@ export default function Data() {
                                                 </div>
                                               );
                                             })()}
-                                            <div className="md:col-span-2 text-right">
-                                              <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => handleEditUpdate(update)}
-                                                data-testid={`button-edit-update-${update.id}`}
-                                              >
-                                                <Edit className="h-4 w-4 mr-1" />
-                                                Edit Update
-                                              </Button>
+                                            <div className="md:col-span-2 flex items-center justify-between gap-2 flex-wrap">
+                                              <div className="flex items-center gap-1">
+                                                {update.scorerName && (
+                                                  <span className="text-xs text-muted-foreground">Scored by: {update.scorerName}</span>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-2">
+                                                {update.isPrimaryScore === false && (
+                                                  <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={async () => {
+                                                      try {
+                                                        await apiRequest("PUT", `/api/quarterly-updates/${update.id}/set-primary`);
+                                                        queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+                                                        queryClient.invalidateQueries({ queryKey: ["/api/quarterly-updates"] });
+                                                        toast({ title: "Primary score updated" });
+                                                      } catch (e: any) {
+                                                        toast({ title: "Error", description: e.message, variant: "destructive" });
+                                                      }
+                                                    }}
+                                                    data-testid={`button-set-primary-${update.id}`}
+                                                  >
+                                                    Set as Primary
+                                                  </Button>
+                                                )}
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  onClick={() => handleEditUpdate(update)}
+                                                  data-testid={`button-edit-update-${update.id}`}
+                                                >
+                                                  <Edit className="h-4 w-4 mr-1" />
+                                                  Edit Update
+                                                </Button>
+                                              </div>
                                             </div>
                                           </div>
                                         </CardContent>
@@ -2193,6 +2230,14 @@ export default function Data() {
                       data-testid="badge-cycle-score-duplicates"
                     >{scoreImportPreviewData.filter(r => r.isDuplicate).length} duplicate(s)</Badge>
                   )}
+                  {scoreImportPreviewData.some(r => r.isCollaborativeScore && !r.isDuplicate) && (
+                    <Badge
+                      variant="secondary"
+                      className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 cursor-pointer"
+                      onClick={() => cycleToRow(scoreImportPreviewData, r => r.isCollaborativeScore && !r.isDuplicate, "collaborative", scoreCycleIndex, setScoreCycleIndex, "row-score-import")}
+                      data-testid="badge-cycle-score-collaborative"
+                    >{scoreImportPreviewData.filter(r => r.isCollaborativeScore && !r.isDuplicate).length} collaborative</Badge>
+                  )}
                 </div>
               )}
 
@@ -2228,7 +2273,7 @@ export default function Data() {
                     {scoreImportPreviewData.map((row, idx) => (
                       <Fragment key={`score-row-${idx}`}>
                         <TableRow
-                          className={`${!row.include ? "opacity-40" : ""} ${row.isDuplicate ? "bg-amber-500/10" : row.errors.length > 0 ? "bg-destructive/5" : ""} ${!row.isDuplicate && row.matchedOkrId ? "" : !row.isDuplicate ? "bg-amber-500/5" : ""}`}
+                          className={`${!row.include ? "opacity-40" : ""} ${row.isDuplicate ? "bg-amber-500/10" : row.isCollaborativeScore ? "bg-blue-500/10" : row.errors.length > 0 ? "bg-destructive/5" : ""} ${!row.isDuplicate && !row.isCollaborativeScore && row.matchedOkrId ? "" : !row.isDuplicate && !row.isCollaborativeScore ? "bg-amber-500/5" : ""}`}
                           data-testid={`row-score-import-${idx}`}
                         >
                           <TableCell>
@@ -2244,6 +2289,9 @@ export default function Data() {
                               {row.rowIndex}
                               {row.isDuplicate && (
                                 <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] px-1 py-0">DUP</Badge>
+                              )}
+                              {row.isCollaborativeScore && !row.isDuplicate && (
+                                <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1 py-0">COLLAB</Badge>
                               )}
                             </div>
                           </TableCell>

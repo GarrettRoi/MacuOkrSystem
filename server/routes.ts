@@ -1095,8 +1095,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         });
         
-        // Derive current progress from latest update's averageScore
-        const latestUpdate = updatesWithParsedScores[0];
+        const primaryUpdates = updatesWithParsedScores.filter(u => u.isPrimaryScore !== false);
+        const latestUpdate = primaryUpdates[0] || updatesWithParsedScores[0];
         const derivedProgress = latestUpdate?.averageScore ?? okr.currentValue;
         
         return {
@@ -1216,6 +1216,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/quarterly-updates/:id/set-primary", requireAdmin, async (req, res) => {
+    try {
+      const update = await storage.getQuarterlyUpdate(req.params.id);
+      if (!update) {
+        return res.status(404).json({ error: "Quarterly update not found" });
+      }
+
+      const allUpdates = await storage.getQuarterlyUpdatesByOkr(update.okrId);
+      const sameQuarterUpdates = allUpdates.filter(
+        u => u.quarter === update.quarter && u.year === update.year
+      );
+
+      for (const u of sameQuarterUpdates) {
+        if (u.id === update.id) {
+          await storage.updateQuarterlyUpdate(u.id, { isPrimaryScore: true });
+        } else {
+          await storage.updateQuarterlyUpdate(u.id, { isPrimaryScore: false });
+        }
+      }
+
+      res.json({ success: true, primaryId: update.id });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set primary score" });
+    }
+  });
+
   app.get("/api/export/csv", async (req, res) => {
     try {
       const { quarter, year, planningYear } = req.query;
@@ -1269,7 +1295,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       for (const okr of okrs) {
         const okrUpdates = updates.filter((u) => u.okrId === okr.id);
-        const latestUpdate = okrUpdates.sort(
+        const primaryOkrUpdates = okrUpdates.filter(u => u.isPrimaryScore !== false);
+        const latestUpdate = (primaryOkrUpdates.length > 0 ? primaryOkrUpdates : okrUpdates).sort(
           (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
         )[0];
         
@@ -2080,9 +2107,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const allQuarterlyUpdates = await storage.getAllQuarterlyUpdates();
       const existingUpdateKeys = new Set<string>();
+      const existingUpdateScorerMap = new Map<string, string>();
       for (const update of allQuarterlyUpdates) {
         const key = `${update.okrId}|${update.quarter}|${update.year}`;
         existingUpdateKeys.add(key);
+        if (update.scorerName) {
+          existingUpdateScorerMap.set(key, update.scorerName);
+        }
       }
 
       const csvScoreSeenKeys = new Map<string, number>();
@@ -2232,18 +2263,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let isDuplicate = false;
         let duplicateType: string | null = null;
         let duplicateOfRow: number | null = null;
+        let isCollaborativeScore = false;
 
         if (matchedOkrId) {
           const scoreKey = `${matchedOkrId}|${quarter}|${year}`;
           if (existingUpdateKeys.has(scoreKey)) {
-            isDuplicate = true;
-            duplicateType = 'existing';
-            rowErrors.push('Duplicate: A score for this OKR already exists in the database for this period');
+            const existingScorer = existingUpdateScorerMap.get(scoreKey);
+            const scorersDiffer = existingScorer && scorerName && 
+              existingScorer.toLowerCase().trim() !== scorerName.toLowerCase().trim();
+            if (scorersDiffer) {
+              isCollaborativeScore = true;
+              rowWarnings.push(`Collaborative score: Different scorer "${scorerName}" vs existing "${existingScorer}" for same OKR. Will be saved as secondary (non-primary) score.`);
+            } else {
+              isDuplicate = true;
+              duplicateType = 'existing';
+              rowErrors.push('Duplicate: A score for this OKR already exists in the database for this period');
+            }
           } else if (csvScoreSeenKeys.has(scoreKey)) {
-            isDuplicate = true;
-            duplicateType = 'csv';
-            duplicateOfRow = csvScoreSeenKeys.get(scoreKey) || null;
-            rowErrors.push(`Duplicate: Same OKR score as row ${duplicateOfRow} in this file`);
+            const prevRowIdx = csvScoreSeenKeys.get(scoreKey)!;
+            const prevRow = previewRows.find(r => r.rowIndex === prevRowIdx);
+            const prevScorer = prevRow?.scorerName || '';
+            const scorersDiffer = prevScorer && scorerName && 
+              prevScorer.toLowerCase().trim() !== scorerName.toLowerCase().trim();
+            if (scorersDiffer) {
+              isCollaborativeScore = true;
+              duplicateOfRow = prevRowIdx;
+              rowWarnings.push(`Collaborative score: Different scorer "${scorerName}" vs row ${prevRowIdx} scorer "${prevScorer}" for same OKR. Will be saved as secondary (non-primary) score.`);
+            } else {
+              isDuplicate = true;
+              duplicateType = 'csv';
+              duplicateOfRow = prevRowIdx;
+              rowErrors.push(`Duplicate: Same OKR score as row ${duplicateOfRow} in this file`);
+            }
           }
           csvScoreSeenKeys.set(scoreKey, i + 2);
         }
@@ -2272,6 +2323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isDuplicate,
           duplicateType,
           duplicateOfRow,
+          isCollaborativeScore,
         });
       }
 
@@ -2369,7 +2421,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             : null;
 
           const scoreDedupKey = `${row.matchedOkrId}|${row.quarter}|${row.year}`;
-          if (existingScoreKeys.has(scoreDedupKey) || importedScoreKeys.has(scoreDedupKey)) {
+          const isCollab = row.isCollaborativeScore === true;
+          
+          if (!isCollab && (existingScoreKeys.has(scoreDedupKey) || importedScoreKeys.has(scoreDedupKey))) {
             results.duplicatesSkipped++;
             results.rowsSkipped++;
             continue;
@@ -2386,6 +2440,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             averageScore: row.averageScore ?? 0,
             additionalKeyResults: row.overflowKRText || null,
             notes: row.notes || '',
+            isPrimaryScore: !isCollab,
+            isCollaborativeScore: isCollab,
           });
           importedScoreKeys.add(scoreDedupKey);
           results.scoresCreated++;

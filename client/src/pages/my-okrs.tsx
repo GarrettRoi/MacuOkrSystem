@@ -93,7 +93,8 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
 
   const getLatestUpdate = (okrId: string) => {
     if (!updates) return null;
-    const okrUpdates = updates.filter((u) => u.okrId === okrId);
+    const primaryUpdates = updates.filter((u) => u.okrId === okrId && u.isPrimaryScore !== false);
+    const okrUpdates = primaryUpdates.length > 0 ? primaryUpdates : updates.filter((u) => u.okrId === okrId);
     if (okrUpdates.length === 0) return null;
     return okrUpdates.sort((a, b) => 
       new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
