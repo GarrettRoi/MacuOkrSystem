@@ -297,7 +297,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
             </CardContent>
           </Card>
         ) : (
-          <Accordion type="multiple" defaultValue={spuGroups.slice(0, 3).map((_, i) => `spu-${i}`)} className="space-y-4">
+          <Accordion type="multiple" defaultValue={[]} className="space-y-4">
             {spuGroups.map((spuGroup, spuIndex) => (
               <AccordionItem
                 key={spuGroup.spuId}
