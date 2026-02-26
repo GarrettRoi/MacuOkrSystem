@@ -256,24 +256,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                   </Select>
                 </div>
 
-                {/* Staff Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Employee</label>
-                  <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
-                    <SelectTrigger data-testid="select-filter-staff">
-                      <SelectValue placeholder="All employees" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all" data-testid="option-filter-staff-all">All employees</SelectItem>
-                      {allStaff && allStaff.slice().sort((a, b) => compareNames(a.name, b.name)).map((s) => (
-                        <SelectItem key={s.id} value={s.id} data-testid={`option-filter-staff-${s.id}`}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {/* SPU Filter */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">SPU</label>
