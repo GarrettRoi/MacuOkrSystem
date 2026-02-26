@@ -68,6 +68,7 @@ export default function Data() {
   const [filterOkrNumber, setFilterOkrNumber] = useState<string>("all");
   const [filterSpu, setFilterSpu] = useState<string>("all");
   const [filterSubUnit, setFilterSubUnit] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
   
   // Selection states
   const [selectedOkrIds, setSelectedOkrIds] = useState<Set<string>>(new Set());
@@ -262,6 +263,12 @@ export default function Data() {
     return [krText];
   };
 
+  const getOkrStatus = (okr: AggregatedOkr): "unscored" | "collab" | "ok" => {
+    if (!okr.quarterlyUpdates || okr.quarterlyUpdates.length === 0) return "unscored";
+    if (okr.quarterlyUpdates.some((u: any) => u.isCollaborativeScore || u.isPrimaryScore === false)) return "collab";
+    return "ok";
+  };
+
   // Filter the data
   const filteredOkrs = useMemo(() => {
     if (!okrsWithUpdates) return [];
@@ -274,12 +281,18 @@ export default function Data() {
       if (filterOkrNumber !== "all" && okr.okrNumber !== filterOkrNumber) return false;
       if (filterSpu !== "all" && okr.spuId !== filterSpu) return false;
       if (filterSubUnit !== "all" && okr.subUnitId !== filterSubUnit) return false;
+      if (filterStatus !== "all") {
+        const status = getOkrStatus(okr);
+        if (filterStatus === "unscored" && status !== "unscored") return false;
+        if (filterStatus === "collab" && status !== "collab") return false;
+        if (filterStatus === "scored" && status === "unscored") return false;
+      }
       return true;
     });
-  }, [okrsWithUpdates, filterStaff, filterYear, filterPlanningYear, filterQuarter, filterOkrNumber, filterSpu, filterSubUnit, planStartYear]);
+  }, [okrsWithUpdates, filterStaff, filterYear, filterPlanningYear, filterQuarter, filterOkrNumber, filterSpu, filterSubUnit, filterStatus, planStartYear]);
 
   // Check if any filters are active
-  const hasActiveFilters = filterStaff !== "all" || filterYear !== "all" || filterPlanningYear !== "all" || filterQuarter !== "all" || filterOkrNumber !== "all" || filterSpu !== "all" || filterSubUnit !== "all";
+  const hasActiveFilters = filterStaff !== "all" || filterYear !== "all" || filterPlanningYear !== "all" || filterQuarter !== "all" || filterOkrNumber !== "all" || filterSpu !== "all" || filterSubUnit !== "all" || filterStatus !== "all";
   
   const clearAllFilters = () => {
     setFilterStaff("all");
@@ -289,6 +302,7 @@ export default function Data() {
     setFilterOkrNumber("all");
     setFilterSpu("all");
     setFilterSubUnit("all");
+    setFilterStatus("all");
   };
 
   const toggleExpanded = (okrId: string) => {
@@ -981,15 +995,64 @@ export default function Data() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Score Status Filter */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Score Status</label>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger data-testid="select-filter-status">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="unscored">No Score</SelectItem>
+                      <SelectItem value="scored">Has Score</SelectItem>
+                      <SelectItem value="collab">Collaborative Score</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Results Summary */}
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>
-              Showing {filteredOkrs.length} of {okrsWithUpdates?.length || 0} OKRs
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2">
+              <span>
+                Showing {filteredOkrs.length} of {okrsWithUpdates?.length || 0} OKRs
+              </span>
+              {okrsWithUpdates && (() => {
+                const unscoredCount = okrsWithUpdates.filter(o => getOkrStatus(o) === "unscored").length;
+                const collabCount = okrsWithUpdates.filter(o => getOkrStatus(o) === "collab").length;
+                return (
+                  <>
+                    {unscoredCount > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFilterStatus(filterStatus === "unscored" ? "all" : "unscored")}
+                        className={filterStatus === "unscored" ? "border-amber-500 text-amber-700 bg-amber-50 dark:bg-amber-950 dark:text-amber-300" : ""}
+                        data-testid="button-filter-unscored"
+                      >
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        {unscoredCount} No Score
+                      </Button>
+                    )}
+                    {collabCount > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFilterStatus(filterStatus === "collab" ? "all" : "collab")}
+                        className={filterStatus === "collab" ? "border-blue-500 text-blue-700 bg-blue-50 dark:bg-blue-950 dark:text-blue-300" : ""}
+                        data-testid="button-filter-collab"
+                      >
+                        {collabCount} Collaborative
+                      </Button>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
             {selectedOkrIds.size > 0 && (
               <span className="font-medium text-foreground">
                 {selectedOkrIds.size} selected
@@ -1030,9 +1093,15 @@ export default function Data() {
                   filteredOkrs.map((okr) => {
                     const isExpanded = expandedOkrIds.has(okr.id);
                     const isSelected = selectedOkrIds.has(okr.id);
+                    const okrStatus = getOkrStatus(okr);
+                    const rowBg = isSelected
+                      ? 'bg-primary/5'
+                      : okrStatus === "unscored"
+                      ? 'bg-amber-50 dark:bg-amber-950/30'
+                      : '';
                     return (
                       <Fragment key={okr.id}>
-                        <TableRow className={`hover-elevate ${isSelected ? 'bg-primary/5' : ''}`} data-testid={`row-okr-${okr.id}`}>
+                        <TableRow className={`hover-elevate ${rowBg}`} data-testid={`row-okr-${okr.id}`}>
                           <TableCell>
                             <Checkbox
                               checked={isSelected}
@@ -1062,9 +1131,21 @@ export default function Data() {
                           </TableCell>
                           <TableCell className="max-w-xs truncate" title={okr.objectiveStatement}>{okr.objectiveStatement}</TableCell>
                           <TableCell>
-                            <span className="font-semibold" data-testid={`text-progress-${okr.id}`}>
-                              {okr.derivedProgress}%
-                            </span>
+                            <div className="flex flex-col gap-1">
+                              {okrStatus === "unscored" ? (
+                                <Badge variant="outline" className="border-amber-500 text-amber-700 bg-amber-50 dark:bg-amber-950 dark:text-amber-300 w-fit text-xs" data-testid={`badge-status-${okr.id}`}>
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  No Score
+                                </Badge>
+                              ) : okrStatus === "collab" ? (
+                                <Badge variant="outline" className="border-blue-500 text-blue-700 bg-blue-50 dark:bg-blue-950 dark:text-blue-300 w-fit text-xs" data-testid={`badge-status-${okr.id}`}>
+                                  Collaborative
+                                </Badge>
+                              ) : null}
+                              <span className="font-semibold" data-testid={`text-progress-${okr.id}`}>
+                                {okr.derivedProgress}%
+                              </span>
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
