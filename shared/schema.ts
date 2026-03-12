@@ -127,6 +127,30 @@ export const editLogs = pgTable("edit_logs", {
   editedAt: timestamp("edited_at").notNull().defaultNow(),
 });
 
+export const unmatchedScores = pgTable("unmatched_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  spuName: text("spu_name"),
+  subUnitName: text("sub_unit_name"),
+  quarter: text("quarter").notNull(),
+  year: integer("year").notNull(),
+  okrNumber: text("okr_number"),
+  scorerName: text("scorer_name"),
+  krScores: text("kr_scores"),
+  notes: text("notes"),
+  averageScore: integer("average_score"),
+  overflowKrText: text("overflow_kr_text"),
+  isCollaborativeScore: boolean("is_collaborative_score").default(false),
+  rawData: text("raw_data"),
+  importedAt: timestamp("imported_at").notNull().defaultNow(),
+  status: text("status").notNull().default("pending"),
+  matchedOkrId: varchar("matched_okr_id").references(() => okrs.id, { onDelete: "set null" }),
+  matchedAt: timestamp("matched_at"),
+});
+
+export const insertUnmatchedScoreSchema = createInsertSchema(unmatchedScores).omit({ id: true, importedAt: true });
+export type InsertUnmatchedScore = z.infer<typeof insertUnmatchedScoreSchema>;
+export type UnmatchedScore = typeof unmatchedScores.$inferSelect;
+
 export const UNIVERSITY_OBJECTIVES = [
   "Objective 1: We will humbly CREATE transformative opportunities for the holistic growth of students, faculty, staff, alums, and our community from a Christ-centered, biblical worldview and Wesleyan perspective.",
   "Objective 2: We will joyfully COLLABORATE to align our organizational structures, facilities, and resources effectively and efficiently to achieve sustainability and future expansion.",

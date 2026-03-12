@@ -24,6 +24,8 @@ import {
   type UniversityObjectiveWithKeyResults,
   type EditLog,
   type InsertEditLog,
+  type UnmatchedScore,
+  type InsertUnmatchedScore,
   type StaffWithDetails,
   type StaffSpuAssignmentWithDetails,
   type OkrWithDetails,
@@ -42,6 +44,7 @@ import {
   universityObjectives,
   universityKeyResults,
   editLogs,
+  unmatchedScores,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, inArray, ne } from "drizzle-orm";
@@ -155,6 +158,14 @@ export interface IStorage {
 
   createEditLog(log: InsertEditLog): Promise<EditLog>;
   getAllEditLogs(): Promise<EditLog[]>;
+
+  // Unmatched Scores
+  getAllUnmatchedScores(): Promise<UnmatchedScore[]>;
+  getPendingUnmatchedScores(): Promise<UnmatchedScore[]>;
+  createUnmatchedScore(score: InsertUnmatchedScore): Promise<UnmatchedScore>;
+  matchUnmatchedScore(id: string, okrId: string): Promise<UnmatchedScore>;
+  dismissUnmatchedScore(id: string): Promise<void>;
+  deleteUnmatchedScore(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1122,6 +1133,39 @@ export class DatabaseStorage implements IStorage {
 
   async getAllEditLogs(): Promise<EditLog[]> {
     return await db.select().from(editLogs).orderBy(desc(editLogs.editedAt));
+  }
+
+  async getAllUnmatchedScores(): Promise<UnmatchedScore[]> {
+    return await db.select().from(unmatchedScores).orderBy(desc(unmatchedScores.importedAt));
+  }
+
+  async getPendingUnmatchedScores(): Promise<UnmatchedScore[]> {
+    return await db.select().from(unmatchedScores)
+      .where(eq(unmatchedScores.status, "pending"))
+      .orderBy(desc(unmatchedScores.importedAt));
+  }
+
+  async createUnmatchedScore(score: InsertUnmatchedScore): Promise<UnmatchedScore> {
+    const [result] = await db.insert(unmatchedScores).values(score).returning();
+    return result;
+  }
+
+  async matchUnmatchedScore(id: string, okrId: string): Promise<UnmatchedScore> {
+    const [result] = await db.update(unmatchedScores)
+      .set({ status: "matched", matchedOkrId: okrId, matchedAt: new Date() })
+      .where(eq(unmatchedScores.id, id))
+      .returning();
+    return result;
+  }
+
+  async dismissUnmatchedScore(id: string): Promise<void> {
+    await db.update(unmatchedScores)
+      .set({ status: "dismissed" })
+      .where(eq(unmatchedScores.id, id));
+  }
+
+  async deleteUnmatchedScore(id: string): Promise<void> {
+    await db.delete(unmatchedScores).where(eq(unmatchedScores.id, id));
   }
 }
 

@@ -2393,6 +2393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         scoresCreated: 0,
         rowsSkipped: 0,
         duplicatesSkipped: 0,
+        unmatchedSaved: 0,
         errors: [] as string[],
       };
 
@@ -2406,7 +2407,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         try {
-          if (!row.include || !row.matchedOkrId) {
+          if (!row.matchedOkrId) {
+            await storage.createUnmatchedScore({
+              spuName: row.spuName || null,
+              subUnitName: row.subUnitName || null,
+              quarter: row.quarter,
+              year: row.year,
+              okrNumber: row.okrNumber || null,
+              scorerName: row.scorerName || null,
+              krScores: row.krScores && row.krScores.length > 0
+                ? JSON.stringify(row.krScores.map((kr: any) => ({ keyResultNumber: kr.krNumber, score: kr.score })))
+                : null,
+              notes: row.notes || null,
+              averageScore: row.averageScore ?? null,
+              overflowKrText: row.overflowKRText || null,
+              isCollaborativeScore: row.isCollaborativeScore === true,
+              rawData: JSON.stringify(row),
+              status: "pending",
+              matchedOkrId: null,
+              matchedAt: null,
+            });
+            results.unmatchedSaved++;
+            continue;
+          }
+
+          if (!row.include) {
             results.rowsSkipped++;
             continue;
           }
@@ -2453,6 +2478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const errorCount = results.errors.length;
       let message = `Score import completed: ${results.scoresCreated} quarterly updates created.`;
+      if (results.unmatchedSaved > 0) message += ` ${results.unmatchedSaved} unmatched score(s) saved for manual matching.`;
       if (results.duplicatesSkipped > 0) message += ` ${results.duplicatesSkipped} duplicate(s) skipped.`;
       if (results.rowsSkipped > 0) message += ` ${results.rowsSkipped} rows skipped.`;
       if (errorCount > 0) message += ` ${errorCount} error(s).`;
@@ -2462,6 +2488,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Score import error:", error);
       res.status(500).json({ error: "Failed to import scores", details: error.message });
+    }
+  });
+
+  // ── Unmatched Scores endpoints ──────────────────────────────────────────────
+
+  app.get("/api/unmatched-scores", requireAdmin, async (req, res) => {
+    try {
+      const scores = await storage.getPendingUnmatchedScores();
+      res.json(scores);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/unmatched-scores/:id/match", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { okrId, scorerName } = req.body;
+      if (!okrId) return res.status(400).json({ error: "okrId is required" });
+
+      const pendingScores = await storage.getPendingUnmatchedScores();
+      const pending = pendingScores.find(s => s.id === id);
+      if (!pending) return res.status(404).json({ error: "Unmatched score not found" });
+
+      const allQuarterlyUpdates = await storage.getAllQuarterlyUpdates();
+      const existingKey = `${okrId}|${pending.quarter}|${pending.year}`;
+      const isDuplicate = allQuarterlyUpdates.some(u =>
+        u.okrId === okrId && u.quarter === pending.quarter && u.year === pending.year && u.isPrimaryScore
+      );
+      if (isDuplicate && !pending.isCollaborativeScore) {
+        return res.status(409).json({ error: "A primary score already exists for this OKR in this quarter/year" });
+      }
+
+      const allStaff = await storage.getAllStaff();
+      const resolvedScorerName = scorerName || pending.scorerName || "";
+      const matchedStaff = allStaff.find(s =>
+        s.name.toLowerCase().trim() === resolvedScorerName.toLowerCase().trim()
+      ) || null;
+
+      let krScores = null;
+      try {
+        if (pending.krScores) {
+          const parsed = JSON.parse(pending.krScores);
+          krScores = JSON.stringify(parsed.map((kr: any) => ({
+            keyResultNumber: kr.keyResultNumber,
+            description: `Key Result ${kr.keyResultNumber}`,
+            score: kr.score,
+          })));
+        }
+      } catch {}
+
+      await storage.createQuarterlyUpdate({
+        okrId,
+        staffId: matchedStaff?.id || null,
+        scorerName: resolvedScorerName,
+        quarter: pending.quarter,
+        year: pending.year,
+        progress: pending.averageScore ?? 0,
+        keyResultScores: krScores,
+        averageScore: pending.averageScore ?? 0,
+        additionalKeyResults: pending.overflowKrText || null,
+        notes: pending.notes || '',
+        isPrimaryScore: !pending.isCollaborativeScore,
+        isCollaborativeScore: pending.isCollaborativeScore ?? false,
+      });
+
+      await storage.matchUnmatchedScore(id, okrId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/unmatched-scores/:id", requireAdmin, async (req, res) => {
+    try {
+      const { action } = req.query;
+      if (action === "dismiss") {
+        await storage.dismissUnmatchedScore(req.params.id);
+      } else {
+        await storage.deleteUnmatchedScore(req.params.id);
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 

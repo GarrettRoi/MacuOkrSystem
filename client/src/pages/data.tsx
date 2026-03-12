@@ -14,9 +14,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText, Shuffle, CheckCircle, Clock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog, UnmatchedScore } from "@shared/schema";
 import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
 
@@ -101,6 +101,19 @@ export default function Data() {
   const [okrSearchSpu, setOkrSearchSpu] = useState("all");
   const [okrSearchQuarter, setOkrSearchQuarter] = useState("all");
   const [okrSearchYear, setOkrSearchYear] = useState("all");
+
+  // Section switcher (OKR Records vs Pending Matches)
+  const [activeDataSection, setActiveDataSection] = useState<"records" | "pending">("records");
+
+  // Pending matches state
+  const [selectedUnmatchedId, setSelectedUnmatchedId] = useState<string | null>(null);
+  const [pendingFilterSpu, setPendingFilterSpu] = useState("all");
+  const [pendingFilterQuarter, setPendingFilterQuarter] = useState("all");
+  const [pendingFilterYear, setPendingFilterYear] = useState("all");
+  const [matchOkrSearch, setMatchOkrSearch] = useState("");
+  const [matchOkrSpu, setMatchOkrSpu] = useState("all");
+  const [matchOkrQuarter, setMatchOkrQuarter] = useState("all");
+  const [matchOkrYear, setMatchOkrYear] = useState("all");
 
   // Badge cycling state for import previews
   const [importCycleIndex, setImportCycleIndex] = useState<Record<string, number>>({});
@@ -189,6 +202,29 @@ export default function Data() {
       return res.json();
     },
     enabled: linkingScoreRow !== null,
+  });
+
+  const { data: pendingUnmatchedScores, isLoading: isPendingLoading } = useQuery<UnmatchedScore[]>({
+    queryKey: ["/api/unmatched-scores"],
+  });
+
+  const matchOkrSearchParams = useMemo(() => {
+    const params = new URLSearchParams();
+    if (matchOkrSpu !== "all") params.append("spuId", matchOkrSpu);
+    if (matchOkrQuarter !== "all") params.append("quarter", matchOkrQuarter);
+    if (matchOkrYear !== "all") params.append("year", matchOkrYear);
+    if (matchOkrSearch.trim()) params.append("q", matchOkrSearch.trim());
+    return params.toString();
+  }, [matchOkrSpu, matchOkrQuarter, matchOkrYear, matchOkrSearch]);
+
+  const { data: matchableOkrs, isLoading: isMatchableOkrsLoading } = useQuery<any[]>({
+    queryKey: ["/api/okrs/search", matchOkrSearchParams, "matching"],
+    queryFn: async () => {
+      const res = await fetch(`/api/okrs/search?${matchOkrSearchParams}`);
+      if (!res.ok) throw new Error("Search failed");
+      return res.json();
+    },
+    enabled: activeDataSection === "pending",
   });
 
   const linkOkrToScoreRow = (rowIdx: number, okr: any) => {
@@ -517,6 +553,7 @@ export default function Data() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
       queryClient.invalidateQueries({ queryKey: ["/api/quarterly-updates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmatched-scores"] });
       setScoreImportDialogOpen(false);
       resetScoreImportState();
 
@@ -542,6 +579,41 @@ export default function Data() {
         variant: "destructive",
       });
       setScoreImportStep("preview");
+    },
+  });
+
+  const matchUnmatchedScoreMutation = useMutation({
+    mutationFn: async ({ id, okrId }: { id: string; okrId: string }) => {
+      const res = await apiRequest("POST", `/api/unmatched-scores/${id}/match`, { okrId });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to match score");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/unmatched-scores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
+      setSelectedUnmatchedId(null);
+      toast({ title: "Score Matched", description: "The score has been linked to the OKR and a quarterly update was created." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Match Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const dismissUnmatchedScoreMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/unmatched-scores/${id}?action=dismiss`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/unmatched-scores"] });
+      if (selectedUnmatchedId) setSelectedUnmatchedId(null);
+      toast({ title: "Score Dismissed", description: "The unmatched score has been dismissed." });
+    },
+    onError: () => {
+      toast({ title: "Dismiss Failed", description: "Could not dismiss this score.", variant: "destructive" });
     },
   });
 
@@ -853,6 +925,37 @@ export default function Data() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Section Tab Navigation */}
+          <div className="flex items-center gap-1 border-b pb-3">
+            <Button
+              variant={activeDataSection === "records" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveDataSection("records")}
+              data-testid="tab-okr-records"
+            >
+              <Database className="h-4 w-4 mr-2" />
+              OKR Records
+            </Button>
+            <Button
+              variant={activeDataSection === "pending" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setActiveDataSection("pending")}
+              data-testid="tab-pending-matches"
+              className="relative"
+            >
+              <Shuffle className="h-4 w-4 mr-2" />
+              Pending Matches
+              {pendingUnmatchedScores && pendingUnmatchedScores.length > 0 && (
+                <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">
+                  {pendingUnmatchedScores.length}
+                </Badge>
+              )}
+            </Button>
+          </div>
+
+          {/* OKR Records Section */}
+          {activeDataSection === "records" && <>
+
           {/* Filter Section */}
           <Card className="bg-muted/30">
             <CardHeader className="py-3">
@@ -1368,6 +1471,269 @@ export default function Data() {
               </TableBody>
             </Table>
           </div>
+
+          </>}
+
+          {/* Pending Matches Section */}
+          {activeDataSection === "pending" && (
+            <div className="flex flex-col gap-4">
+              {isPendingLoading ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">Loading pending scores...</div>
+              ) : !pendingUnmatchedScores || pendingUnmatchedScores.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                  <CheckCircle className="h-10 w-10 text-muted-foreground/40" />
+                  <p className="font-medium text-muted-foreground">No pending scores</p>
+                  <p className="text-sm text-muted-foreground/70 max-w-sm">All imported scores have been matched or dismissed. Import a score CSV to start matching unrecognised rows.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 min-h-[600px]">
+
+                  {/* Left panel — pending score list */}
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-semibold text-sm flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        Unmatched Scores
+                        <Badge variant="secondary" className="text-xs">{pendingUnmatchedScores.length}</Badge>
+                      </h3>
+                      {/* Filter pills */}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <Select value={pendingFilterQuarter} onValueChange={setPendingFilterQuarter}>
+                          <SelectTrigger className="h-7 text-xs w-[90px]" data-testid="select-pending-quarter">
+                            <SelectValue placeholder="Quarter" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Qtrs</SelectItem>
+                            {QUARTERS.map(q => <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Select value={pendingFilterYear} onValueChange={setPendingFilterYear}>
+                          <SelectTrigger className="h-7 text-xs w-[80px]" data-testid="select-pending-year">
+                            <SelectValue placeholder="Year" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Yrs</SelectItem>
+                            {Array.from(new Set(pendingUnmatchedScores.map(s => s.year))).sort().map(y => (
+                              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select value={pendingFilterSpu} onValueChange={setPendingFilterSpu}>
+                          <SelectTrigger className="h-7 text-xs w-[110px]" data-testid="select-pending-spu">
+                            <SelectValue placeholder="SPU" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All SPUs</SelectItem>
+                            {Array.from(new Set(pendingUnmatchedScores.map(s => s.spuName).filter(Boolean))).sort().map(spu => (
+                              <SelectItem key={spu!} value={spu!}>{spu}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2 overflow-y-auto max-h-[560px] pr-1">
+                      {pendingUnmatchedScores
+                        .filter(s => {
+                          if (pendingFilterQuarter !== "all" && s.quarter !== pendingFilterQuarter) return false;
+                          if (pendingFilterYear !== "all" && String(s.year) !== pendingFilterYear) return false;
+                          if (pendingFilterSpu !== "all" && s.spuName !== pendingFilterSpu) return false;
+                          return true;
+                        })
+                        .map(score => {
+                          const isSelected = selectedUnmatchedId === score.id;
+                          let krList: { keyResultNumber: number; score: number }[] = [];
+                          try { if (score.krScores) krList = JSON.parse(score.krScores); } catch {}
+                          return (
+                            <Card
+                              key={score.id}
+                              data-testid={`card-unmatched-score-${score.id}`}
+                              className={`cursor-pointer transition-colors hover-elevate ${isSelected ? "border-primary ring-1 ring-primary" : ""}`}
+                              onClick={() => {
+                                setSelectedUnmatchedId(isSelected ? null : score.id);
+                                if (!isSelected && score.spuName) {
+                                  const matched = spus?.find(s => s.name.toLowerCase().includes(score.spuName!.toLowerCase()) || score.spuName!.toLowerCase().includes(s.name.toLowerCase()));
+                                  if (matched) setMatchOkrSpu(matched.id);
+                                  setMatchOkrQuarter(score.quarter);
+                                  setMatchOkrYear(String(score.year));
+                                }
+                              }}
+                            >
+                              <CardContent className="p-3 space-y-1.5">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Badge variant="outline" className="text-xs font-mono">{score.okrNumber || "?"}</Badge>
+                                    <span className="text-xs text-muted-foreground">{score.quarter} {score.year}</span>
+                                    {score.isCollaborativeScore && <Badge variant="secondary" className="text-[10px] px-1">COLLAB</Badge>}
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-xs text-muted-foreground"
+                                    data-testid={`button-dismiss-unmatched-${score.id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      dismissUnmatchedScoreMutation.mutate(score.id);
+                                    }}
+                                  >
+                                    <X className="h-3 w-3 mr-1" />
+                                    Dismiss
+                                  </Button>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs flex-wrap">
+                                  {score.spuName && <span className="font-medium">{score.spuName}</span>}
+                                  {score.subUnitName && <span className="text-muted-foreground">/ {score.subUnitName}</span>}
+                                </div>
+                                {score.scorerName && (
+                                  <p className="text-xs text-muted-foreground">Scorer: {score.scorerName}</p>
+                                )}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {krList.map(kr => (
+                                    <Badge key={kr.keyResultNumber} variant="outline" className="text-[10px] px-1.5 py-0">
+                                      KR{kr.keyResultNumber}: {kr.score}
+                                    </Badge>
+                                  ))}
+                                  {score.averageScore !== null && score.averageScore !== undefined && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                      Avg: {score.averageScore}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {score.notes && (
+                                  <p className="text-xs text-muted-foreground line-clamp-2 italic">{score.notes}</p>
+                                )}
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Right panel — OKR browser for matching */}
+                  <div className="flex flex-col gap-3">
+                    {!selectedUnmatchedId ? (
+                      <div className="flex flex-col items-center justify-center h-full gap-3 text-center border rounded-md bg-muted/20 p-8">
+                        <Shuffle className="h-8 w-8 text-muted-foreground/40" />
+                        <p className="font-medium text-muted-foreground">Select a score to match</p>
+                        <p className="text-sm text-muted-foreground/70">Pick an unmatched score from the list on the left, then find and link it to the correct OKR here.</p>
+                      </div>
+                    ) : (() => {
+                      const selected = pendingUnmatchedScores.find(s => s.id === selectedUnmatchedId);
+                      let krList: { keyResultNumber: number; score: number }[] = [];
+                      try { if (selected?.krScores) krList = JSON.parse(selected.krScores); } catch {}
+                      return (
+                        <div className="flex flex-col gap-3">
+                          {/* Selected score summary */}
+                          <div className="rounded-md border bg-primary/5 p-3 space-y-1.5">
+                            <p className="text-xs font-semibold text-primary">Matching this score:</p>
+                            <div className="flex flex-wrap gap-2 text-xs">
+                              <span><span className="text-muted-foreground">OKR:</span> {selected?.okrNumber || "?"}</span>
+                              <span><span className="text-muted-foreground">SPU:</span> {selected?.spuName || "—"}</span>
+                              <span><span className="text-muted-foreground">Period:</span> {selected?.quarter} {selected?.year}</span>
+                              <span><span className="text-muted-foreground">Scorer:</span> {selected?.scorerName || "—"}</span>
+                            </div>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {krList.map(kr => (
+                                <Badge key={kr.keyResultNumber} variant="outline" className="text-[10px] px-1.5 py-0">
+                                  KR{kr.keyResultNumber}: {kr.score}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* OKR search filters */}
+                          <div className="flex flex-wrap gap-2">
+                            <div className="relative flex-1 min-w-[140px]">
+                              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                              <Input
+                                className="pl-7 h-8 text-xs"
+                                placeholder="Search objectives..."
+                                value={matchOkrSearch}
+                                onChange={e => setMatchOkrSearch(e.target.value)}
+                                data-testid="input-match-okr-search"
+                              />
+                            </div>
+                            <Select value={matchOkrSpu} onValueChange={setMatchOkrSpu}>
+                              <SelectTrigger className="h-8 text-xs w-[120px]" data-testid="select-match-spu">
+                                <SelectValue placeholder="SPU" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All SPUs</SelectItem>
+                                {spus?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <Select value={matchOkrQuarter} onValueChange={setMatchOkrQuarter}>
+                              <SelectTrigger className="h-8 text-xs w-[90px]" data-testid="select-match-quarter">
+                                <SelectValue placeholder="Quarter" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Qtrs</SelectItem>
+                                {QUARTERS.map(q => <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <Select value={matchOkrYear} onValueChange={setMatchOkrYear}>
+                              <SelectTrigger className="h-8 text-xs w-[80px]" data-testid="select-match-year">
+                                <SelectValue placeholder="Year" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Yrs</SelectItem>
+                                {years?.map(y => <SelectItem key={y.id} value={String(y.year)}>{y.year}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            {(matchOkrSearch || matchOkrSpu !== "all" || matchOkrQuarter !== "all" || matchOkrYear !== "all") && (
+                              <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setMatchOkrSearch(""); setMatchOkrSpu("all"); setMatchOkrQuarter("all"); setMatchOkrYear("all"); }}>
+                                <X className="h-3.5 w-3.5 mr-1" /> Clear
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* OKR results */}
+                          <div className="flex flex-col gap-2 overflow-y-auto max-h-[440px] pr-1">
+                            {isMatchableOkrsLoading ? (
+                              <div className="text-sm text-muted-foreground py-4 text-center">Searching OKRs...</div>
+                            ) : !matchableOkrs || matchableOkrs.length === 0 ? (
+                              <div className="text-sm text-muted-foreground py-8 text-center">No OKRs found. Try adjusting the filters or search term.</div>
+                            ) : (
+                              matchableOkrs.map((okr: any) => (
+                                <div
+                                  key={okr.id}
+                                  data-testid={`card-matchable-okr-${okr.id}`}
+                                  className="rounded-md border p-3 space-y-1.5 bg-card"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mb-1">
+                                        <Badge variant="outline" className="text-[10px] px-1.5 font-mono">{okr.okrNumber}</Badge>
+                                        <span>{okr.spu?.name || "—"}</span>
+                                        <span>{okr.quarter} {okr.year}</span>
+                                        <span>{okr.staff?.name || "—"}</span>
+                                      </div>
+                                      <p className="text-xs line-clamp-2 font-medium">{okr.objectiveStatement}</p>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      className="shrink-0"
+                                      data-testid={`button-match-okr-${okr.id}`}
+                                      disabled={matchUnmatchedScoreMutation.isPending}
+                                      onClick={() => matchUnmatchedScoreMutation.mutate({ id: selectedUnmatchedId!, okrId: okr.id })}
+                                    >
+                                      <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                                      Match
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
         </CardContent>
       </Card>
 
