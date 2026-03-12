@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter, Calendar } from "lucide-react";
+import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, Year } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
@@ -100,7 +100,6 @@ function DashboardTab() {
     ? Math.round(filteredOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / totalOkrs)
     : 0;
   
-  const uniqueStaffWithOkrs = new Set(filteredOkrs.map((okr) => okr.staffId)).size;
   
   const okrsNeedingUpdate = filteredOkrs.filter((okr) => {
     const hasRecentUpdate = updates?.some((update) => {
@@ -254,13 +253,13 @@ function DashboardTab() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-32" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total OKRs</CardTitle>
@@ -282,19 +281,6 @@ function DashboardTab() {
             <CardContent>
               <div className="text-2xl font-bold" data-testid="text-avg-progress">{avgProgress}%</div>
               <Progress value={avgProgress} className="mt-2 h-2" />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Staff</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-active-staff">{uniqueStaffWithOkrs}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Staff with OKRs
-              </p>
             </CardContent>
           </Card>
 
