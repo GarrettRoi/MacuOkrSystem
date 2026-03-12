@@ -1182,83 +1182,113 @@ export default function Data() {
                                 return (
                                   <div className="px-6 py-4 space-y-4">
                                     {/* Key Results accordion */}
-                                    <div>
-                                      <h4 className="font-semibold text-sm mb-2">Key Results</h4>
-                                      {krs.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground">No key results defined for this OKR.</p>
-                                      ) : (
-                                        <div className="space-y-1.5">
-                                          {krs.map((kr, krIdx) => {
-                                            const krKey = `${okr.id}-kr-${krIdx}`;
-                                            const isKrExpanded = expandedKrIds.has(krKey);
-                                            const krNum = krIdx + 1;
-                                            const submissions = okr.quarterlyUpdates.flatMap((update: any) => {
-                                              if (!update.keyResultScoresParsed) return [];
-                                              const krScore = update.keyResultScoresParsed.find((s: any) => s.keyResultNumber === krNum);
-                                              if (!krScore) return [];
-                                              return [{ update, krScore }];
-                                            });
-                                            return (
-                                              <div key={krIdx} className="border rounded-md bg-background overflow-hidden" data-testid={`kr-item-${okr.id}-${krIdx}`}>
-                                                <button
-                                                  className="w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
-                                                  onClick={() => toggleKrExpand(krKey)}
-                                                  data-testid={`button-expand-kr-${okr.id}-${krIdx}`}
-                                                >
-                                                  <div className="shrink-0 mt-0.5 text-muted-foreground">
-                                                    {isKrExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                                  </div>
-                                                  <div className="flex-1 min-w-0">
-                                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">KR {krNum}</span>
-                                                    <p className="text-sm text-foreground leading-snug mt-0.5">{kr.description}</p>
-                                                  </div>
-                                                  <div className="shrink-0 text-right ml-3">
-                                                    {submissions.length > 0 ? (
-                                                      <span className="text-sm font-bold tabular-nums">{submissions[0].krScore.score}%</span>
-                                                    ) : (
-                                                      <span className="text-xs text-muted-foreground italic">No score</span>
-                                                    )}
-                                                  </div>
-                                                </button>
-                                                {isKrExpanded && (
-                                                  <div className="border-t bg-primary/5 px-4 py-3 space-y-3">
-                                                    {submissions.length === 0 ? (
-                                                      <p className="text-sm text-muted-foreground italic">No score submissions for this key result yet.</p>
-                                                    ) : (
-                                                      submissions.map(({ update, krScore }: any) => (
-                                                        <div key={update.id} className="space-y-2" data-testid={`kr-submission-${update.id}-${krIdx}`}>
-                                                          <div className="flex items-center justify-between gap-3 flex-wrap">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                              <span className="text-sm font-semibold">{getQuarterLabel(update.quarter)} {update.year}</span>
-                                                              <span className="text-sm font-bold text-foreground">— {krScore.score}%</span>
-                                                              {update.isPrimaryScore === false && (
-                                                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Secondary</Badge>
-                                                              )}
-                                                              {update.isCollaborativeScore && (
-                                                                <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5 py-0">Collab</Badge>
-                                                              )}
-                                                            </div>
-                                                            {update.scorerName && (
-                                                              <span className="text-xs text-muted-foreground">Scored by {update.scorerName}</span>
-                                                            )}
-                                                          </div>
-                                                          {update.notes && (
-                                                            <div className="bg-background border rounded px-3 py-2">
-                                                              <p className="text-xs font-medium text-muted-foreground mb-0.5">Response / Notes</p>
-                                                              <p className="text-sm text-foreground leading-relaxed">{update.notes}</p>
-                                                            </div>
+                                    {(() => {
+                                      // Collect all KR numbers that appear in any update score
+                                      const scoredKrNums = new Set<number>();
+                                      okr.quarterlyUpdates.forEach((update: any) => {
+                                        (update.keyResultScoresParsed || []).forEach((s: any) => {
+                                          scoredKrNums.add(Number(s.keyResultNumber));
+                                        });
+                                      });
+                                      // Build unified KR list: defined KRs first, then any extra scored KRs not in definition
+                                      const extraKrNums = Array.from(scoredKrNums)
+                                        .filter(n => n > krs.length)
+                                        .sort((a, b) => a - b);
+                                      const allKrNums = [
+                                        ...krs.map((_: any, i: number) => i + 1),
+                                        ...extraKrNums,
+                                      ];
+
+                                      return (
+                                        <div>
+                                          <h4 className="font-semibold text-sm mb-2">Key Results</h4>
+                                          {allKrNums.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">No key results defined for this OKR.</p>
+                                          ) : (
+                                            <div className="space-y-1.5">
+                                              {allKrNums.map((krNum) => {
+                                                const krIdx = krNum - 1;
+                                                const krDef = krs[krIdx] as { description: string } | undefined;
+                                                const krKey = `${okr.id}-kr-${krIdx}`;
+                                                const isKrExpanded = expandedKrIds.has(krKey);
+                                                const submissions = okr.quarterlyUpdates.flatMap((update: any) => {
+                                                  if (!update.keyResultScoresParsed) return [];
+                                                  const krScore = update.keyResultScoresParsed.find((s: any) => Number(s.keyResultNumber) === krNum);
+                                                  if (!krScore) return [];
+                                                  return [{ update, krScore }];
+                                                });
+                                                return (
+                                                  <div key={krNum} className="border rounded-md bg-background overflow-hidden" data-testid={`kr-item-${okr.id}-${krIdx}`}>
+                                                    <button
+                                                      className="w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                                                      onClick={() => toggleKrExpand(krKey)}
+                                                      data-testid={`button-expand-kr-${okr.id}-${krIdx}`}
+                                                    >
+                                                      <div className="shrink-0 mt-0.5 text-muted-foreground">
+                                                        {isKrExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                      </div>
+                                                      <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">KR {krNum}</span>
+                                                          {!krDef && (
+                                                            <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-1.5 py-0 rounded">Score only</span>
                                                           )}
                                                         </div>
-                                                      ))
+                                                        {krDef ? (
+                                                          <p className="text-sm text-foreground leading-snug mt-0.5">{krDef.description}</p>
+                                                        ) : (
+                                                          <p className="text-sm text-muted-foreground italic mt-0.5">No description — scored via import</p>
+                                                        )}
+                                                      </div>
+                                                      <div className="shrink-0 text-right ml-3">
+                                                        {submissions.length > 0 ? (
+                                                          <span className="text-sm font-bold tabular-nums">{submissions[0].krScore.score}%</span>
+                                                        ) : (
+                                                          <span className="text-xs text-muted-foreground italic">No score</span>
+                                                        )}
+                                                      </div>
+                                                    </button>
+                                                    {isKrExpanded && (
+                                                      <div className="border-t bg-primary/5 px-4 py-3 space-y-3">
+                                                        {submissions.length === 0 ? (
+                                                          <p className="text-sm text-muted-foreground italic">No score submissions for this key result yet.</p>
+                                                        ) : (
+                                                          submissions.map(({ update, krScore }: any) => (
+                                                            <div key={update.id} className="space-y-2" data-testid={`kr-submission-${update.id}-${krIdx}`}>
+                                                              <div className="flex items-center justify-between gap-3 flex-wrap">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                  <span className="text-sm font-semibold">{getQuarterLabel(update.quarter)} {update.year}</span>
+                                                                  <span className="text-sm font-bold text-foreground">— {krScore.score}%</span>
+                                                                  {update.isPrimaryScore === false && (
+                                                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Secondary</Badge>
+                                                                  )}
+                                                                  {update.isCollaborativeScore && (
+                                                                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5 py-0">Collab</Badge>
+                                                                  )}
+                                                                </div>
+                                                                {update.scorerName && (
+                                                                  <span className="text-xs text-muted-foreground">Scored by {update.scorerName}</span>
+                                                                )}
+                                                              </div>
+                                                              {update.notes && (
+                                                                <div className="bg-background border rounded px-3 py-2">
+                                                                  <p className="text-xs font-medium text-muted-foreground mb-0.5">Response / Notes</p>
+                                                                  <p className="text-sm text-foreground leading-relaxed">{update.notes}</p>
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          ))
+                                                        )}
+                                                      </div>
                                                     )}
                                                   </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })}
+                                                );
+                                              })}
+                                            </div>
+                                          )}
                                         </div>
-                                      )}
-                                    </div>
+                                      );
+                                    })()}
 
                                     {/* Update actions row */}
                                     {okr.quarterlyUpdates.length > 0 && (
