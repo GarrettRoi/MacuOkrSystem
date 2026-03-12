@@ -8,7 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, X, ChevronRight, Building2, Users, Target, CheckSquare, Square } from "lucide-react";
+import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, CheckSquare, Square, MessageSquare } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
@@ -71,6 +71,11 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   const [uniQuarter, setUniQuarter] = useState<string>("");
   const [uniSpu, setUniSpu] = useState<string>("");
 
+  // ── Expandable row state ────────────────────────────────────────────────
+  const [expandedOkrIds, setExpandedOkrIds] = useState<Set<string>>(new Set());
+  const toggleOkrExpand = (id: string) =>
+    setExpandedOkrIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+
   // ── Shared data ─────────────────────────────────────────────────────────
   const { data: years } = useQuery<Year[]>({ queryKey: ["/api/years"] });
   const { data: spus } = useQuery<Spu[]>({ queryKey: ["/api/spus"] });
@@ -116,6 +121,11 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
 
   const getKeyResults = (keyResultsJson: string) => {
     try { return JSON.parse(keyResultsJson); } catch { return []; }
+  };
+
+  const getKrScores = (json: string | null | undefined): Array<{ keyResultNumber: number; description?: string; score: number }> => {
+    if (!json) return [];
+    try { return JSON.parse(json); } catch { return []; }
   };
 
   const totalProgress = progressSummaries && progressSummaries.length > 0
@@ -368,68 +378,140 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                   const collaborators = record.responsibilities.filter((r: any) => r.role === 'collaborator').map((r: any) => r.staff.name);
                                   const strategicObjs = parseMultiSelectField(record.okr.universityObjective).map(o => o.split(":")[0]?.trim()).filter(Boolean);
                                   const hasScore = latestScore !== null && latestScore !== undefined;
+                                  const isExpanded = expandedOkrIds.has(record.okr.id);
+                                  const krScores = getKrScores(record.latestUpdate?.keyResultScores);
                                   return (
-                                    <tr key={record.okr.id} className="hover:bg-muted/20 transition-colors" data-testid={`row-okr-${record.okr.id}`}>
-                                      <td className="px-3 py-3 align-top">
-                                        <div className="flex flex-col gap-1">
-                                          <span className="font-semibold text-xs text-foreground">{record.okr.okrNumber}</span>
-                                          {record.okr.subUnit && (
-                                            <span className="text-xs text-muted-foreground hidden sm:block">{record.okr.subUnit.name}</span>
-                                          )}
-                                          {record.okr.collaborationSpu && (
-                                            <Badge variant="outline" className="text-xs w-fit px-1 py-0">Collab</Badge>
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td className="px-3 py-3 align-top max-w-sm">
-                                        <p className="font-medium text-sm leading-snug">{record.okr.objectiveStatement}</p>
-                                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                                          {keyResults.length > 0 && (
-                                            <span className="text-xs text-muted-foreground">{keyResults.length} key result{keyResults.length !== 1 ? "s" : ""}</span>
-                                          )}
-                                          {collaborators.length > 0 && (
-                                            <span className="text-xs text-muted-foreground">Collaborators: {collaborators.join(", ")}</span>
-                                          )}
-                                          {record.okr.collaborationSpu && (
-                                            <span className="text-xs text-muted-foreground">Collab SPU: {record.okr.collaborationSpu.name}</span>
-                                          )}
-                                          {record.latestUpdate && (
-                                            <span className="text-xs text-muted-foreground">
-                                              Updated {new Date(record.latestUpdate.submittedAt).toLocaleDateString()}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td className="px-3 py-3 align-top hidden lg:table-cell">
-                                        <span className="text-sm">{owner}</span>
-                                      </td>
-                                      <td className="px-3 py-3 align-top hidden xl:table-cell">
-                                        {strategicObjs.length > 0 ? (
-                                          <div className="flex flex-wrap gap-1">
-                                            {strategicObjs.map((obj, i) => (
-                                              <Badge key={i} variant="outline" className="text-xs px-1.5 py-0 font-normal">{obj}</Badge>
-                                            ))}
-                                          </div>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground">—</span>
-                                        )}
-                                      </td>
-                                      <td className="px-3 py-3 align-top hidden md:table-cell">
-                                        <span className="text-sm text-muted-foreground whitespace-nowrap">{record.okr.quarter} {record.okr.year}</span>
-                                      </td>
-                                      <td className="px-3 py-3 align-top text-right">
-                                        {hasScore ? (
-                                          <div className="flex flex-col items-end gap-1">
-                                            <span className="text-base font-bold tabular-nums">{latestScore}%</span>
-                                            <div className="w-14">
-                                              <Progress value={latestScore} className="h-1" />
+                                    <React.Fragment key={record.okr.id}>
+                                      <tr
+                                        className={`cursor-pointer transition-colors ${isExpanded ? "bg-muted/30" : "hover:bg-muted/20"}`}
+                                        onClick={() => toggleOkrExpand(record.okr.id)}
+                                        data-testid={`row-okr-${record.okr.id}`}
+                                      >
+                                        <td className="px-3 py-3 align-top">
+                                          <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-1">
+                                              {isExpanded
+                                                ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+                                                : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                                              <span className="font-semibold text-xs text-foreground">{record.okr.okrNumber}</span>
                                             </div>
+                                            {record.okr.subUnit && (
+                                              <span className="text-xs text-muted-foreground hidden sm:block pl-4">{record.okr.subUnit.name}</span>
+                                            )}
+                                            {record.okr.collaborationSpu && (
+                                              <Badge variant="outline" className="text-xs w-fit px-1 py-0 ml-4">Collab</Badge>
+                                            )}
                                           </div>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground italic">No score</span>
-                                        )}
-                                      </td>
-                                    </tr>
+                                        </td>
+                                        <td className="px-3 py-3 align-top max-w-sm">
+                                          <p className="font-medium text-sm leading-snug">{record.okr.objectiveStatement}</p>
+                                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                                            {keyResults.length > 0 && (
+                                              <span className="text-xs text-muted-foreground">{keyResults.length} key result{keyResults.length !== 1 ? "s" : ""}</span>
+                                            )}
+                                            {collaborators.length > 0 && (
+                                              <span className="text-xs text-muted-foreground">Collaborators: {collaborators.join(", ")}</span>
+                                            )}
+                                            {record.okr.collaborationSpu && (
+                                              <span className="text-xs text-muted-foreground">Collab SPU: {record.okr.collaborationSpu.name}</span>
+                                            )}
+                                            {record.latestUpdate && (
+                                              <span className="text-xs text-muted-foreground">
+                                                Updated {new Date(record.latestUpdate.submittedAt).toLocaleDateString()}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-3 align-top hidden lg:table-cell">
+                                          <span className="text-sm">{owner}</span>
+                                        </td>
+                                        <td className="px-3 py-3 align-top hidden xl:table-cell">
+                                          {strategicObjs.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1">
+                                              {strategicObjs.map((obj, i) => (
+                                                <Badge key={i} variant="outline" className="text-xs px-1.5 py-0 font-normal">{obj}</Badge>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <span className="text-xs text-muted-foreground">—</span>
+                                          )}
+                                        </td>
+                                        <td className="px-3 py-3 align-top hidden md:table-cell">
+                                          <span className="text-sm text-muted-foreground whitespace-nowrap">{record.okr.quarter} {record.okr.year}</span>
+                                        </td>
+                                        <td className="px-3 py-3 align-top text-right">
+                                          {hasScore ? (
+                                            <div className="flex flex-col items-end gap-1">
+                                              <span className="text-base font-bold tabular-nums">{latestScore}%</span>
+                                              <div className="w-14">
+                                                <Progress value={latestScore} className="h-1" />
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <span className="text-xs text-muted-foreground italic">No score</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                      {isExpanded && (
+                                        <tr className="bg-muted/20 border-b" data-testid={`row-okr-detail-${record.okr.id}`}>
+                                          <td colSpan={6} className="px-6 py-4">
+                                            {!record.latestUpdate ? (
+                                              <p className="text-sm text-muted-foreground italic">No quarterly update submitted yet.</p>
+                                            ) : (
+                                              <div className="space-y-4">
+                                                {/* Key Results with scores */}
+                                                {keyResults.length > 0 && (
+                                                  <div>
+                                                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Key Results</p>
+                                                    <div className="space-y-2">
+                                                      {keyResults.map((kr: any, i: number) => {
+                                                        const krText = typeof kr === "string" ? kr : kr.description;
+                                                        const krScore = krScores.find(s => s.keyResultNumber === i + 1);
+                                                        return (
+                                                          <div key={i} className="flex items-start gap-3 text-sm">
+                                                            <span className="shrink-0 text-xs font-medium text-muted-foreground w-10 pt-0.5">KR {i + 1}</span>
+                                                            <span className="flex-1 text-foreground leading-snug">{krText}</span>
+                                                            {krScore !== undefined ? (
+                                                              <div className="shrink-0 flex items-center gap-2 min-w-[80px] justify-end">
+                                                                <span className="text-xs text-muted-foreground">Score:</span>
+                                                                <span className="font-bold text-sm tabular-nums">{krScore.score}</span>
+                                                              </div>
+                                                            ) : (
+                                                              <span className="shrink-0 text-xs text-muted-foreground italic min-w-[80px] text-right">No score</span>
+                                                            )}
+                                                          </div>
+                                                        );
+                                                      })}
+                                                    </div>
+                                                  </div>
+                                                )}
+                                                {/* Notes/response */}
+                                                {record.latestUpdate.notes && (
+                                                  <div>
+                                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                                      <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                                                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Response / Notes</p>
+                                                    </div>
+                                                    <p className="text-sm text-foreground leading-relaxed bg-background rounded-md px-3 py-2 border">{record.latestUpdate.notes}</p>
+                                                  </div>
+                                                )}
+                                                {!record.latestUpdate.notes && keyResults.length === 0 && (
+                                                  <p className="text-sm text-muted-foreground italic">No details available.</p>
+                                                )}
+                                                {/* Scorer info */}
+                                                <div className="flex items-center gap-4 pt-1 border-t text-xs text-muted-foreground">
+                                                  {record.latestUpdate.scorerName && (
+                                                    <span>Scored by <span className="font-medium text-foreground">{record.latestUpdate.scorerName}</span></span>
+                                                  )}
+                                                  <span>Submitted {new Date(record.latestUpdate.submittedAt).toLocaleDateString()}</span>
+                                                  {hasScore && <span>Overall score: <span className="font-medium text-foreground">{latestScore}%</span></span>}
+                                                </div>
+                                              </div>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
                                   );
                                 })}
                               </tbody>
