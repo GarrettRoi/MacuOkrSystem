@@ -57,6 +57,7 @@ const okrNumbers = ["OKR 1", "OKR 2", "OKR 3", "OKR 4", "OKR 5"];
 export default function Data() {
   const { toast } = useToast();
   const [expandedOkrIds, setExpandedOkrIds] = useState<Set<string>>(new Set());
+  const [expandedKrIds, setExpandedKrIds] = useState<Set<string>>(new Set());
   const [editingOkr, setEditingOkr] = useState<AggregatedOkr | null>(null);
   const [editingUpdate, setEditingUpdate] = useState<(QuarterlyUpdate & { keyResultScoresParsed: any }) | null>(null);
   
@@ -313,6 +314,10 @@ export default function Data() {
       newExpanded.add(okrId);
     }
     setExpandedOkrIds(newExpanded);
+  };
+
+  const toggleKrExpand = (key: string) => {
+    setExpandedKrIds(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
   };
 
   const toggleSelection = (okrId: string) => {
@@ -1171,71 +1176,115 @@ export default function Data() {
                         </TableRow>
                         {isExpanded && (
                           <TableRow>
-                            <TableCell colSpan={10} className="bg-muted/30 p-4">
-                              <div className="space-y-4">
-                                <h4 className="font-semibold text-sm">Quarterly Updates ({okr.quarterlyUpdates.length})</h4>
-                                {okr.quarterlyUpdates.length === 0 ? (
-                                  <p className="text-sm text-muted-foreground">No quarterly updates yet</p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {okr.quarterlyUpdates.map((update: any) => (
-                                      <Card key={update.id} className={`bg-background ${update.isCollaborativeScore ? 'border-blue-300 dark:border-blue-700' : ''}`} data-testid={`card-update-${update.id}`}>
-                                        <CardContent className="pt-4">
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                              <p className="text-sm font-medium">Quarter/Year</p>
-                                              <div className="flex items-center gap-1 flex-wrap">
-                                                <p className="text-sm text-muted-foreground">
-                                                  {getQuarterLabel(update.quarter)} {update.year}
-                                                </p>
-                                                {update.isPrimaryScore === false && (
-                                                  <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px] px-1 py-0">Secondary</Badge>
-                                                )}
-                                                {update.isPrimaryScore !== false && update.isCollaborativeScore && (
-                                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1 py-0">Primary</Badge>
-                                                )}
-                                                {update.isCollaborativeScore && (
-                                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1 py-0">COLLAB</Badge>
-                                                )}
-                                              </div>
-                                            </div>
-                                            <div>
-                                              <p className="text-sm font-medium">Average Score</p>
-                                              <p className="text-sm text-muted-foreground" data-testid={`text-avg-score-${update.id}`}>
-                                                {update.averageScore ?? "N/A"}%
-                                              </p>
-                                            </div>
-                                            <div className="md:col-span-2">
-                                              <p className="text-sm font-medium">Notes</p>
-                                              <p className="text-sm text-muted-foreground">{update.notes}</p>
-                                            </div>
-                                            {update.keyResultScoresParsed && (() => {
-                                              const okrKrs = parseKeyResultsJson(okr.keyResults);
-                                              return (
-                                                <div className="md:col-span-2">
-                                                  <p className="text-sm font-medium">Key Result Scores</p>
-                                                  <div className="space-y-1 mt-2">
-                                                    {update.keyResultScoresParsed.map((kr: any, idx: number) => {
-                                                      const krDef = okrKrs[kr.keyResultNumber - 1];
-                                                      return (
-                                                        <div key={idx} className="text-sm flex items-baseline gap-2">
-                                                          <span className="font-medium shrink-0">KR{kr.keyResultNumber}: {kr.score}%</span>
-                                                          {krDef?.description && (
-                                                            <span className="text-muted-foreground text-xs truncate" title={krDef.description}>
-                                                              — {krDef.description}
-                                                            </span>
+                            <TableCell colSpan={10} className="bg-muted/30 p-0">
+                              {(() => {
+                                const krs = parseKeyResultsJson(okr.keyResults);
+                                return (
+                                  <div className="px-6 py-4 space-y-4">
+                                    {/* Key Results accordion */}
+                                    <div>
+                                      <h4 className="font-semibold text-sm mb-2">Key Results</h4>
+                                      {krs.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground">No key results defined for this OKR.</p>
+                                      ) : (
+                                        <div className="space-y-1.5">
+                                          {krs.map((kr, krIdx) => {
+                                            const krKey = `${okr.id}-kr-${krIdx}`;
+                                            const isKrExpanded = expandedKrIds.has(krKey);
+                                            const krNum = krIdx + 1;
+                                            const submissions = okr.quarterlyUpdates.flatMap((update: any) => {
+                                              if (!update.keyResultScoresParsed) return [];
+                                              const krScore = update.keyResultScoresParsed.find((s: any) => s.keyResultNumber === krNum);
+                                              if (!krScore) return [];
+                                              return [{ update, krScore }];
+                                            });
+                                            return (
+                                              <div key={krIdx} className="border rounded-md bg-background overflow-hidden" data-testid={`kr-item-${okr.id}-${krIdx}`}>
+                                                <button
+                                                  className="w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                                                  onClick={() => toggleKrExpand(krKey)}
+                                                  data-testid={`button-expand-kr-${okr.id}-${krIdx}`}
+                                                >
+                                                  <div className="shrink-0 mt-0.5 text-muted-foreground">
+                                                    {isKrExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                  </div>
+                                                  <div className="flex-1 min-w-0">
+                                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">KR {krNum}</span>
+                                                    <p className="text-sm text-foreground leading-snug mt-0.5">{kr.description}</p>
+                                                  </div>
+                                                  <div className="shrink-0 text-right ml-3">
+                                                    {submissions.length > 0 ? (
+                                                      <span className="text-sm font-bold tabular-nums">{submissions[0].krScore.score}%</span>
+                                                    ) : (
+                                                      <span className="text-xs text-muted-foreground italic">No score</span>
+                                                    )}
+                                                  </div>
+                                                </button>
+                                                {isKrExpanded && (
+                                                  <div className="border-t bg-primary/5 px-4 py-3 space-y-3">
+                                                    {submissions.length === 0 ? (
+                                                      <p className="text-sm text-muted-foreground italic">No score submissions for this key result yet.</p>
+                                                    ) : (
+                                                      submissions.map(({ update, krScore }: any) => (
+                                                        <div key={update.id} className="space-y-2" data-testid={`kr-submission-${update.id}-${krIdx}`}>
+                                                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                              <span className="text-sm font-semibold">{getQuarterLabel(update.quarter)} {update.year}</span>
+                                                              <span className="text-sm font-bold text-foreground">— {krScore.score}%</span>
+                                                              {update.isPrimaryScore === false && (
+                                                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Secondary</Badge>
+                                                              )}
+                                                              {update.isCollaborativeScore && (
+                                                                <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5 py-0">Collab</Badge>
+                                                              )}
+                                                            </div>
+                                                            {update.scorerName && (
+                                                              <span className="text-xs text-muted-foreground">Scored by {update.scorerName}</span>
+                                                            )}
+                                                          </div>
+                                                          {update.notes && (
+                                                            <div className="bg-background border rounded px-3 py-2">
+                                                              <p className="text-xs font-medium text-muted-foreground mb-0.5">Response / Notes</p>
+                                                              <p className="text-sm text-foreground leading-relaxed">{update.notes}</p>
+                                                            </div>
                                                           )}
                                                         </div>
-                                                      );
-                                                    })}
+                                                      ))
+                                                    )}
                                                   </div>
-                                                </div>
-                                              );
-                                            })()}
-                                            <div className="md:col-span-2 flex items-center justify-between gap-2 flex-wrap">
-                                              <div className="flex items-center gap-1">
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Update actions row */}
+                                    {okr.quarterlyUpdates.length > 0 && (
+                                      <div>
+                                        <h4 className="font-semibold text-sm mb-2">Score Submissions ({okr.quarterlyUpdates.length})</h4>
+                                        <div className="space-y-1.5">
+                                          {okr.quarterlyUpdates.map((update: any) => (
+                                            <div
+                                              key={update.id}
+                                              className={`flex items-center justify-between gap-3 flex-wrap bg-background border rounded-md px-3 py-2 ${update.isCollaborativeScore ? 'border-blue-300 dark:border-blue-700' : ''}`}
+                                              data-testid={`card-update-${update.id}`}
+                                            >
+                                              <div className="flex items-center gap-2 flex-wrap text-sm">
+                                                <span className="font-medium">{getQuarterLabel(update.quarter)} {update.year}</span>
+                                                <span className="font-bold tabular-nums" data-testid={`text-avg-score-${update.id}`}>{update.averageScore ?? "—"}%</span>
+                                                {update.isPrimaryScore === false && (
+                                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Secondary</Badge>
+                                                )}
+                                                {update.isPrimaryScore !== false && update.isCollaborativeScore && (
+                                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5 py-0">Primary</Badge>
+                                                )}
+                                                {update.isCollaborativeScore && (
+                                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5 py-0">Collab</Badge>
+                                                )}
                                                 {update.scorerName && (
-                                                  <span className="text-xs text-muted-foreground">Scored by: {update.scorerName}</span>
+                                                  <span className="text-xs text-muted-foreground">by {update.scorerName}</span>
                                                 )}
                                               </div>
                                               <div className="flex items-center gap-2">
@@ -1269,13 +1318,16 @@ export default function Data() {
                                                 </Button>
                                               </div>
                                             </div>
-                                          </div>
-                                        </CardContent>
-                                      </Card>
-                                    ))}
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {okr.quarterlyUpdates.length === 0 && (
+                                      <p className="text-sm text-muted-foreground">No score submissions yet.</p>
+                                    )}
                                   </div>
-                                )}
-                              </div>
+                                );
+                              })()}
                             </TableCell>
                           </TableRow>
                         )}
