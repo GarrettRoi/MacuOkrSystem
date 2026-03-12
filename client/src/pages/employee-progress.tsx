@@ -453,7 +453,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                         </td>
                                       </tr>
                                       {isExpanded && (
-                                        <tr className="bg-muted/20 border-b" data-testid={`row-okr-detail-${record.okr.id}`}>
+                                        <tr className="bg-primary/5 border-b border-primary/10" data-testid={`row-okr-detail-${record.okr.id}`}>
                                           <td colSpan={6} className="px-6 py-4">
                                             {!record.latestUpdate ? (
                                               <p className="text-sm text-muted-foreground italic">No quarterly update submitted yet.</p>
