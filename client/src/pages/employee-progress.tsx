@@ -567,19 +567,24 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                         key={obj.id}
                         onClick={() => toggleObjective(obj.label)}
                         data-testid={`button-objective-${obj.id}`}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm transition-colors ${
+                        className={`flex flex-col items-start gap-1 px-4 py-3 rounded-md border text-left transition-colors flex-1 min-w-[260px] max-w-[420px] ${
                           isSelected
                             ? "bg-primary text-primary-foreground border-primary"
                             : "bg-background text-foreground border-border hover:bg-muted"
                         }`}
                       >
-                        <Target className="h-3.5 w-3.5 shrink-0" />
-                        <span className="font-medium">{obj.label}</span>
-                        {alignedCount > 0 && (
-                          <span className={`text-xs px-1.5 py-0.5 rounded-sm ${isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                            {alignedCount}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2 w-full">
+                          <Target className="h-3.5 w-3.5 shrink-0" />
+                          <span className="font-semibold text-sm">{obj.label}</span>
+                          {alignedCount > 0 && (
+                            <span className={`ml-auto text-xs px-1.5 py-0.5 rounded-sm shrink-0 ${isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                              {alignedCount} OKR{alignedCount !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-xs leading-snug ${isSelected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                          {obj.description}
+                        </p>
                       </button>
                     );
                   })}
