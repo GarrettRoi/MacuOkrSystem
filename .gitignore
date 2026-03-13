@@ -1,6 +1,29 @@
-node_modules
-dist
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+
+# Environment variables
+.env
+.env.*
+
+# OS files
 .DS_Store
-server/public
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Vite
 vite.config.ts.*
+.cache/
+
+# Project specific
+server/public
 *.tar.gz
