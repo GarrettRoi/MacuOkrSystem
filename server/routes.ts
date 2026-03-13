@@ -48,6 +48,10 @@ async function requireRole(req: Request, res: Response, roles: UserRole[]): Prom
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   app.post("/api/auth/verify", async (req, res) => {
     try {
       const { password } = req.body;
