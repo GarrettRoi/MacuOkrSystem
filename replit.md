@@ -26,7 +26,7 @@ PostgreSQL is used as the database, accessed via Drizzle ORM and Neon Database's
 
 - **SPU Selection**: Staff can submit OKRs for various departments/sub-departments, distinguishing between their primary assignment and the OKR's submission SPU.
 - **Multi-SPU Assignments**: Leaders and super admins can be assigned to manage multiple SPUs beyond their primary assignment. This is managed via the Admin panel's staff management section (gear icon).
-- **Authentication & Authorization**: A dual password-based system provides Admin and Staff access levels, with role-based access control (super_admin, leader, basic).
+- **Authentication & Authorization**: A dual password-based system provides Admin and Staff access levels, with role-based access control (super_admin, leader, basic). Optionally, OneLogin OIDC SSO can be enabled — staff are matched by email address and logged in automatically. SSO is toggled in the Admin Settings tab. An "Admin Login" escape hatch at the bottom of the login page allows admin password login when SSO is active. SSO credentials can be provided via DB settings or environment variables (`SSO_ISSUER_URL`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`). Callback URL: `/api/auth/sso/callback`.
 - **Key Pages**:
     - **Submit OKR**: Form for creating OKRs with multi-select for university strategic objectives and key results (stored as JSON arrays in text columns), plus dynamic key results.
     - **Quarterly Update**: Interface for updating OKR progress with individual key result scoring and notes.

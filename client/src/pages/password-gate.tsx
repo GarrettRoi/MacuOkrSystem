@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { AlertCircle, Shield, User } from "lucide-react";
+import { AlertCircle, Shield, User, LogIn } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface PasswordGateProps {
@@ -15,14 +15,62 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
 
   const { data: passwordSetting, isLoading: settingLoading } = useQuery<{ enabled: boolean }>({
     queryKey: ["/api/settings/password-login"],
   });
 
-  const passwordEnabled = passwordSetting?.enabled !== false;
+  const { data: ssoSetting, isLoading: ssoLoading } = useQuery<{
+    enabled: boolean;
+    issuerUrl: string;
+    clientId: string;
+    hasClientSecret: boolean;
+  }>({
+    queryKey: ["/api/settings/sso"],
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const passwordEnabled = passwordSetting?.enabled !== false;
+  const ssoEnabled = ssoSetting?.enabled === true;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ssoError = params.get("sso_error");
+    const email = params.get("email");
+    if (ssoError) {
+      const messages: Record<string, string> = {
+        no_account: `No staff account found for ${email || "that email address"}. Contact your administrator.`,
+        no_email: "OneLogin did not provide an email address. Contact your administrator.",
+        invalid_state: "Login session expired. Please try again.",
+        callback_failed: "Sign-in failed. Please try again or use the admin login below.",
+        session_error: "A session error occurred. Please try again.",
+      };
+      setError(messages[ssoError] || "Sign-in failed. Please try again.");
+      setShowAdminLogin(true);
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
+
+  const handleSsoLogin = async () => {
+    setError("");
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/auth/sso/login");
+      if (res.ok) {
+        const data = await res.json();
+        window.location.href = data.redirectUrl;
+      } else {
+        const data = await res.json();
+        setError(data.error || "Failed to start sign-in. Please try again.");
+        setIsLoading(false);
+      }
+    } catch {
+      setError("An error occurred. Please try again.");
+      setIsLoading(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
@@ -41,7 +89,7 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
         setError("Incorrect password. Please try again.");
         setPassword("");
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
@@ -66,14 +114,14 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
       } else {
         setError("An error occurred. Please try again.");
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (settingLoading) {
+  if (settingLoading || ssoLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
@@ -90,13 +138,15 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
     );
   }
 
+  const showSsoPrimary = ssoEnabled && !showAdminLogin;
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
           <div className="flex justify-center mb-4">
             <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center">
-              <span className="text-2xl font-bold text-primary-foreground">MACU</span>
+              <span className="text-xl font-bold text-primary-foreground">MACU</span>
             </div>
           </div>
           <CardTitle className="text-3xl font-bold">OKR Tracking System</CardTitle>
@@ -104,9 +154,67 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
             Mid-America Christian University
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {passwordEnabled ? (
-            <form onSubmit={handleSubmit} className="space-y-6">
+        <CardContent className="space-y-4">
+
+          {showSsoPrimary && (
+            <div className="space-y-4">
+              <Button
+                size="lg"
+                className="w-full"
+                onClick={handleSsoLogin}
+                disabled={isLoading}
+                data-testid="button-sso-login"
+              >
+                <LogIn className="h-4 w-4 mr-2" />
+                {isLoading ? "Redirecting to OneLogin..." : "Sign in with OneLogin"}
+              </Button>
+
+              {passwordEnabled && (
+                <>
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-card px-2 text-muted-foreground">or</span>
+                    </div>
+                  </div>
+                  <form onSubmit={handlePasswordSubmit} className="space-y-3">
+                    <Input
+                      type="password"
+                      placeholder="Access password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      data-testid="input-password"
+                      className="text-base"
+                    />
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      className="w-full"
+                      disabled={isLoading || !password}
+                      data-testid="button-submit-password"
+                    >
+                      Continue with Password
+                    </Button>
+                  </form>
+                </>
+              )}
+
+              {error && (
+                <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!showSsoPrimary && passwordEnabled && (
+            <form onSubmit={handlePasswordSubmit} className="space-y-6">
+              {showAdminLogin && ssoEnabled && (
+                <p className="text-sm text-center text-muted-foreground">Admin / manual login</p>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="password">Access Password</Label>
                 <Input
@@ -123,7 +231,7 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
                   Admin password for full access, or staff password for limited access
                 </p>
               </div>
-              
+
               {error && (
                 <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
                   <AlertCircle className="h-4 w-4" />
@@ -140,9 +248,27 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
               >
                 {isLoading ? "Verifying..." : "Continue"}
               </Button>
+
+              {showAdminLogin && ssoEnabled && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => { setShowAdminLogin(false); setError(""); setPassword(""); }}
+                  data-testid="button-back-to-sso"
+                >
+                  Back to OneLogin sign-in
+                </Button>
+              )}
             </form>
-          ) : (
+          )}
+
+          {!showSsoPrimary && !passwordEnabled && (
             <div className="space-y-4">
+              {showAdminLogin && ssoEnabled && (
+                <p className="text-sm text-center text-muted-foreground">Admin / manual login</p>
+              )}
               <p className="text-sm text-muted-foreground text-center">
                 Select your access level to continue
               </p>
@@ -176,10 +302,34 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
                   <span>{error}</span>
                 </div>
               )}
+
+              {showAdminLogin && ssoEnabled && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => { setShowAdminLogin(false); setError(""); }}
+                  data-testid="button-back-to-sso"
+                >
+                  Back to OneLogin sign-in
+                </Button>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {ssoEnabled && !showAdminLogin && (
+        <button
+          className="mt-8 text-xs text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors select-none"
+          onClick={() => setShowAdminLogin(true)}
+          data-testid="button-admin-escape"
+          aria-label="Admin login"
+        >
+          Admin Login
+        </button>
+      )}
     </div>
   );
 }

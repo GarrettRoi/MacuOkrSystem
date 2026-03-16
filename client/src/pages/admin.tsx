@@ -127,6 +127,19 @@ export default function Admin({ staff }: AdminProps) {
     enabled: staff.role === "super_admin",
   });
 
+  const { data: ssoSetting, refetch: refetchSso } = useQuery<{
+    enabled: boolean;
+    issuerUrl: string;
+    clientId: string;
+    hasClientSecret: boolean;
+  }>({
+    queryKey: ["/api/settings/sso"],
+    enabled: staff.role === "super_admin",
+  });
+  const [ssoIssuerUrl, setSsoIssuerUrl] = useState("");
+  const [ssoClientId, setSsoClientId] = useState("");
+  const [ssoClientSecret, setSsoClientSecret] = useState("");
+
   const { data: planStartYearData } = useQuery<{ startYear: number }>({
     queryKey: ["/api/settings/strategic-plan-start-year"],
     enabled: staff.role === "super_admin",
@@ -235,6 +248,17 @@ export default function Admin({ staff }: AdminProps) {
           ? "Users must now enter a password to access the system."
           : "Users can now enter without a password by selecting Admin or Staff access.",
       });
+    },
+  });
+
+  const updateSsoMutation = useMutation({
+    mutationFn: async (data: { enabled: boolean; issuerUrl?: string; clientId?: string; clientSecret?: string }) => {
+      return await apiRequest("PUT", "/api/settings/sso", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/sso"] });
+      setSsoClientSecret("");
+      toast({ title: "SSO Settings Saved", description: "Single Sign-On configuration has been updated." });
     },
   });
 
@@ -1991,6 +2015,94 @@ export default function Admin({ staff }: AdminProps) {
                     disabled={togglePasswordLoginMutation.isPending}
                     data-testid="switch-password-login"
                   />
+                </div>
+
+                <div className="p-4 border rounded-md space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-base font-medium">OneLogin SSO</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {ssoSetting?.enabled
+                          ? "SSO is enabled. Staff sign in via OneLogin and are matched by email address."
+                          : "SSO is disabled. Enable and configure to allow staff to sign in with OneLogin."}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={ssoSetting?.enabled === true}
+                      onCheckedChange={(checked) =>
+                        updateSsoMutation.mutate({
+                          enabled: checked,
+                          issuerUrl: ssoSetting?.issuerUrl,
+                          clientId: ssoSetting?.clientId,
+                        })
+                      }
+                      disabled={updateSsoMutation.isPending}
+                      data-testid="switch-sso-enabled"
+                    />
+                  </div>
+
+                  <div className="space-y-3 pt-2 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      OIDC configuration — values can also be set via environment variables{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs">SSO_ISSUER_URL</code>,{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs">SSO_CLIENT_ID</code>,{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs">SSO_CLIENT_SECRET</code>.
+                    </p>
+                    <div className="grid gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="sso-issuer" className="text-sm">Issuer URL</Label>
+                        <Input
+                          id="sso-issuer"
+                          placeholder={ssoSetting?.issuerUrl || "https://yourorg.onelogin.com/oidc/2"}
+                          value={ssoIssuerUrl}
+                          onChange={(e) => setSsoIssuerUrl(e.target.value)}
+                          data-testid="input-sso-issuer-url"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="sso-client-id" className="text-sm">Client ID</Label>
+                        <Input
+                          id="sso-client-id"
+                          placeholder={ssoSetting?.clientId || "your-client-id"}
+                          value={ssoClientId}
+                          onChange={(e) => setSsoClientId(e.target.value)}
+                          data-testid="input-sso-client-id"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="sso-client-secret" className="text-sm">
+                          Client Secret{ssoSetting?.hasClientSecret ? " (already set — leave blank to keep)" : ""}
+                        </Label>
+                        <Input
+                          id="sso-client-secret"
+                          type="password"
+                          placeholder={ssoSetting?.hasClientSecret ? "••••••••••••" : "your-client-secret"}
+                          value={ssoClientSecret}
+                          onChange={(e) => setSsoClientSecret(e.target.value)}
+                          data-testid="input-sso-client-secret"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      disabled={updateSsoMutation.isPending || (!ssoIssuerUrl && !ssoClientId && !ssoClientSecret)}
+                      onClick={() =>
+                        updateSsoMutation.mutate({
+                          enabled: ssoSetting?.enabled === true,
+                          ...(ssoIssuerUrl && { issuerUrl: ssoIssuerUrl }),
+                          ...(ssoClientId && { clientId: ssoClientId }),
+                          ...(ssoClientSecret && { clientSecret: ssoClientSecret }),
+                        })
+                      }
+                      data-testid="button-save-sso"
+                    >
+                      {updateSsoMutation.isPending ? "Saving..." : "Save SSO Configuration"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Callback URL to register in OneLogin:{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs">{window.location.origin}/api/auth/sso/callback</code>
+                    </p>
+                  </div>
                 </div>
 
                 <div className="p-4 border rounded-md space-y-3">

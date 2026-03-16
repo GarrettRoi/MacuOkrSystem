@@ -11,6 +11,8 @@ declare module 'express-session' {
     selectedStaffId?: string;
     selectedStaffName?: string;
     sessionVersion?: number;
+    ssoState?: string;
+    ssoCodeVerifier?: string;
   }
 }
 

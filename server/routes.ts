@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import * as oidcClient from "openid-client";
 import {
   insertStaffSchema,
   insertSpuSchema,
@@ -190,6 +191,161 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, enabled: parsed.data.enabled });
     } catch (error) {
       res.status(500).json({ error: "Failed to update setting" });
+    }
+  });
+
+  // SSO Settings
+  app.get("/api/settings/sso", async (_req, res) => {
+    try {
+      const enabled = await storage.getSetting("sso_enabled");
+      const issuer = await storage.getSetting("sso_issuer_url");
+      const clientId = await storage.getSetting("sso_client_id");
+      const hasClientSecret = !!(await storage.getSetting("sso_client_secret")) || !!process.env.SSO_CLIENT_SECRET;
+      res.json({
+        enabled: enabled === "true",
+        issuerUrl: issuer || process.env.SSO_ISSUER_URL || "",
+        clientId: clientId || process.env.SSO_CLIENT_ID || "",
+        hasClientSecret,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch SSO settings" });
+    }
+  });
+
+  app.put("/api/settings/sso", async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const staffMember = await storage.getStaff(req.session.selectedStaffId);
+      if (!staffMember || staffMember.role !== "super_admin") {
+        return res.status(403).json({ error: "Only super admins can change this setting" });
+      }
+      const schema = z.object({
+        enabled: z.boolean(),
+        issuerUrl: z.string().optional(),
+        clientId: z.string().optional(),
+        clientSecret: z.string().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      await storage.setSetting("sso_enabled", parsed.data.enabled ? "true" : "false");
+      if (parsed.data.issuerUrl !== undefined) {
+        await storage.setSetting("sso_issuer_url", parsed.data.issuerUrl);
+      }
+      if (parsed.data.clientId !== undefined) {
+        await storage.setSetting("sso_client_id", parsed.data.clientId);
+      }
+      if (parsed.data.clientSecret !== undefined && parsed.data.clientSecret !== "") {
+        await storage.setSetting("sso_client_secret", parsed.data.clientSecret);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update SSO settings" });
+    }
+  });
+
+  // OIDC SSO Auth Routes
+  async function getSsoConfig() {
+    const issuerUrl = (await storage.getSetting("sso_issuer_url")) || process.env.SSO_ISSUER_URL || "";
+    const clientId = (await storage.getSetting("sso_client_id")) || process.env.SSO_CLIENT_ID || "";
+    const clientSecret = (await storage.getSetting("sso_client_secret")) || process.env.SSO_CLIENT_SECRET || "";
+    return { issuerUrl, clientId, clientSecret };
+  }
+
+  app.get("/api/auth/sso/login", async (req, res) => {
+    try {
+      const ssoEnabled = await storage.getSetting("sso_enabled");
+      if (ssoEnabled !== "true") {
+        return res.status(403).json({ error: "SSO is not enabled" });
+      }
+
+      const { issuerUrl, clientId, clientSecret } = await getSsoConfig();
+      if (!issuerUrl || !clientId) {
+        return res.status(500).json({ error: "SSO is not fully configured" });
+      }
+
+      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined);
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/sso/callback`;
+
+      const codeVerifier = oidcClient.randomPKCECodeVerifier();
+      const codeChallenge = await oidcClient.calculatePKCECodeChallenge(codeVerifier);
+      const state = oidcClient.randomPKCECodeVerifier();
+
+      req.session.ssoState = state;
+      req.session.ssoCodeVerifier = codeVerifier;
+
+      const authUrl = oidcClient.buildAuthorizationUrl(config, {
+        redirect_uri: redirectUri,
+        scope: "openid email profile",
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
+        state,
+      });
+
+      await new Promise<void>((resolve, reject) => req.session.save((err) => err ? reject(err) : resolve()));
+      res.json({ redirectUrl: authUrl.href });
+    } catch (error: any) {
+      console.error("SSO login error:", error);
+      res.status(500).json({ error: "Failed to initiate SSO login" });
+    }
+  });
+
+  app.get("/api/auth/sso/callback", async (req, res) => {
+    try {
+      const { error: oauthError, state } = req.query;
+
+      if (oauthError) {
+        return res.redirect(`/?sso_error=${encodeURIComponent(String(oauthError))}`);
+      }
+
+      if (state !== req.session.ssoState) {
+        return res.redirect("/?sso_error=invalid_state");
+      }
+
+      const { issuerUrl, clientId, clientSecret } = await getSsoConfig();
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/sso/callback`;
+
+      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined);
+
+      const callbackUrl = new URL(req.url, `${req.protocol}://${req.get("host")}`);
+      const tokenResponse = await oidcClient.authorizationCodeGrant(config, callbackUrl, {
+        pkceCodeVerifier: req.session.ssoCodeVerifier,
+        expectedState: req.session.ssoState,
+        redirectUri,
+      } as any);
+
+      const claims = tokenResponse.claims();
+      const email = (claims?.email as string | undefined)?.toLowerCase().trim();
+
+      delete req.session.ssoState;
+      delete req.session.ssoCodeVerifier;
+
+      if (!email) {
+        return res.redirect("/?sso_error=no_email");
+      }
+
+      const staffMember = await storage.getStaffByEmail(email);
+      if (!staffMember) {
+        return res.redirect(`/?sso_error=no_account&email=${encodeURIComponent(email)}`);
+      }
+
+      req.session.regenerate((err) => {
+        if (err) return res.redirect("/?sso_error=session_error");
+        req.session.isAdmin = staffMember.isAdmin;
+        req.session.selectedStaffId = staffMember.id;
+        req.session.selectedStaffName = staffMember.name;
+        req.session.sessionVersion = Date.now();
+        req.session.save((err2) => {
+          if (err2) return res.redirect("/?sso_error=session_error");
+          res.redirect("/");
+        });
+      });
+    } catch (error: any) {
+      console.error("SSO callback error:", error);
+      res.redirect(`/?sso_error=callback_failed`);
     }
   });
 
