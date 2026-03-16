@@ -2568,26 +2568,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const row = rows[i];
         try {
           if (!row.matchedOkrId) {
-            await storage.createUnmatchedScore({
-              spuName: row.spuName || null,
-              subUnitName: row.subUnitName || null,
-              quarter: row.quarter,
-              year: row.year,
-              okrNumber: row.okrNumber || null,
-              scorerName: row.scorerName || null,
-              krScores: row.krScores && row.krScores.length > 0
-                ? JSON.stringify(row.krScores.map((kr: any) => ({ keyResultNumber: kr.krNumber, score: kr.score })))
-                : null,
-              notes: row.notes || null,
-              averageScore: row.averageScore ?? null,
-              overflowKrText: row.overflowKRText || null,
-              isCollaborativeScore: row.isCollaborativeScore === true,
-              rawData: JSON.stringify(row),
-              status: "pending",
-              matchedOkrId: null,
-              matchedAt: null,
-            });
-            results.unmatchedSaved++;
+            // Only save non-duplicate unmatched rows to the pending queue
+            if (!row.isDuplicate) {
+              await storage.createUnmatchedScore({
+                spuName: row.spuName || null,
+                subUnitName: row.subUnitName || null,
+                quarter: row.quarter,
+                year: row.year,
+                okrNumber: row.okrNumber || null,
+                scorerName: row.scorerName || null,
+                krScores: row.krScores && row.krScores.length > 0
+                  ? JSON.stringify(row.krScores.map((kr: any) => ({ keyResultNumber: kr.krNumber, score: kr.score })))
+                  : null,
+                notes: row.notes || null,
+                averageScore: row.averageScore ?? null,
+                overflowKrText: row.overflowKRText || null,
+                isCollaborativeScore: row.isCollaborativeScore === true,
+                rawData: JSON.stringify(row),
+                status: "pending",
+                matchedOkrId: null,
+                matchedAt: null,
+              });
+              results.unmatchedSaved++;
+            } else {
+              results.rowsSkipped++;
+            }
             continue;
           }
 

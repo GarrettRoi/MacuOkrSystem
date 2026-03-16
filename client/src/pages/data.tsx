@@ -672,12 +672,14 @@ export default function Data() {
 
   const handleConfirmScoreImport = async () => {
     const includedRows = scoreImportPreviewData.filter(r => r.include);
-    if (includedRows.length === 0) {
-      toast({ title: "No Rows Selected", description: "Please include at least one row to import.", variant: "destructive" });
+    const unmatchedRows = scoreImportPreviewData.filter(r => !r.matchedOkrId && !r.isDuplicate);
+    if (includedRows.length === 0 && unmatchedRows.length === 0) {
+      toast({ title: "Nothing to Import", description: "No matched rows selected and no unmatched rows to save for manual matching.", variant: "destructive" });
       return;
     }
     setScoreImportStep("importing");
-    confirmScoreImportMutation.mutate(includedRows);
+    // Send ALL rows — server handles matched (include=true) vs unmatched (no matchedOkrId) appropriately
+    confirmScoreImportMutation.mutate(scoreImportPreviewData);
   };
 
   const updateScoreRow = (index: number, field: string, value: any) => {
@@ -3148,9 +3150,24 @@ export default function Data() {
                 <Button variant="outline" onClick={() => { setScoreImportDialogOpen(false); resetScoreImportState(); }} data-testid="button-cancel-score-import">
                   Cancel
                 </Button>
-                <Button onClick={handleConfirmScoreImport} disabled={confirmScoreImportMutation.isPending || scoreImportPreviewData.filter(r => r.include).length === 0} data-testid="button-confirm-score-import">
-                  Import {scoreImportPreviewData.filter(r => r.include).length} Score{scoreImportPreviewData.filter(r => r.include).length !== 1 ? "s" : ""}
-                </Button>
+                {(() => {
+                  const matchedCount = scoreImportPreviewData.filter(r => r.include).length;
+                  const unmatchedCount = scoreImportPreviewData.filter(r => !r.matchedOkrId && !r.isDuplicate).length;
+                  const label = matchedCount > 0
+                    ? `Import ${matchedCount} Score${matchedCount !== 1 ? "s" : ""}${unmatchedCount > 0 ? ` + Save ${unmatchedCount} Pending` : ""}`
+                    : unmatchedCount > 0
+                      ? `Save ${unmatchedCount} Pending Score${unmatchedCount !== 1 ? "s" : ""}`
+                      : "Nothing to Import";
+                  return (
+                    <Button
+                      onClick={handleConfirmScoreImport}
+                      disabled={confirmScoreImportMutation.isPending || (matchedCount === 0 && unmatchedCount === 0)}
+                      data-testid="button-confirm-score-import"
+                    >
+                      {label}
+                    </Button>
+                  );
+                })()}
               </DialogFooter>
             </div>
           )}
@@ -3159,7 +3176,7 @@ export default function Data() {
             <div className="flex items-center justify-center py-12">
               <div className="text-center space-y-3">
                 <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
-                <p className="text-sm text-muted-foreground">Processing {scoreImportPreviewData.filter(r => r.include).length} scores...</p>
+                <p className="text-sm text-muted-foreground">Processing {scoreImportPreviewData.length} rows...</p>
               </div>
             </div>
           )}
