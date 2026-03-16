@@ -5,6 +5,9 @@ import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 
+// Trust Railway/Heroku/Render proxy so secure session cookies work behind HTTPS load balancers
+app.set('trust proxy', 1);
+
 declare module 'express-session' {
   interface SessionData {
     isAdmin?: boolean;
