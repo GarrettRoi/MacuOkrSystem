@@ -354,7 +354,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                         </Badge>
                       )}
                       <span className="font-bold text-lg" data-testid={`text-okr-progress-${okr.id}`}>
-                        {okr.currentValue}%
+                        {latestUpdate?.averageScore ?? okr.currentValue}%
                       </span>
                     </div>
                   </div>
