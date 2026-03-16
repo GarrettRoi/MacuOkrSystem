@@ -390,13 +390,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/university-objectives", async (req, res) => {
+  app.post("/api/university-objectives", requireAdmin, async (req, res) => {
     try {
-      if (!(await requireRole(req, res, ["super_admin"]))) return;
       const schema = z.object({
         label: z.string().min(1),
         description: z.string().min(1),
         sortOrder: z.number().int().optional(),
+        applicableYears: z.array(z.number().int()).optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
@@ -409,9 +409,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/university-objectives/:id", async (req, res) => {
+  app.patch("/api/university-objectives/:id", requireAdmin, async (req, res) => {
     try {
-      if (!(await requireRole(req, res, ["super_admin"]))) return;
       const schema = z.object({
         label: z.string().min(1).optional(),
         description: z.string().min(1).optional(),
@@ -430,9 +429,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/university-objectives/:id", async (req, res) => {
+  app.delete("/api/university-objectives/:id", requireAdmin, async (req, res) => {
     try {
-      if (!(await requireRole(req, res, ["super_admin"]))) return;
       await storage.deleteUniversityObjective(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -440,9 +438,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/university-key-results", async (req, res) => {
+  app.post("/api/university-key-results", requireAdmin, async (req, res) => {
     try {
-      if (!(await requireRole(req, res, ["super_admin"]))) return;
       const schema = z.object({
         objectiveId: z.string().min(1),
         label: z.string().min(1),
@@ -460,9 +457,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/university-key-results/:id", async (req, res) => {
+  app.patch("/api/university-key-results/:id", requireAdmin, async (req, res) => {
     try {
-      if (!(await requireRole(req, res, ["super_admin"]))) return;
       const schema = z.object({
         label: z.string().min(1).optional(),
         description: z.string().min(1).optional(),
@@ -479,9 +475,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/university-key-results/:id", async (req, res) => {
+  app.delete("/api/university-key-results/:id", requireAdmin, async (req, res) => {
     try {
-      if (!(await requireRole(req, res, ["super_admin"]))) return;
       await storage.deleteUniversityKeyResult(req.params.id);
       res.json({ success: true });
     } catch (error) {

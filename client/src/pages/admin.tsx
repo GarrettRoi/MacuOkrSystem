@@ -164,6 +164,9 @@ export default function Admin({ staff }: AdminProps) {
       setNewObjYears([]);
       toast({ title: "Objective Added", description: "The university objective has been created." });
     },
+    onError: (error: any) => {
+      toast({ title: "Failed to Add Objective", description: error?.message || "Could not create the university objective.", variant: "destructive" });
+    },
   });
 
   const updateObjectiveMutation = useMutation({
@@ -176,6 +179,9 @@ export default function Admin({ staff }: AdminProps) {
       setEditingObj(null);
       toast({ title: "Objective Updated", description: "The university objective has been updated." });
     },
+    onError: (error: any) => {
+      toast({ title: "Failed to Update Objective", description: error?.message || "Could not update the university objective.", variant: "destructive" });
+    },
   });
 
   const deleteObjectiveMutation = useMutation({
@@ -185,6 +191,9 @@ export default function Admin({ staff }: AdminProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
       toast({ title: "Objective Deleted", description: "The university objective and its key results have been removed." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to Delete Objective", description: error?.message || "Could not delete the university objective.", variant: "destructive" });
     },
   });
 
@@ -200,6 +209,9 @@ export default function Admin({ staff }: AdminProps) {
       setNewKrDescription("");
       toast({ title: "Key Result Added", description: "The university key result has been created." });
     },
+    onError: (error: any) => {
+      toast({ title: "Failed to Add Key Result", description: error?.message || "Could not create the key result.", variant: "destructive" });
+    },
   });
 
   const updateKeyResultMutation = useMutation({
@@ -212,6 +224,9 @@ export default function Admin({ staff }: AdminProps) {
       setEditingKr(null);
       toast({ title: "Key Result Updated", description: "The university key result has been updated." });
     },
+    onError: (error: any) => {
+      toast({ title: "Failed to Update Key Result", description: error?.message || "Could not update the key result.", variant: "destructive" });
+    },
   });
 
   const deleteKeyResultMutation = useMutation({
@@ -221,6 +236,9 @@ export default function Admin({ staff }: AdminProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
       toast({ title: "Key Result Deleted", description: "The university key result has been removed." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to Delete Key Result", description: error?.message || "Could not delete the key result.", variant: "destructive" });
     },
   });
 
