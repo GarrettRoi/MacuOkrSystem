@@ -1170,3 +1170,55 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+// ─── Startup seed ──────────────────────────────────────────────────────────────
+// Ensures the three core super-admin accounts always exist in every database
+// (Replit dev, Railway production, fresh deployments, etc.).
+// Uses email as the stable unique key — safe to run on every startup.
+
+const SEED_SUPER_ADMINS: Array<{
+  name: string;
+  email: string;
+  spuName: string;
+}> = [
+  { name: "Amanda Harris",   email: "amanda.harris@macu.edu",  spuName: "Strategic Initiatives"   },
+  { name: "Phil Greenwald",  email: "president@macu.edu",      spuName: "Office of the President" },
+  { name: "Garrett Finnell", email: "garrett.finnell@macu.edu", spuName: "Information Technology"  },
+];
+
+async function getOrCreateSpu(name: string): Promise<string> {
+  const [existing] = await db.select({ id: spus.id }).from(spus).where(eq(spus.name, name));
+  if (existing) return existing.id;
+  const [created] = await db.insert(spus).values({ name }).returning({ id: spus.id });
+  return created.id;
+}
+
+export async function seedDatabase(): Promise<void> {
+  try {
+    for (const admin of SEED_SUPER_ADMINS) {
+      const spuId = await getOrCreateSpu(admin.spuName);
+
+      // Upsert by email — update name/role/spuId if the record already exists
+      // so corrections in this list are applied automatically on next deploy.
+      await db
+        .insert(staff)
+        .values({
+          name: admin.name,
+          email: admin.email,
+          role: "super_admin",
+          spuId,
+        })
+        .onConflictDoUpdate({
+          target: staff.email,
+          set: {
+            name: admin.name,
+            role: "super_admin",
+            spuId,
+          },
+        });
+    }
+    console.log("[seed] Super-admin accounts verified/created.");
+  } catch (err) {
+    console.error("[seed] Failed to seed super-admin accounts:", err);
+  }
+}

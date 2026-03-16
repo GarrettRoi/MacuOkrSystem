@@ -27,6 +27,25 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Returns true for sub-unit values that mean "whole SPU / no sub-unit" so
+// we never create junk sub-unit records from these CSV values.
+function isPlaceholderSubUnit(name: string): boolean {
+  const lower = name.toLowerCase().trim();
+  return (
+    lower === '' ||
+    lower === 'n/a' ||
+    lower === 'na' ||
+    lower === 'none' ||
+    lower.includes('not applic') ||
+    lower.includes('non-applic') ||
+    lower.includes('entire spu') ||
+    lower.includes('entire unit') ||
+    lower.includes('whole spu') ||
+    lower.includes('whole unit') ||
+    lower.includes('not applicable')
+  );
+}
+
 async function requireRole(req: Request, res: Response, roles: UserRole[]): Promise<boolean> {
   const staffId = req.session.selectedStaffId;
   if (!staffId) {
@@ -1794,7 +1813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!okrNumberText) rowErrors.push('Missing OKR number');
         if (!objectiveStmt) rowErrors.push('Missing objective statement');
 
-        const cleanSubUnit = subUnitText.toLowerCase() === 'n/a' ? '' : subUnitText;
+        const cleanSubUnit = isPlaceholderSubUnit(subUnitText) ? '' : subUnitText;
 
         let isDuplicate = false;
         let duplicateType: string | null = null;
@@ -1979,7 +1998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           let subUnit = null;
-          if (subUnitName) {
+          if (subUnitName && !isPlaceholderSubUnit(subUnitName)) {
             const cacheKey = `${primarySpuName.toLowerCase()}:${subUnitName.toLowerCase()}`;
             if (subUnitCache.has(cacheKey)) {
               subUnit = subUnitCache.get(cacheKey);
@@ -2298,7 +2317,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const spuNames = spuText.split(',').map((s: string) => s.trim()).filter(Boolean);
         const primarySpuName = spuNames[0] || spuText;
         const matchedSpuId = fuzzyMatchSpu(primarySpuName);
-        const cleanSubUnit = subUnitText.toLowerCase() === 'n/a' ? '' : subUnitText;
+        const cleanSubUnit = isPlaceholderSubUnit(subUnitText) ? '' : subUnitText;
         const matchedSubUnitId = cleanSubUnit && matchedSpuId ? fuzzyMatchSubUnit(cleanSubUnit, matchedSpuId) : null;
 
         const krScores: Array<{ krNumber: number; score: number }> = [];
