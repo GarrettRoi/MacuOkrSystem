@@ -464,7 +464,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                     )}
 
                     <div className="flex gap-2 pt-2">
-                      <Link href="/quarterly-update">
+                      <Link href={`/quarterly-update?okrId=${okr.id}&quarter=${okr.quarter}&year=${okr.year}`}>
                         <Button variant="outline" size="sm" data-testid={`button-update-${okr.id}`}>
                           <TrendingUp className="h-4 w-4 mr-1" />
                           Update Progress

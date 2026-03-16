@@ -47,10 +47,19 @@ const currentYear = new Date().getFullYear();
 
 export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   const { toast } = useToast();
+
+  // Parse deep-link params: ?okrId=...&quarter=...&year=...
+  const urlParams = new URLSearchParams(
+    typeof window !== "undefined" ? window.location.search : ""
+  );
+  const deepOkrId = urlParams.get("okrId") || "";
+  const deepQuarter = urlParams.get("quarter") || "";
+  const deepYear = parseInt(urlParams.get("year") || "") || currentYear;
+
   const [selectedOkr, setSelectedOkr] = useState<OkrWithDetails | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [selectedQuarter, setSelectedQuarter] = useState("");
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedQuarter, setSelectedQuarter] = useState(deepQuarter);
+  const [selectedYear, setSelectedYear] = useState(deepQuarter ? deepYear : currentYear);
 
   // SPU-centric model: Fetch OKRs scoped to user's SPU directly from server
   // Server validates session-based staff belongs to requested SPU
@@ -81,8 +90,8 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     defaultValues: {
       okrId: "",
       staffId: staff.id,
-      quarter: "",
-      year: currentYear,
+      quarter: deepQuarter,
+      year: deepQuarter ? deepYear : currentYear,
       progress: 0,
       keyResultScores: [],
       averageScore: 0,
@@ -138,6 +147,39 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
       form.setValue("keyResultScores", initialScores);
     }
   };
+
+  // Auto-select OKR when arriving via deep-link from My OKRs
+  useEffect(() => {
+    if (!deepOkrId || !spuOkrs || selectedOkr) return;
+
+    // Find the target OKR across all loaded OKRs (not just filtered)
+    const target = spuOkrs.find((o) => o.id === deepOkrId);
+    if (!target) return;
+
+    // Set quarter/year so filteredOkrs includes this OKR, then select it
+    setSelectedQuarter(target.quarter);
+    setSelectedYear(target.year);
+    form.setValue("quarter", target.quarter);
+    form.setValue("year", target.year);
+
+    // Parse and set key results
+    let keyResults: any[] = [];
+    try {
+      keyResults = typeof target.keyResults === "string"
+        ? JSON.parse(target.keyResults)
+        : Array.isArray(target.keyResults) ? target.keyResults : [];
+    } catch {}
+
+    const initialScores = keyResults.map((kr, index) => ({
+      keyResultNumber: index + 1,
+      description: kr.description || `Key Result ${index + 1}`,
+      score: 0,
+    }));
+
+    form.setValue("okrId", target.id);
+    form.setValue("keyResultScores", initialScores);
+    setSelectedOkr(target);
+  }, [deepOkrId, spuOkrs]);
 
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
