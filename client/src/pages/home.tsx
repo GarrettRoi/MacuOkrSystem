@@ -47,6 +47,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-indigo-600",
       bg: "bg-indigo-50",
       adminOnly: false,
+      hidden: true,
     },
     {
       title: "All OKR's",
@@ -104,7 +105,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
     },
   ];
 
-  const actions = allActions.filter((action) => !action.adminOnly || isAdmin);
+  const actions = allActions.filter((action) => !action.hidden && (!action.adminOnly || isAdmin));
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">

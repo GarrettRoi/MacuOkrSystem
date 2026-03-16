@@ -690,6 +690,7 @@ export default function UniversityAchievement() {
         <TabsList data-testid="tabs-achievement">
           <TabsTrigger value="dashboard" data-testid="tab-dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="trends" data-testid="tab-trends">Historical Trends</TabsTrigger>
+          <TabsTrigger value="strategic-advancement" data-testid="tab-strategic-advancement">Strategic Advancement</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard">
@@ -698,6 +699,12 @@ export default function UniversityAchievement() {
 
         <TabsContent value="trends">
           <TrendsTab />
+        </TabsContent>
+
+        <TabsContent value="strategic-advancement">
+          <div className="flex flex-col items-center justify-center py-24 text-center text-muted-foreground">
+            <p className="text-2xl font-semibold">Coming Soon</p>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
