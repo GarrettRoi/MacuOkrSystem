@@ -127,7 +127,25 @@ function AppContent() {
       {!isAuthenticated ? (
         <PasswordGate onAuthenticated={handleAuthenticated} />
       ) : !selectedStaff ? (
-        <StaffSelection onStaffSelected={handleStaffSelected} />
+        <StaffSelection
+          onStaffSelected={handleStaffSelected}
+          isAdmin={isAdmin}
+          onAdminBypass={() => {
+            const adminStaff: StaffWithDetails = {
+              id: "admin-bypass",
+              name: "Administrator",
+              email: "",
+              staffIdNumber: "",
+              isAdmin: true,
+              role: "super_admin",
+              spuId: "",
+              subUnitId: null,
+              spu: { id: "", name: "Administration" },
+              subUnit: null,
+            };
+            setSelectedStaff(adminStaff);
+          }}
+        />
       ) : (
         <div className="min-h-screen flex flex-col">
           <AppHeader staff={selectedStaff} onLogout={handleLogout} isAdmin={isAdmin} />

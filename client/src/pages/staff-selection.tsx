@@ -3,18 +3,19 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, User } from "lucide-react";
+import { Search, User, Settings } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { compareNames } from "@/lib/utils";
 
 interface StaffSelectionProps {
   onStaffSelected: (staff: StaffWithDetails) => void;
+  isAdmin?: boolean;
+  onAdminBypass?: () => void;
 }
 
-export default function StaffSelection({ onStaffSelected }: StaffSelectionProps) {
+export default function StaffSelection({ onStaffSelected, isAdmin, onAdminBypass }: StaffSelectionProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
   const { data: staffList, isLoading } = useQuery<StaffWithDetails[]>({
@@ -60,7 +61,16 @@ export default function StaffSelection({ onStaffSelected }: StaffSelectionProps)
                 {filteredStaff.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <User className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                    <p>No staff members found</p>
+                    <p>{searchTerm ? "No staff members found" : "No staff members have been set up yet"}</p>
+                    {isAdmin && !searchTerm && onAdminBypass && (
+                      <div className="mt-6">
+                        <p className="text-sm mb-3">You're logged in as an administrator. Set up your organization first.</p>
+                        <Button onClick={onAdminBypass} data-testid="button-admin-bypass">
+                          <Settings className="h-4 w-4 mr-2" />
+                          Go to Admin Panel
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   filteredStaff.map((staff) => (
