@@ -67,6 +67,16 @@ export const universityKeyResults = pgTable("university_key_results", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
+export const universityKeyResultProgress = pgTable("university_key_result_progress", {
+  keyResultId: varchar("key_result_id").primaryKey().references(() => universityKeyResults.id, { onDelete: "cascade" }),
+  progressPercent: integer("progress_percent").notNull().default(0),
+});
+
+export const universityObjectiveComments = pgTable("university_objective_comments", {
+  objectiveId: varchar("objective_id").primaryKey().references(() => universityObjectives.id, { onDelete: "cascade" }),
+  comment: text("comment").notNull().default(""),
+});
+
 export const okrs = pgTable("okrs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").references(() => staff.id, { onDelete: "set null" }),
@@ -320,9 +330,25 @@ export type InsertUniversityKeyResult = z.infer<typeof insertUniversityKeyResult
 
 export type UniversityObjective = typeof universityObjectives.$inferSelect;
 export type UniversityKeyResult = typeof universityKeyResults.$inferSelect;
+export type UniversityKeyResultProgress = typeof universityKeyResultProgress.$inferSelect;
+export type UniversityObjectiveComment = typeof universityObjectiveComments.$inferSelect;
+
+export type UniversityKeyResultWithProgress = UniversityKeyResult & {
+  progressPercent: number;
+};
 
 export type UniversityObjectiveWithKeyResults = UniversityObjective & {
   keyResults: UniversityKeyResult[];
+};
+
+export type StrategicAdvancementObjective = UniversityObjective & {
+  keyResults: UniversityKeyResultWithProgress[];
+  comment: string;
+};
+
+export type StrategicAdvancementData = {
+  objectives: StrategicAdvancementObjective[];
+  lastUpdated: string | null;
 };
 
 export type Spu = typeof spus.$inferSelect;

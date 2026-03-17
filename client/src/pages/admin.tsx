@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,8 +15,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2 } from "lucide-react";
-import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults } from "@shared/schema";
+import { Slider } from "@/components/ui/slider";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw } from "lucide-react";
+import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames } from "@/lib/utils";
 
@@ -178,6 +179,73 @@ export default function Admin({ staff }: AdminProps) {
   const { data: universityObjectives, isLoading: objectivesLoading } = useQuery<UniversityObjectiveWithKeyResults[]>({
     queryKey: ["/api/university-objectives"],
     enabled: staff.role === "super_admin",
+  });
+
+  const { data: advancementData, isLoading: advancementLoading } = useQuery<StrategicAdvancementData>({
+    queryKey: ["/api/strategic-advancement"],
+    enabled: staff.role === "super_admin",
+  });
+
+  const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
+  const [localComments, setLocalComments] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (advancementData) {
+      const progress: Record<string, number> = {};
+      const comments: Record<string, string> = {};
+      for (const obj of advancementData.objectives) {
+        comments[obj.id] = obj.comment;
+        for (const kr of obj.keyResults) {
+          progress[kr.id] = kr.progressPercent;
+        }
+      }
+      setLocalProgress((prev) => {
+        const merged = { ...prev };
+        for (const [k, v] of Object.entries(progress)) {
+          if (!(k in prev)) merged[k] = v;
+        }
+        return merged;
+      });
+      setLocalComments((prev) => {
+        const merged = { ...prev };
+        for (const [k, v] of Object.entries(comments)) {
+          if (!(k in prev)) merged[k] = v;
+        }
+        return merged;
+      });
+    }
+  }, [advancementData]);
+
+  const saveProgressMutation = useMutation({
+    mutationFn: async ({ keyResultId, progressPercent }: { keyResultId: string; progressPercent: number }) => {
+      return await apiRequest("PUT", `/api/strategic-advancement/progress/${keyResultId}`, { progressPercent });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/strategic-advancement"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save progress.", variant: "destructive" }),
+  });
+
+  const saveCommentMutation = useMutation({
+    mutationFn: async ({ objectiveId, comment }: { objectiveId: string; comment: string }) => {
+      return await apiRequest("PUT", `/api/strategic-advancement/comment/${objectiveId}`, { comment });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/strategic-advancement"] });
+      toast({ title: "Comment Saved", description: "The objective comment has been updated." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save comment.", variant: "destructive" }),
+  });
+
+  const updateAdvancementDateMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/strategic-advancement/update-date", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/strategic-advancement"] });
+      toast({ title: "Date Updated", description: "The last updated date has been refreshed." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update date.", variant: "destructive" }),
   });
 
   const addObjectiveMutation = useMutation({
@@ -2358,6 +2426,119 @@ export default function Admin({ staff }: AdminProps) {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+            {/* Strategic Advancement Dashboard */}
+            <Card className="mt-6">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="h-5 w-5" />
+                      Strategic Advancement Dashboard
+                    </CardTitle>
+                    <CardDescription>Set progress percentages and comments for each objective and key result</CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => updateAdvancementDateMutation.mutate()}
+                    disabled={updateAdvancementDateMutation.isPending}
+                    data-testid="button-update-advancement-date"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${updateAdvancementDateMutation.isPending ? "animate-spin" : ""}`} />
+                    Update Last Updated Date
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {advancementLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="space-y-2">
+                        <Skeleton className="h-5 w-48" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-full" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (advancementData?.objectives ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No active objectives found. Add objectives in the University Strategic Planning section above.
+                  </p>
+                ) : (
+                  <div className="space-y-8">
+                    {(advancementData?.objectives ?? []).map((obj) => (
+                      <div key={obj.id} className="space-y-4" data-testid={`adv-objective-${obj.id}`}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className="font-mono text-xs shrink-0">{obj.label}</Badge>
+                          <span className="text-sm font-semibold">{obj.description}</span>
+                        </div>
+
+                        {obj.keyResults.length > 0 && (
+                          <div className="space-y-4 pl-4 border-l-2 border-muted">
+                            {obj.keyResults.map((kr) => {
+                              const pct = localProgress[kr.id] ?? 0;
+                              return (
+                                <div key={kr.id} className="space-y-2" data-testid={`adv-kr-${kr.id}`}>
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <span className="text-sm">
+                                      <span className="font-mono text-muted-foreground mr-1">{kr.label}</span>
+                                      {kr.description}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <Slider
+                                      value={[pct]}
+                                      min={0}
+                                      max={100}
+                                      step={1}
+                                      className="flex-1"
+                                      onValueChange={([val]) => setLocalProgress((prev) => ({ ...prev, [kr.id]: val }))}
+                                      onValueCommit={([val]) => saveProgressMutation.mutate({ keyResultId: kr.id, progressPercent: val })}
+                                      data-testid={`slider-kr-${kr.id}`}
+                                    />
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      value={pct}
+                                      onChange={(e) => {
+                                        const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                        setLocalProgress((prev) => ({ ...prev, [kr.id]: val }));
+                                      }}
+                                      onBlur={() => saveProgressMutation.mutate({ keyResultId: kr.id, progressPercent: pct })}
+                                      className="w-20 text-center"
+                                      data-testid={`input-kr-percent-${kr.id}`}
+                                    />
+                                    <span className="text-sm text-muted-foreground w-4">%</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground uppercase tracking-wide">Progress Comment</Label>
+                          <Textarea
+                            placeholder="Add a comment about the progress of this objective..."
+                            value={localComments[obj.id] ?? ""}
+                            onChange={(e) => setLocalComments((prev) => ({ ...prev, [obj.id]: e.target.value }))}
+                            onBlur={() => {
+                              const comment = localComments[obj.id] ?? "";
+                              if (comment !== (obj.comment ?? "")) {
+                                saveCommentMutation.mutate({ objectiveId: obj.id, comment });
+                              }
+                            }}
+                            className="min-h-20 resize-none text-sm"
+                            data-testid={`textarea-objective-comment-${obj.id}`}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         )}
         {staff.role === "super_admin" && (

@@ -22,6 +22,7 @@ import {
   type UniversityObjective,
   type UniversityKeyResult,
   type UniversityObjectiveWithKeyResults,
+  type StrategicAdvancementData,
   type EditLog,
   type InsertEditLog,
   type UnmatchedScore,
@@ -43,6 +44,8 @@ import {
   appSettings,
   universityObjectives,
   universityKeyResults,
+  universityKeyResultProgress,
+  universityObjectiveComments,
   editLogs,
   unmatchedScores,
 } from "@shared/schema";
@@ -131,6 +134,11 @@ export interface IStorage {
   createUniversityKeyResult(kr: import("@shared/schema").InsertUniversityKeyResult): Promise<import("@shared/schema").UniversityKeyResult>;
   updateUniversityKeyResult(id: string, updates: Partial<import("@shared/schema").InsertUniversityKeyResult>): Promise<import("@shared/schema").UniversityKeyResult>;
   deleteUniversityKeyResult(id: string): Promise<void>;
+
+  // Strategic Advancement
+  getStrategicAdvancementData(): Promise<import("@shared/schema").StrategicAdvancementData>;
+  setKeyResultProgress(keyResultId: string, progressPercent: number): Promise<void>;
+  setObjectiveComment(objectiveId: string, comment: string): Promise<void>;
 
   // App Settings
   getSetting(key: string): Promise<string | null>;
@@ -1130,6 +1138,40 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUniversityKeyResult(id: string): Promise<void> {
     await db.delete(universityKeyResults).where(eq(universityKeyResults.id, id));
+  }
+
+  async getStrategicAdvancementData(): Promise<StrategicAdvancementData> {
+    const objectives = await db.select().from(universityObjectives).where(eq(universityObjectives.isActive, true)).orderBy(asc(universityObjectives.sortOrder));
+    const krs = await db.select().from(universityKeyResults).orderBy(asc(universityKeyResults.sortOrder));
+    const progressRows = await db.select().from(universityKeyResultProgress);
+    const commentRows = await db.select().from(universityObjectiveComments);
+    const lastUpdatedRow = await db.select().from(appSettings).where(eq(appSettings.key, "strategic_advancement_updated_at"));
+    const progressMap = new Map(progressRows.map(r => [r.keyResultId, r.progressPercent]));
+    const commentMap = new Map(commentRows.map(r => [r.objectiveId, r.comment]));
+    return {
+      objectives: objectives.map(obj => ({
+        ...obj,
+        keyResults: krs
+          .filter(kr => kr.objectiveId === obj.id)
+          .map(kr => ({ ...kr, progressPercent: progressMap.get(kr.id) ?? 0 })),
+        comment: commentMap.get(obj.id) ?? "",
+      })),
+      lastUpdated: lastUpdatedRow[0]?.value ?? null,
+    };
+  }
+
+  async setKeyResultProgress(keyResultId: string, progressPercent: number): Promise<void> {
+    await db
+      .insert(universityKeyResultProgress)
+      .values({ keyResultId, progressPercent })
+      .onConflictDoUpdate({ target: universityKeyResultProgress.keyResultId, set: { progressPercent } });
+  }
+
+  async setObjectiveComment(objectiveId: string, comment: string): Promise<void> {
+    await db
+      .insert(universityObjectiveComments)
+      .values({ objectiveId, comment })
+      .onConflictDoUpdate({ target: universityObjectiveComments.objectiveId, set: { comment } });
   }
 
   async createEditLog(log: InsertEditLog): Promise<EditLog> {

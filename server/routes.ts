@@ -517,6 +517,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Strategic Advancement Progress & Comments
+  app.get("/api/strategic-advancement", async (_req, res) => {
+    try {
+      const data = await storage.getStrategicAdvancementData();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch strategic advancement data" });
+    }
+  });
+
+  app.put("/api/strategic-advancement/progress/:keyResultId", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({ progressPercent: z.number().int().min(0).max(100) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "progressPercent must be 0–100" });
+      await storage.setKeyResultProgress(req.params.keyResultId, parsed.data.progressPercent);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update progress" });
+    }
+  });
+
+  app.put("/api/strategic-advancement/comment/:objectiveId", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({ comment: z.string() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid comment" });
+      await storage.setObjectiveComment(req.params.objectiveId, parsed.data.comment);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update comment" });
+    }
+  });
+
+  app.post("/api/strategic-advancement/update-date", requireAdmin, async (req, res) => {
+    try {
+      const now = new Date().toISOString();
+      await storage.setSetting("strategic_advancement_updated_at", now);
+      res.json({ success: true, updatedAt: now });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update date" });
+    }
+  });
+
   app.post("/api/auth/enter", async (req, res) => {
     try {
       const passwordRequired = await storage.getSetting("password_login_enabled");

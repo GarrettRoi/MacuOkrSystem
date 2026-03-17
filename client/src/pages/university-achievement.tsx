@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar } from "lucide-react";
-import type { OkrWithDetails, QuarterlyUpdate, Spu, Year } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
@@ -676,6 +676,99 @@ function TrendsTab() {
   );
 }
 
+function StrategicAdvancementTab() {
+  const { data, isLoading } = useQuery<StrategicAdvancementData>({
+    queryKey: ["/api/strategic-advancement"],
+  });
+
+  const formatDate = (iso: string | null) => {
+    if (!iso) return null;
+    return new Date(iso).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        {[1, 2, 3].map((i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-4 w-80" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-16 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  const objectives = data?.objectives ?? [];
+  const lastUpdated = formatDate(data?.lastUpdated ?? null);
+
+  return (
+    <div className="space-y-6">
+      {lastUpdated && (
+        <p className="text-center text-sm text-muted-foreground" data-testid="text-strategic-last-updated">
+          Last Updated: {lastUpdated}
+        </p>
+      )}
+
+      {objectives.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center text-muted-foreground">
+          <Target className="h-10 w-10 mb-3 opacity-40" />
+          <p className="text-lg font-medium">No strategic objectives configured yet.</p>
+          <p className="text-sm mt-1">An administrator can add objectives in the Strategic Planning section.</p>
+        </div>
+      ) : (
+        objectives.map((obj) => (
+          <Card key={obj.id} data-testid={`card-objective-${obj.id}`}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="font-mono text-xs shrink-0">{obj.label}</Badge>
+                <span>{obj.description}</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {obj.keyResults.length > 0 && (
+                <div className="space-y-3">
+                  {obj.keyResults.map((kr) => (
+                    <div key={kr.id} className="space-y-1" data-testid={`kr-progress-${kr.id}`}>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-sm font-medium">
+                          <span className="text-muted-foreground font-mono mr-1">{kr.label}</span>
+                          {kr.description}
+                        </span>
+                        <span className="text-sm font-semibold tabular-nums shrink-0" data-testid={`text-kr-percent-${kr.id}`}>
+                          {kr.progressPercent}%
+                        </span>
+                      </div>
+                      <Progress value={kr.progressPercent} className="h-2" data-testid={`progress-kr-${kr.id}`} />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {obj.comment && (
+                <div className="rounded-md bg-muted/50 p-4 text-sm text-muted-foreground whitespace-pre-wrap" data-testid={`text-objective-comment-${obj.id}`}>
+                  {obj.comment}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+}
+
 export default function UniversityAchievement() {
   return (
     <div className="p-6 space-y-6">
@@ -702,9 +795,7 @@ export default function UniversityAchievement() {
         </TabsContent>
 
         <TabsContent value="strategic-advancement">
-          <div className="flex flex-col items-center justify-center py-24 text-center text-muted-foreground">
-            <p className="text-2xl font-semibold">Coming Soon</p>
-          </div>
+          <StrategicAdvancementTab />
         </TabsContent>
       </Tabs>
     </div>
