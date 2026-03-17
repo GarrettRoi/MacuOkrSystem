@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames } from "@/lib/utils";
@@ -62,6 +62,21 @@ export default function Admin({ staff }: AdminProps) {
   const [spuAssignmentsStaff, setSpuAssignmentsStaff] = useState<Staff | null>(null);
   const [newAssignmentSpuId, setNewAssignmentSpuId] = useState("");
   const [newAssignmentSubUnitId, setNewAssignmentSubUnitId] = useState("");
+
+  const [mergeSpuDialogOpen, setMergeSpuDialogOpen] = useState(false);
+  const [mergeSpuSourceId, setMergeSpuSourceId] = useState("");
+  const [mergeSpuTargetId, setMergeSpuTargetId] = useState("");
+  const [convertSpuDialogOpen, setConvertSpuDialogOpen] = useState(false);
+  const [convertSpuSource, setConvertSpuSource] = useState<Spu | null>(null);
+  const [convertSpuTargetId, setConvertSpuTargetId] = useState("");
+  const [promoteSubUnitDialogOpen, setPromoteSubUnitDialogOpen] = useState(false);
+  const [promoteSubUnit, setPromoteSubUnit] = useState<SubUnit | null>(null);
+  const [promoteSubUnitIdsToMove, setPromoteSubUnitIdsToMove] = useState<string[]>([]);
+  const [expandedSpus, setExpandedSpus] = useState<Set<string>>(new Set());
+  const [moveSubUnitDialogOpen, setMoveSubUnitDialogOpen] = useState(false);
+  const [moveSubUnit, setMoveSubUnit] = useState<SubUnit | null>(null);
+  const [moveSubUnitTargetSpuId, setMoveSubUnitTargetSpuId] = useState("");
+  const [addSubUnitForSpuId, setAddSubUnitForSpuId] = useState("");
 
   const [objDialogOpen, setObjDialogOpen] = useState(false);
   const [newObjLabel, setNewObjLabel] = useState("");
@@ -503,6 +518,103 @@ export default function Admin({ staff }: AdminProps) {
     },
   });
 
+  const mergeSpuMutation = useMutation({
+    mutationFn: async (data: { sourceId: string; targetId: string }) => {
+      const res = await apiRequest("POST", "/api/spus/merge", data);
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] });
+      setMergeSpuDialogOpen(false);
+      setMergeSpuSourceId("");
+      setMergeSpuTargetId("");
+      toast({ title: "SPUs Merged", description: data.message || "SPUs have been merged successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Merge Failed", description: error?.message || "Failed to merge SPUs.", variant: "destructive" });
+    },
+  });
+
+  const convertSpuToSubUnitMutation = useMutation({
+    mutationFn: async (data: { sourceId: string; targetSpuId: string }) => {
+      const res = await apiRequest("POST", `/api/spus/${data.sourceId}/convert-to-subunit`, { targetSpuId: data.targetSpuId });
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] });
+      setConvertSpuDialogOpen(false);
+      setConvertSpuSource(null);
+      setConvertSpuTargetId("");
+      toast({ title: "SPU Converted", description: data.message || "SPU has been converted to a sub-unit." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Conversion Failed", description: error?.message || "Failed to convert SPU.", variant: "destructive" });
+    },
+  });
+
+  const promoteSubUnitToSpuMutation = useMutation({
+    mutationFn: async (data: { subUnitId: string; subUnitIdsToMove: string[] }) => {
+      const res = await apiRequest("POST", `/api/sub-units/${data.subUnitId}/promote-to-spu`, { subUnitIdsToMove: data.subUnitIdsToMove });
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] });
+      setPromoteSubUnitDialogOpen(false);
+      setPromoteSubUnit(null);
+      setPromoteSubUnitIdsToMove([]);
+      toast({ title: "Sub-Unit Promoted", description: data.message || "Sub-unit has been promoted to a full SPU." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Promotion Failed", description: error?.message || "Failed to promote sub-unit.", variant: "destructive" });
+    },
+  });
+
+  const moveSubUnitMutation = useMutation({
+    mutationFn: async (data: { subUnitId: string; targetSpuId: string }) => {
+      const res = await apiRequest("POST", `/api/sub-units/${data.subUnitId}/move`, { targetSpuId: data.targetSpuId });
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] });
+      setMoveSubUnitDialogOpen(false);
+      setMoveSubUnit(null);
+      setMoveSubUnitTargetSpuId("");
+      toast({ title: "Sub-Unit Moved", description: data.message || "Sub-unit has been moved successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Move Failed", description: error?.message || "Failed to move sub-unit.", variant: "destructive" });
+    },
+  });
+
+  const toggleSpuExpanded = (spuId: string) => {
+    setExpandedSpus(prev => {
+      const next = new Set(prev);
+      if (next.has(spuId)) next.delete(spuId);
+      else next.add(spuId);
+      return next;
+    });
+  };
+
+  const getSubUnitsForSpu = (spuId: string) => {
+    return subUnits?.filter(su => su.spuId === spuId) || [];
+  };
+
   const getSpuName = (spuId: string) => {
     return spus?.find((s) => s.id === spuId)?.name || "Unknown";
   };
@@ -533,8 +645,7 @@ export default function Admin({ staff }: AdminProps) {
             </TabsTrigger>
           )}
           <TabsTrigger value="staff" data-testid="tab-staff">Staff Management</TabsTrigger>
-          <TabsTrigger value="spus" data-testid="tab-spus">SPUs</TabsTrigger>
-          <TabsTrigger value="subunits" data-testid="tab-subunits">Sub-Units</TabsTrigger>
+          <TabsTrigger value="spus" data-testid="tab-spus">SPUs & Sub-Units</TabsTrigger>
           <TabsTrigger value="years" data-testid="tab-years">Years</TabsTrigger>
           {staff.role === "super_admin" && (
             <TabsTrigger value="strategic" data-testid="tab-strategic">
@@ -1187,74 +1298,103 @@ export default function Admin({ staff }: AdminProps) {
         <TabsContent value="spus">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div>
-                  <CardTitle>SPUs (Schools, Departments, Units)</CardTitle>
-                  <CardDescription>Manage university SPUs</CardDescription>
+                  <CardTitle>SPUs & Sub-Units</CardTitle>
+                  <CardDescription>Manage university SPUs and their nested sub-units</CardDescription>
                 </div>
-                <Dialog open={spuDialogOpen} onOpenChange={setSpuDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button data-testid="button-add-spu">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add SPU
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add New SPU</DialogTitle>
-                      <DialogDescription>Create a new SPU (School, Department, or Unit)</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="spu-name">SPU Name *</Label>
-                        <Input
-                          id="spu-name"
-                          value={newSpuName}
-                          onChange={(e) => setNewSpuName(e.target.value)}
-                          placeholder="e.g., Academic Affairs"
-                          data-testid="input-spu-name"
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button
-                        onClick={() => newSpuName && addSpuMutation.mutate(newSpuName)}
-                        disabled={!newSpuName || addSpuMutation.isPending}
-                        data-testid="button-save-spu"
-                      >
-                        {addSpuMutation.isPending ? "Adding..." : "Add SPU"}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    onClick={() => setMergeSpuDialogOpen(true)}
+                    data-testid="button-merge-spu"
+                  >
+                    <Merge className="h-4 w-4 mr-2" />
+                    Merge SPUs
+                  </Button>
+                  <Dialog open={spuDialogOpen} onOpenChange={setSpuDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button data-testid="button-add-spu">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add SPU
                       </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Add New SPU</DialogTitle>
+                        <DialogDescription>Create a new SPU (School, Department, or Unit)</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="spu-name">SPU Name *</Label>
+                          <Input
+                            id="spu-name"
+                            value={newSpuName}
+                            onChange={(e) => setNewSpuName(e.target.value)}
+                            placeholder="e.g., Academic Affairs"
+                            data-testid="input-spu-name"
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          onClick={() => newSpuName && addSpuMutation.mutate(newSpuName)}
+                          disabled={!newSpuName || addSpuMutation.isPending}
+                          data-testid="button-save-spu"
+                        >
+                          {addSpuMutation.isPending ? "Adding..." : "Add SPU"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              {spusLoading ? (
+              {(spusLoading || subUnitsLoading) ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>SPU Name</TableHead>
-                      <TableHead className="w-20">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {spus?.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={2} className="text-center text-muted-foreground">
-                          No SPUs yet. Add your first SPU above.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      spus?.map((spu) => (
-                        <TableRow key={spu.id} data-testid={`row-spu-${spu.id}`}>
-                          <TableCell className="font-medium">{spu.name}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
+                <div className="space-y-1">
+                  {spus?.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No SPUs yet. Add your first SPU above.</p>
+                  ) : (
+                    spus?.map((spu) => {
+                      const spuSubUnits = getSubUnitsForSpu(spu.id);
+                      const isExpanded = expandedSpus.has(spu.id);
+                      return (
+                        <div key={spu.id} data-testid={`row-spu-${spu.id}`}>
+                          <div className="flex items-center justify-between gap-2 py-2 px-2 rounded-md hover-elevate">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => toggleSpuExpanded(spu.id)}
+                                data-testid={`button-toggle-spu-${spu.id}`}
+                              >
+                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              </Button>
+                              <span className="font-medium truncate">{spu.name}</span>
+                              {spuSubUnits.length > 0 && (
+                                <Badge variant="secondary" className="no-default-active-elevate">{spuSubUnits.length} sub-unit{spuSubUnits.length !== 1 ? "s" : ""}</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setAddSubUnitForSpuId(spu.id);
+                                  setNewSubUnitParent(spu.id);
+                                  setNewSubUnitName("");
+                                  setSubUnitDialogOpen(true);
+                                }}
+                                title="Add Sub-Unit"
+                                data-testid={`button-add-subunit-to-spu-${spu.id}`}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -1262,6 +1402,7 @@ export default function Admin({ staff }: AdminProps) {
                                   setEditingSpu(spu);
                                   setEditSpuDialogOpen(true);
                                 }}
+                                title="Edit SPU"
                                 data-testid={`button-edit-spu-${spu.id}`}
                               >
                                 <Pencil className="h-4 w-4" />
@@ -1269,22 +1410,154 @@ export default function Admin({ staff }: AdminProps) {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                onClick={() => {
+                                  setConvertSpuSource(spu);
+                                  setConvertSpuTargetId("");
+                                  setConvertSpuDialogOpen(true);
+                                }}
+                                title="Downgrade to Sub-Unit"
+                                data-testid={`button-convert-spu-${spu.id}`}
+                              >
+                                <ArrowDownToLine className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => deleteSpuMutation.mutate(spu.id)}
+                                title="Delete SPU"
                                 data-testid={`button-delete-spu-${spu.id}`}
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                          </div>
+                          {isExpanded && (
+                            <div className="ml-10 border-l pl-4 space-y-1 mb-2">
+                              {spuSubUnits.length === 0 ? (
+                                <p className="text-sm text-muted-foreground py-2">No sub-units</p>
+                              ) : (
+                                spuSubUnits.map((subUnit) => (
+                                  <div
+                                    key={subUnit.id}
+                                    className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-md hover-elevate"
+                                    data-testid={`row-subunit-${subUnit.id}`}
+                                  >
+                                    <span className="text-sm truncate">{subUnit.name}</span>
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => {
+                                          setEditingSubUnit(subUnit);
+                                          setEditSubUnitDialogOpen(true);
+                                        }}
+                                        title="Edit Sub-Unit"
+                                        data-testid={`button-edit-subunit-${subUnit.id}`}
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => {
+                                          setPromoteSubUnit(subUnit);
+                                          setPromoteSubUnitIdsToMove([]);
+                                          setPromoteSubUnitDialogOpen(true);
+                                        }}
+                                        title="Promote to SPU"
+                                        data-testid={`button-promote-subunit-${subUnit.id}`}
+                                      >
+                                        <ArrowUpFromLine className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => {
+                                          setMoveSubUnit(subUnit);
+                                          setMoveSubUnitTargetSpuId("");
+                                          setMoveSubUnitDialogOpen(true);
+                                        }}
+                                        title="Move to another SPU"
+                                        data-testid={`button-move-subunit-${subUnit.id}`}
+                                      >
+                                        <MoveHorizontal className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => deleteSubUnitMutation.mutate(subUnit.id)}
+                                        title="Delete Sub-Unit"
+                                        data-testid={`button-delete-subunit-${subUnit.id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
-          
+
+          <Dialog open={subUnitDialogOpen} onOpenChange={setSubUnitDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Sub-Unit</DialogTitle>
+                <DialogDescription>Create a new sub-unit{addSubUnitForSpuId && spus ? ` under ${spus.find(s => s.id === addSubUnitForSpuId)?.name || ""}` : ""}</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="subunit-name">Sub-Unit Name *</Label>
+                  <Input
+                    id="subunit-name"
+                    value={newSubUnitName}
+                    onChange={(e) => setNewSubUnitName(e.target.value)}
+                    placeholder="e.g., Undergraduate Studies"
+                    data-testid="input-subunit-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="subunit-parent">Parent SPU *</Label>
+                  <Select value={newSubUnitParent} onValueChange={setNewSubUnitParent}>
+                    <SelectTrigger data-testid="select-subunit-parent">
+                      <SelectValue placeholder="Select parent SPU" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {spus?.map((spu) => (
+                        <SelectItem key={spu.id} value={spu.id}>
+                          {spu.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => {
+                    if (newSubUnitName && newSubUnitParent) {
+                      addSubUnitMutation.mutate({
+                        name: newSubUnitName,
+                        spuId: newSubUnitParent,
+                      });
+                    }
+                  }}
+                  disabled={!newSubUnitName || !newSubUnitParent || addSubUnitMutation.isPending}
+                  data-testid="button-save-subunit"
+                >
+                  {addSubUnitMutation.isPending ? "Adding..." : "Add Sub-Unit"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={editSpuDialogOpen} onOpenChange={setEditSpuDialogOpen}>
             <DialogContent>
               <DialogHeader>
@@ -1328,138 +1601,12 @@ export default function Admin({ staff }: AdminProps) {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </TabsContent>
 
-        <TabsContent value="subunits">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Sub-Units</CardTitle>
-                  <CardDescription>Manage sub-units or divisions within each SPU</CardDescription>
-                </div>
-                <Dialog open={subUnitDialogOpen} onOpenChange={setSubUnitDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button data-testid="button-add-subunit">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Sub-Unit
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Add New Sub-Unit</DialogTitle>
-                      <DialogDescription>Create a new sub-unit or division</DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="subunit-name">Sub-Unit Name *</Label>
-                        <Input
-                          id="subunit-name"
-                          value={newSubUnitName}
-                          onChange={(e) => setNewSubUnitName(e.target.value)}
-                          placeholder="e.g., Undergraduate Studies"
-                          data-testid="input-subunit-name"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="subunit-parent">Parent SPU *</Label>
-                        <Select value={newSubUnitParent} onValueChange={setNewSubUnitParent}>
-                          <SelectTrigger data-testid="select-subunit-parent">
-                            <SelectValue placeholder="Select parent SPU" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {spus?.map((spu) => (
-                              <SelectItem key={spu.id} value={spu.id}>
-                                {spu.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button
-                        onClick={() => {
-                          if (newSubUnitName && newSubUnitParent) {
-                            addSubUnitMutation.mutate({
-                              name: newSubUnitName,
-                              spuId: newSubUnitParent,
-                            });
-                          }
-                        }}
-                        disabled={!newSubUnitName || !newSubUnitParent || addSubUnitMutation.isPending}
-                        data-testid="button-save-subunit"
-                      >
-                        {addSubUnitMutation.isPending ? "Adding..." : "Add Sub-Unit"}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {subUnitsLoading ? (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Sub-Unit Name</TableHead>
-                      <TableHead>Parent SPU</TableHead>
-                      <TableHead className="w-20">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {subUnits?.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center text-muted-foreground">
-                          No sub-units yet. Add your first sub-unit above.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      subUnits?.map((subUnit) => (
-                        <TableRow key={subUnit.id} data-testid={`row-subunit-${subUnit.id}`}>
-                          <TableCell className="font-medium">{subUnit.name}</TableCell>
-                          <TableCell>{getSpuName(subUnit.spuId)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setEditingSubUnit(subUnit);
-                                  setEditSubUnitDialogOpen(true);
-                                }}
-                                data-testid={`button-edit-subunit-${subUnit.id}`}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => deleteSubUnitMutation.mutate(subUnit.id)}
-                                data-testid={`button-delete-subunit-${subUnit.id}`}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-          
           <Dialog open={editSubUnitDialogOpen} onOpenChange={setEditSubUnitDialogOpen}>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Edit Sub-Unit</DialogTitle>
-                <DialogDescription>Update the sub-unit name and parent SPU</DialogDescription>
+                <DialogDescription>Update the sub-unit name</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -1471,24 +1618,6 @@ export default function Admin({ staff }: AdminProps) {
                     placeholder="e.g., Undergraduate Studies"
                     data-testid="input-edit-subunit-name"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-subunit-parent">Parent SPU *</Label>
-                  <Select 
-                    value={editingSubUnit?.spuId || ""} 
-                    onValueChange={(value) => setEditingSubUnit(editingSubUnit ? { ...editingSubUnit, spuId: value } : null)}
-                  >
-                    <SelectTrigger data-testid="select-edit-subunit-parent">
-                      <SelectValue placeholder="Select parent SPU" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {spus?.map((spu) => (
-                        <SelectItem key={spu.id} value={spu.id}>
-                          {spu.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
               <DialogFooter>
@@ -1512,10 +1641,221 @@ export default function Admin({ staff }: AdminProps) {
                       });
                     }
                   }}
-                  disabled={!editingSubUnit?.name || !editingSubUnit?.spuId || updateSubUnitMutation.isPending}
+                  disabled={!editingSubUnit?.name || updateSubUnitMutation.isPending}
                   data-testid="button-save-edit-subunit"
                 >
                   {updateSubUnitMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={mergeSpuDialogOpen} onOpenChange={setMergeSpuDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Merge SPUs</DialogTitle>
+                <DialogDescription>
+                  Combine two SPUs into one. All staff, OKRs, sub-units, and assignments from the source will be moved to the target. The source SPU will be deleted.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Source SPU (will be deleted)</Label>
+                  <Select value={mergeSpuSourceId} onValueChange={setMergeSpuSourceId}>
+                    <SelectTrigger data-testid="select-merge-spu-source">
+                      <SelectValue placeholder="Select source SPU" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {spus?.filter(s => s.id !== mergeSpuTargetId).map((spu) => (
+                        <SelectItem key={spu.id} value={spu.id}>{spu.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Target SPU (will receive everything)</Label>
+                  <Select value={mergeSpuTargetId} onValueChange={setMergeSpuTargetId}>
+                    <SelectTrigger data-testid="select-merge-spu-target">
+                      <SelectValue placeholder="Select target SPU" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {spus?.filter(s => s.id !== mergeSpuSourceId).map((spu) => (
+                        <SelectItem key={spu.id} value={spu.id}>{spu.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {mergeSpuSourceId && mergeSpuTargetId && (
+                  <div className="rounded-md border p-3 space-y-1 text-sm bg-muted/50">
+                    <p className="font-medium">Preview:</p>
+                    <p>Staff in "{spus?.find(s => s.id === mergeSpuSourceId)?.name}" will be moved to "{spus?.find(s => s.id === mergeSpuTargetId)?.name}"</p>
+                    <p>All OKRs, sub-units, and SPU assignments will be transferred</p>
+                    <p className="text-destructive font-medium">"{spus?.find(s => s.id === mergeSpuSourceId)?.name}" will be permanently deleted</p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setMergeSpuDialogOpen(false); setMergeSpuSourceId(""); setMergeSpuTargetId(""); }} data-testid="button-cancel-merge-spu">
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => mergeSpuMutation.mutate({ sourceId: mergeSpuSourceId, targetId: mergeSpuTargetId })}
+                  disabled={!mergeSpuSourceId || !mergeSpuTargetId || mergeSpuMutation.isPending}
+                  data-testid="button-confirm-merge-spu"
+                >
+                  {mergeSpuMutation.isPending ? "Merging..." : "Merge SPUs"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={convertSpuDialogOpen} onOpenChange={setConvertSpuDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Downgrade SPU to Sub-Unit</DialogTitle>
+                <DialogDescription>
+                  Demote "{convertSpuSource?.name}" into a sub-unit under another SPU. All its child sub-units will join the new parent SPU.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Target Parent SPU</Label>
+                  <Select value={convertSpuTargetId} onValueChange={setConvertSpuTargetId}>
+                    <SelectTrigger data-testid="select-convert-spu-target">
+                      <SelectValue placeholder="Select parent SPU" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {spus?.filter(s => s.id !== convertSpuSource?.id).map((spu) => (
+                        <SelectItem key={spu.id} value={spu.id}>{spu.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {convertSpuSource && convertSpuTargetId && (
+                  <div className="rounded-md border p-3 space-y-1 text-sm bg-muted/50">
+                    <p className="font-medium">What will happen:</p>
+                    <p>All staff and OKRs under "{convertSpuSource.name}" will be reassigned to "{spus?.find(s => s.id === convertSpuTargetId)?.name}"</p>
+                    <p>Existing child sub-units of "{convertSpuSource.name}" will become sub-units of "{spus?.find(s => s.id === convertSpuTargetId)?.name}"</p>
+                    <p>A new sub-unit named "{convertSpuSource.name}" will be created under "{spus?.find(s => s.id === convertSpuTargetId)?.name}"</p>
+                    <p className="text-destructive font-medium">The SPU "{convertSpuSource.name}" will be permanently deleted</p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setConvertSpuDialogOpen(false); setConvertSpuSource(null); setConvertSpuTargetId(""); }} data-testid="button-cancel-convert-spu">
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => convertSpuSource && convertSpuToSubUnitMutation.mutate({ sourceId: convertSpuSource.id, targetSpuId: convertSpuTargetId })}
+                  disabled={!convertSpuSource || !convertSpuTargetId || convertSpuToSubUnitMutation.isPending}
+                  data-testid="button-confirm-convert-spu"
+                >
+                  {convertSpuToSubUnitMutation.isPending ? "Converting..." : "Downgrade to Sub-Unit"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={promoteSubUnitDialogOpen} onOpenChange={setPromoteSubUnitDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Promote Sub-Unit to SPU</DialogTitle>
+                <DialogDescription>
+                  Promote "{promoteSubUnit?.name}" to a full, standalone SPU.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {promoteSubUnit && (
+                  <div className="rounded-md border p-3 space-y-1 text-sm bg-muted/50">
+                    <p className="font-medium">What will happen:</p>
+                    <p>A new SPU named "{promoteSubUnit.name}" will be created</p>
+                    <p>All staff and OKRs assigned to this sub-unit will be moved to the new SPU</p>
+                    <p className="text-destructive font-medium">The sub-unit "{promoteSubUnit.name}" will be deleted</p>
+                  </div>
+                )}
+                {promoteSubUnit && subUnits && subUnits.filter(su => su.id !== promoteSubUnit.id && su.spuId === promoteSubUnit.spuId).length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Optionally move sibling sub-units under the new SPU:</Label>
+                    <div className="max-h-48 overflow-y-auto space-y-2 rounded-md border p-3">
+                      {subUnits.filter(su => su.id !== promoteSubUnit.id && su.spuId === promoteSubUnit.spuId).map((su) => (
+                        <div key={su.id} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`promote-move-${su.id}`}
+                            checked={promoteSubUnitIdsToMove.includes(su.id)}
+                            onCheckedChange={(checked) => {
+                              setPromoteSubUnitIdsToMove(prev =>
+                                checked ? [...prev, su.id] : prev.filter(id => id !== su.id)
+                              );
+                            }}
+                            data-testid={`checkbox-promote-move-${su.id}`}
+                          />
+                          <label htmlFor={`promote-move-${su.id}`} className="text-sm cursor-pointer">
+                            {su.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setPromoteSubUnitDialogOpen(false); setPromoteSubUnit(null); setPromoteSubUnitIdsToMove([]); }} data-testid="button-cancel-promote-subunit">
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => promoteSubUnit && promoteSubUnitToSpuMutation.mutate({ subUnitId: promoteSubUnit.id, subUnitIdsToMove: promoteSubUnitIdsToMove })}
+                  disabled={!promoteSubUnit || promoteSubUnitToSpuMutation.isPending}
+                  data-testid="button-confirm-promote-subunit"
+                >
+                  {promoteSubUnitToSpuMutation.isPending ? "Promoting..." : "Promote to SPU"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={moveSubUnitDialogOpen} onOpenChange={setMoveSubUnitDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Move Sub-Unit</DialogTitle>
+                <DialogDescription>
+                  Move "{moveSubUnit?.name}" to a different SPU. All associated staff and OKRs will be reassigned.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Target SPU</Label>
+                  <Select value={moveSubUnitTargetSpuId} onValueChange={setMoveSubUnitTargetSpuId}>
+                    <SelectTrigger data-testid="select-move-subunit-target">
+                      <SelectValue placeholder="Select target SPU" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {spus?.filter(s => s.id !== moveSubUnit?.spuId).map((spu) => (
+                        <SelectItem key={spu.id} value={spu.id}>{spu.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {moveSubUnit && moveSubUnitTargetSpuId && (
+                  <div className="rounded-md border p-3 space-y-1 text-sm bg-muted/50">
+                    <p className="font-medium">What will happen:</p>
+                    <p>"{moveSubUnit.name}" will move from "{getSpuName(moveSubUnit.spuId)}" to "{spus?.find(s => s.id === moveSubUnitTargetSpuId)?.name}"</p>
+                    <p>All staff and OKRs in this sub-unit will be reassigned to the new SPU</p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setMoveSubUnitDialogOpen(false); setMoveSubUnit(null); setMoveSubUnitTargetSpuId(""); }} data-testid="button-cancel-move-subunit">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => moveSubUnit && moveSubUnitMutation.mutate({ subUnitId: moveSubUnit.id, targetSpuId: moveSubUnitTargetSpuId })}
+                  disabled={!moveSubUnit || !moveSubUnitTargetSpuId || moveSubUnitMutation.isPending}
+                  data-testid="button-confirm-move-subunit"
+                >
+                  {moveSubUnitMutation.isPending ? "Moving..." : "Move Sub-Unit"}
                 </Button>
               </DialogFooter>
             </DialogContent>

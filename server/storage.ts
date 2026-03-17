@@ -47,7 +47,7 @@ import {
   unmatchedScores,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, inArray, ne } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, ne, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 export interface IStorage {
@@ -166,6 +166,12 @@ export interface IStorage {
   matchUnmatchedScore(id: string, okrId: string): Promise<UnmatchedScore>;
   dismissUnmatchedScore(id: string): Promise<void>;
   deleteUnmatchedScore(id: string): Promise<void>;
+
+  // SPU merge and conversion operations
+  mergeSpus(sourceId: string, targetId: string): Promise<{ staffMoved: number; okrsMoved: number; subUnitsMoved: number; assignmentsMoved: number }>;
+  convertSpuToSubUnit(sourceSpuId: string, targetSpuId: string): Promise<{ staffMoved: number; okrsMoved: number; subUnitsMoved: number }>;
+  promoteSubUnitToSpu(subUnitId: string, subUnitIdsToMove: string[]): Promise<{ newSpuId: string; staffMoved: number; okrsMoved: number; subUnitsMoved: number }>;
+  moveSubUnit(subUnitId: string, targetSpuId: string): Promise<{ staffMoved: number; okrsMoved: number; assignmentsMoved: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1166,6 +1172,130 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUnmatchedScore(id: string): Promise<void> {
     await db.delete(unmatchedScores).where(eq(unmatchedScores.id, id));
+  }
+
+  async mergeSpus(sourceId: string, targetId: string): Promise<{ staffMoved: number; okrsMoved: number; subUnitsMoved: number; assignmentsMoved: number }> {
+    return await db.transaction(async (tx) => {
+      const movedStaff = await tx.select().from(staff).where(eq(staff.spuId, sourceId));
+      await tx.update(staff).set({ spuId: targetId }).where(eq(staff.spuId, sourceId));
+
+      const movedOkrsSpuId = await tx.select().from(okrs).where(eq(okrs.spuId, sourceId));
+      await tx.update(okrs).set({ spuId: targetId }).where(eq(okrs.spuId, sourceId));
+      await tx.update(okrs).set({ collaborationSpuId: targetId }).where(eq(okrs.collaborationSpuId, sourceId));
+
+      const movedSubUnits = await tx.select().from(subUnits).where(eq(subUnits.spuId, sourceId));
+      await tx.update(subUnits).set({ spuId: targetId }).where(eq(subUnits.spuId, sourceId));
+
+      const movedAssignments = await tx.select().from(staffSpuAssignments).where(eq(staffSpuAssignments.spuId, sourceId));
+      await tx.update(staffSpuAssignments).set({ spuId: targetId }).where(eq(staffSpuAssignments.spuId, sourceId));
+
+      await tx.delete(spus).where(eq(spus.id, sourceId));
+
+      return {
+        staffMoved: movedStaff.length,
+        okrsMoved: movedOkrsSpuId.length,
+        subUnitsMoved: movedSubUnits.length,
+        assignmentsMoved: movedAssignments.length,
+      };
+    });
+  }
+
+  async convertSpuToSubUnit(sourceSpuId: string, targetSpuId: string): Promise<{ staffMoved: number; okrsMoved: number; subUnitsMoved: number }> {
+    const sourceSpu = await this.getSpu(sourceSpuId);
+    if (!sourceSpu) throw new Error("Source SPU not found");
+
+    return await db.transaction(async (tx) => {
+      const movedChildSubUnits = await tx.select().from(subUnits).where(eq(subUnits.spuId, sourceSpuId));
+      await tx.update(subUnits).set({ spuId: targetSpuId }).where(eq(subUnits.spuId, sourceSpuId));
+
+      const [newSubUnit] = await tx.insert(subUnits).values({ name: sourceSpu.name, spuId: targetSpuId }).returning();
+
+      const movedStaff = await tx.select().from(staff).where(eq(staff.spuId, sourceSpuId));
+      await tx.update(staff).set({ spuId: targetSpuId, subUnitId: newSubUnit.id })
+        .where(and(eq(staff.spuId, sourceSpuId), isNull(staff.subUnitId)));
+      await tx.update(staff).set({ spuId: targetSpuId })
+        .where(and(eq(staff.spuId, sourceSpuId)));
+
+      const movedOkrs = await tx.select().from(okrs).where(eq(okrs.spuId, sourceSpuId));
+      await tx.update(okrs).set({ spuId: targetSpuId, subUnitId: newSubUnit.id })
+        .where(and(eq(okrs.spuId, sourceSpuId), isNull(okrs.subUnitId)));
+      await tx.update(okrs).set({ spuId: targetSpuId })
+        .where(eq(okrs.spuId, sourceSpuId));
+      await tx.update(okrs).set({ collaborationSpuId: targetSpuId }).where(eq(okrs.collaborationSpuId, sourceSpuId));
+
+      await tx.update(staffSpuAssignments).set({ spuId: targetSpuId, subUnitId: newSubUnit.id })
+        .where(and(eq(staffSpuAssignments.spuId, sourceSpuId), isNull(staffSpuAssignments.subUnitId)));
+      await tx.update(staffSpuAssignments).set({ spuId: targetSpuId })
+        .where(eq(staffSpuAssignments.spuId, sourceSpuId));
+
+      await tx.delete(spus).where(eq(spus.id, sourceSpuId));
+
+      return {
+        staffMoved: movedStaff.length,
+        okrsMoved: movedOkrs.length,
+        subUnitsMoved: movedChildSubUnits.length,
+      };
+    });
+  }
+
+  async promoteSubUnitToSpu(subUnitId: string, subUnitIdsToMove: string[]): Promise<{ newSpuId: string; staffMoved: number; okrsMoved: number; subUnitsMoved: number }> {
+    const subUnit = await this.getSubUnit(subUnitId);
+    if (!subUnit) throw new Error("Sub-unit not found");
+
+    return await db.transaction(async (tx) => {
+      const [newSpu] = await tx.insert(spus).values({ name: subUnit.name }).returning();
+
+      const movedStaff = await tx.select().from(staff).where(eq(staff.subUnitId, subUnitId));
+      await tx.update(staff).set({ spuId: newSpu.id, subUnitId: null }).where(eq(staff.subUnitId, subUnitId));
+
+      const movedOkrs = await tx.select().from(okrs).where(eq(okrs.subUnitId, subUnitId));
+      await tx.update(okrs).set({ spuId: newSpu.id, subUnitId: null }).where(eq(okrs.subUnitId, subUnitId));
+
+      await tx.update(staffSpuAssignments).set({ spuId: newSpu.id, subUnitId: null }).where(eq(staffSpuAssignments.subUnitId, subUnitId));
+
+      let subUnitsMoved = 0;
+      if (subUnitIdsToMove.length > 0) {
+        const validIds = subUnitIdsToMove.filter(id => id !== subUnitId);
+        if (validIds.length > 0) {
+          await tx.update(subUnits).set({ spuId: newSpu.id }).where(inArray(subUnits.id, validIds));
+          await tx.update(staff).set({ spuId: newSpu.id }).where(inArray(staff.subUnitId, validIds));
+          await tx.update(okrs).set({ spuId: newSpu.id }).where(inArray(okrs.subUnitId, validIds));
+          await tx.update(staffSpuAssignments).set({ spuId: newSpu.id }).where(inArray(staffSpuAssignments.subUnitId, validIds));
+          subUnitsMoved = validIds.length;
+        }
+      }
+
+      await tx.delete(subUnits).where(eq(subUnits.id, subUnitId));
+
+      return {
+        newSpuId: newSpu.id,
+        staffMoved: movedStaff.length,
+        okrsMoved: movedOkrs.length,
+        subUnitsMoved,
+      };
+    });
+  }
+
+  async moveSubUnit(subUnitId: string, targetSpuId: string): Promise<{ staffMoved: number; okrsMoved: number; assignmentsMoved: number }> {
+    return await db.transaction(async (tx) => {
+      const [subUnit] = await tx.select().from(subUnits).where(eq(subUnits.id, subUnitId));
+      if (!subUnit) throw new Error("Sub-unit not found");
+      const [targetSpu] = await tx.select().from(spus).where(eq(spus.id, targetSpuId));
+      if (!targetSpu) throw new Error("Target SPU not found");
+      if (subUnit.spuId === targetSpuId) throw Object.assign(new Error("Sub-unit is already under this SPU"), { statusCode: 400 });
+
+      await tx.update(subUnits).set({ spuId: targetSpuId }).where(eq(subUnits.id, subUnitId));
+
+      const movedStaff = await tx.update(staff).set({ spuId: targetSpuId }).where(eq(staff.subUnitId, subUnitId)).returning({ id: staff.id });
+      const movedOkrs = await tx.update(okrs).set({ spuId: targetSpuId }).where(eq(okrs.subUnitId, subUnitId)).returning({ id: okrs.id });
+      const movedAssignments = await tx.update(staffSpuAssignments).set({ spuId: targetSpuId }).where(eq(staffSpuAssignments.subUnitId, subUnitId)).returning({ id: staffSpuAssignments.id });
+
+      return {
+        staffMoved: movedStaff.length,
+        okrsMoved: movedOkrs.length,
+        assignmentsMoved: movedAssignments.length,
+      };
+    });
   }
 }
 

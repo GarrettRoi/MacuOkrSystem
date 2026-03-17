@@ -881,6 +881,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/spus/merge", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({ sourceId: z.string(), targetId: z.string() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Both sourceId and targetId are required" });
+      }
+      const { sourceId, targetId } = parsed.data;
+      if (sourceId === targetId) {
+        return res.status(400).json({ error: "Cannot merge an SPU with itself" });
+      }
+      const source = await storage.getSpu(sourceId);
+      const target = await storage.getSpu(targetId);
+      if (!source) return res.status(404).json({ error: "Source SPU not found" });
+      if (!target) return res.status(404).json({ error: "Target SPU not found" });
+
+      const result = await storage.mergeSpus(sourceId, targetId);
+      res.json({
+        success: true,
+        message: `Merged "${source.name}" into "${target.name}". Moved ${result.staffMoved} staff, ${result.okrsMoved} OKRs, ${result.subUnitsMoved} sub-units, and ${result.assignmentsMoved} assignments.`,
+        ...result,
+      });
+    } catch (error) {
+      console.error("Merge SPU error:", error);
+      res.status(500).json({ error: "Failed to merge SPUs" });
+    }
+  });
+
+  app.post("/api/spus/:id/convert-to-subunit", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({ targetSpuId: z.string() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "targetSpuId is required" });
+      }
+      const sourceId = req.params.id;
+      const { targetSpuId } = parsed.data;
+      if (sourceId === targetSpuId) {
+        return res.status(400).json({ error: "Cannot convert an SPU to a sub-unit of itself" });
+      }
+      const source = await storage.getSpu(sourceId);
+      const target = await storage.getSpu(targetSpuId);
+      if (!source) return res.status(404).json({ error: "Source SPU not found" });
+      if (!target) return res.status(404).json({ error: "Target SPU not found" });
+
+      const result = await storage.convertSpuToSubUnit(sourceId, targetSpuId);
+      res.json({
+        success: true,
+        message: `Converted "${source.name}" to a sub-unit under "${target.name}". Reassigned ${result.staffMoved} staff, ${result.okrsMoved} OKRs, moved ${result.subUnitsMoved} child sub-units.`,
+        ...result,
+      });
+    } catch (error) {
+      console.error("Convert SPU to sub-unit error:", error);
+      res.status(500).json({ error: "Failed to convert SPU to sub-unit" });
+    }
+  });
+
+  app.post("/api/sub-units/:id/promote-to-spu", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({ subUnitIdsToMove: z.array(z.string()).optional() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const subUnitId = req.params.id;
+      const subUnit = await storage.getSubUnit(subUnitId);
+      if (!subUnit) return res.status(404).json({ error: "Sub-unit not found" });
+
+      const result = await storage.promoteSubUnitToSpu(subUnitId, parsed.data.subUnitIdsToMove || []);
+      res.json({
+        success: true,
+        message: `Promoted "${subUnit.name}" to a full SPU. Reassigned ${result.staffMoved} staff, ${result.okrsMoved} OKRs, moved ${result.subUnitsMoved} sub-units.`,
+        newSpuId: result.newSpuId,
+        ...result,
+      });
+    } catch (error) {
+      console.error("Promote sub-unit to SPU error:", error);
+      res.status(500).json({ error: "Failed to promote sub-unit to SPU" });
+    }
+  });
+
+  app.post("/api/sub-units/:id/move", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({ targetSpuId: z.string().min(1) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const subUnitId = req.params.id;
+      const subUnit = await storage.getSubUnit(subUnitId);
+      if (!subUnit) return res.status(404).json({ error: "Sub-unit not found" });
+
+      const result = await storage.moveSubUnit(subUnitId, parsed.data.targetSpuId);
+      res.json({
+        success: true,
+        message: `Moved "${subUnit.name}" to new SPU. Reassigned ${result.staffMoved} staff, ${result.okrsMoved} OKRs, ${result.assignmentsMoved} assignments.`,
+        ...result,
+      });
+    } catch (error: any) {
+      console.error("Move sub-unit error:", error);
+      const status = error?.statusCode || 500;
+      res.status(status).json({ error: error?.message || "Failed to move sub-unit" });
+    }
+  });
+
   app.get("/api/sub-units", async (_req, res) => {
     try {
       const subUnits = await storage.getAllSubUnits();
