@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard } from "lucide-react";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, AnalyticsDashboardWithWidgets, AnalyticsWidget } from "@shared/schema";
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -25,6 +25,262 @@ import { compareNames } from "@/lib/utils";
 
 interface AdminProps {
   staff: StaffWithDetails;
+}
+
+// ── SPU / Staff CSV Import Dialog ────────────────────────────────────────────
+
+interface SpuPreview { name: string; admin: string; subUnits: { name: string; memberCount: number; members: string[] }[]; directMemberCount: number; directMembers: string[]; }
+interface SpuStaffPreview { spus: SpuPreview[]; totals: { spus: number; subUnits: number; staff: number }; }
+
+function SpuStaffImportDialog() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<"upload" | "preview">("upload");
+  const [csvData, setCsvData] = useState("");
+  const [preview, setPreview] = useState<SpuStaffPreview | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const previewMutation = useMutation<SpuStaffPreview, Error, string>({
+    mutationFn: async (csv) => { const r = await apiRequest("POST", "/api/setup/preview/spu-staff", { csvData: csv }); return r.json(); },
+    onSuccess: (data) => { setPreview(data); setStep("preview"); },
+    onError: (err) => toast({ title: "Parse Error", description: err.message, variant: "destructive" }),
+  });
+
+  const confirmMutation = useMutation<unknown, Error, string>({
+    mutationFn: async (csv) => { const r = await apiRequest("POST", "/api/setup/confirm/spu-staff", { csvData: csv }); return r.json(); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      toast({ title: "Import Complete", description: "SPUs, sub-units, and staff have been imported." });
+      setOpen(false);
+      reset();
+    },
+    onError: (err) => toast({ title: "Import Error", description: err.message, variant: "destructive" }),
+  });
+
+  function reset() { setStep("upload"); setCsvData(""); setPreview(null); if (fileRef.current) fileRef.current.value = ""; }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => { const text = ev.target?.result as string; setCsvData(text); previewMutation.mutate(text); };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" data-testid="button-import-spu-csv">
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5" />
+            Import SPUs, Sub-Units & Staff
+          </DialogTitle>
+          <DialogDescription>
+            Upload a CSV to bulk-add SPUs, sub-units, and staff. Existing records will not be removed.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-4 py-2">
+          {step === "upload" && (
+            <div className="space-y-4">
+              <div className="rounded-md border bg-muted/40 p-4 space-y-1 text-sm">
+                <p className="font-medium">Required columns:</p>
+                <code className="text-xs">SPU Name, Sub-Unit Name, SPU Admin Name, Sub-Unit Team Members</code>
+                <p className="text-muted-foreground text-xs mt-1">Multiple rows can share the same SPU Name — they'll be grouped. Leave Sub-Unit fields blank for direct SPU members.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => window.open("/api/setup/example-csv/spu-staff", "_blank")} data-testid="button-download-spu-template">
+                  <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+                  Download Template
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={previewMutation.isPending}
+                  data-testid="button-upload-spu-file"
+                >
+                  {previewMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
+                  {previewMutation.isPending ? "Parsing…" : "Choose CSV File"}
+                </Button>
+                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+              </div>
+            </div>
+          )}
+
+          {step === "preview" && preview && (
+            <div className="space-y-4">
+              <div className="flex gap-2 flex-wrap">
+                <Badge variant="secondary">{preview.totals.spus} SPUs</Badge>
+                <Badge variant="secondary">{preview.totals.subUnits} Sub-Units</Badge>
+                <Badge variant="secondary">{preview.totals.staff} Staff</Badge>
+              </div>
+              <div className="rounded-md border divide-y max-h-72 overflow-y-auto">
+                {preview.spus.map((spu, i) => (
+                  <div key={i} className="p-3 space-y-1">
+                    <p className="text-sm font-semibold">{spu.name}</p>
+                    {spu.admin && <p className="text-xs text-muted-foreground">Admin: {spu.admin}</p>}
+                    {spu.subUnits.map((su, j) => (
+                      <p key={j} className="text-xs text-muted-foreground pl-3">• {su.name} ({su.memberCount} member{su.memberCount !== 1 ? "s" : ""})</p>
+                    ))}
+                    {spu.directMemberCount > 0 && <p className="text-xs text-muted-foreground pl-3">• {spu.directMemberCount} direct member{spu.directMemberCount !== 1 ? "s" : ""}</p>}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Review the preview above, then click Import to apply.</p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          {step === "preview" && (
+            <Button variant="outline" onClick={() => setStep("upload")} data-testid="button-spu-import-back">Back</Button>
+          )}
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          {step === "preview" && (
+            <Button onClick={() => confirmMutation.mutate(csvData)} disabled={confirmMutation.isPending} data-testid="button-spu-import-confirm">
+              {confirmMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Check className="h-4 w-4 mr-1.5" />}
+              {confirmMutation.isPending ? "Importing…" : "Import"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── University Objectives CSV Import Dialog ───────────────────────────────────
+
+interface ObjKR { number: string; description: string }
+interface ObjEntry { number: string; title: string; keyResults: ObjKR[]; years: number[] }
+interface ObjectivesPreview { objectives: ObjEntry[]; totals: { objectives: number; keyResults: number }; }
+
+function ObjectivesImportDialog() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<"upload" | "preview">("upload");
+  const [csvData, setCsvData] = useState("");
+  const [preview, setPreview] = useState<ObjectivesPreview | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const previewMutation = useMutation<ObjectivesPreview, Error, string>({
+    mutationFn: async (csv) => { const r = await apiRequest("POST", "/api/setup/preview/objectives", { csvData: csv }); return r.json(); },
+    onSuccess: (data) => { setPreview(data); setStep("preview"); },
+    onError: (err) => toast({ title: "Parse Error", description: err.message, variant: "destructive" }),
+  });
+
+  const confirmMutation = useMutation<unknown, Error, string>({
+    mutationFn: async (csv) => { const r = await apiRequest("POST", "/api/setup/confirm/objectives", { csvData: csv }); return r.json(); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
+      toast({ title: "Import Complete", description: "University objectives and key results have been imported." });
+      setOpen(false);
+      reset();
+    },
+    onError: (err) => toast({ title: "Import Error", description: err.message, variant: "destructive" }),
+  });
+
+  function reset() { setStep("upload"); setCsvData(""); setPreview(null); if (fileRef.current) fileRef.current.value = ""; }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => { const text = ev.target?.result as string; setCsvData(text); previewMutation.mutate(text); };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" data-testid="button-import-objectives-csv">
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5" />
+            Import University Objectives
+          </DialogTitle>
+          <DialogDescription>
+            Upload a CSV to bulk-add university objectives and key results. Existing records will not be removed.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-4 py-2">
+          {step === "upload" && (
+            <div className="space-y-4">
+              <div className="rounded-md border bg-muted/40 p-4 space-y-1 text-sm">
+                <p className="font-medium">Required columns:</p>
+                <code className="text-xs">Objective Number, Objective Title, Key Result Number, Key Result Description, Applicable Years</code>
+                <p className="text-muted-foreground text-xs mt-1">Each row is one key result. Rows with the same Objective Number are grouped. Applicable Years can be comma-separated (e.g. 1,2,3,4).</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => window.open("/api/setup/example-csv/objectives", "_blank")} data-testid="button-download-obj-template">
+                  <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+                  Download Template
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={previewMutation.isPending}
+                  data-testid="button-upload-obj-file"
+                >
+                  {previewMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
+                  {previewMutation.isPending ? "Parsing…" : "Choose CSV File"}
+                </Button>
+                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+              </div>
+            </div>
+          )}
+
+          {step === "preview" && preview && (
+            <div className="space-y-4">
+              <div className="flex gap-2 flex-wrap">
+                <Badge variant="secondary">{preview.totals.objectives} Objectives</Badge>
+                <Badge variant="secondary">{preview.totals.keyResults} Key Results</Badge>
+              </div>
+              <div className="rounded-md border divide-y max-h-72 overflow-y-auto">
+                {preview.objectives.map((obj, i) => (
+                  <div key={i} className="p-3 space-y-1">
+                    <p className="text-sm font-semibold">{obj.number}. {obj.title}</p>
+                    {obj.years.length > 0 && <p className="text-xs text-muted-foreground">Years: {obj.years.join(", ")}</p>}
+                    {obj.keyResults.map((kr, j) => (
+                      <p key={j} className="text-xs text-muted-foreground pl-3">• KR {kr.number}: {kr.description}</p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Review the preview above, then click Import to apply.</p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          {step === "preview" && (
+            <Button variant="outline" onClick={() => setStep("upload")} data-testid="button-obj-import-back">Back</Button>
+          )}
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          {step === "preview" && (
+            <Button onClick={() => confirmMutation.mutate(csvData)} disabled={confirmMutation.isPending} data-testid="button-obj-import-confirm">
+              {confirmMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Check className="h-4 w-4 mr-1.5" />}
+              {confirmMutation.isPending ? "Importing…" : "Import"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ── Analytics Builder ────────────────────────────────────────────────────────
@@ -1907,6 +2163,7 @@ export default function Admin({ staff }: AdminProps) {
                   <CardDescription>Manage university SPUs and their nested sub-units</CardDescription>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  <SpuStaffImportDialog />
                   <Button
                     variant="outline"
                     onClick={() => setMergeSpuDialogOpen(true)}
@@ -2581,7 +2838,8 @@ export default function Admin({ staff }: AdminProps) {
                     </CardTitle>
                     <CardDescription>Manage University Level Strategic Objectives and their Key Results</CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
+                    <ObjectivesImportDialog />
                     <Dialog open={krDialogOpen} onOpenChange={setKrDialogOpen}>
                       <DialogTrigger asChild>
                         <Button variant="outline" data-testid="button-add-key-result-strategic">
