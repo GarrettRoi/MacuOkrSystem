@@ -1128,14 +1128,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/okrs/:id", requireAdmin, async (req, res) => {
+  app.put("/api/okrs/:id", async (req, res) => {
     try {
+      let isLeaderOnly = false;
+      const sessionStaffId = req.session.selectedStaffId;
+
+      if (!req.session.isAdmin) {
+        if (!sessionStaffId) {
+          return res.status(403).json({ error: "Forbidden: Admin or Leader access required" });
+        }
+        const sessionStaff = await storage.getStaff(sessionStaffId);
+        if (!sessionStaff || sessionStaff.role !== "leader") {
+          return res.status(403).json({ error: "Forbidden: Admin or Leader access required" });
+        }
+        isLeaderOnly = true;
+      }
+
       const existingOkr = await storage.getOkr(req.params.id);
       if (!existingOkr) {
         return res.status(404).json({ error: "OKR not found" });
       }
+
+      if (isLeaderOnly && existingOkr.staffId !== sessionStaffId) {
+        return res.status(403).json({ error: "Forbidden: You can only edit your own OKRs" });
+      }
       
       const { reason, editedBy, editedByName, ...updateFields } = req.body;
+
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ error: "A reason for editing is required" });
+      }
       
       const parsed = updateOkrSchema.safeParse(updateFields);
       if (!parsed.success) {
@@ -1165,12 +1187,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updatedOkr = await storage.updateOkr(req.params.id, updates);
       
-      if (changedFields.length > 0 && reason) {
+      if (changedFields.length > 0) {
+        let auditStaffId = sessionStaffId || null;
+        let auditStaffName = editedByName || null;
+        if (sessionStaffId) {
+          const auditStaff = await storage.getStaff(sessionStaffId);
+          if (auditStaff) {
+            auditStaffId = auditStaff.id;
+            auditStaffName = auditStaff.name;
+          }
+        }
         await storage.createEditLog({
           okrId: req.params.id,
-          editedBy: editedBy || null,
-          editedByName: editedByName || null,
-          reason,
+          editedBy: auditStaffId,
+          editedByName: auditStaffName,
+          reason: reason.trim(),
           changedFields: JSON.stringify(changedFields),
           previousValues: JSON.stringify(previousValues),
           newValues: JSON.stringify(newValues),

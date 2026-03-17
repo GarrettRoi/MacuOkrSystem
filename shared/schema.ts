@@ -245,6 +245,7 @@ export const updateOkrSchema = z.object({
   universityKeyResult: z.string().optional(),
   keyResults: z.string().optional(),
   collaborationSpuId: z.string().nullable().optional(),
+  status: z.enum(["not_started", "in_progress", "completed"]).optional(),
 });
 
 export const insertOkrSchema = baseInsertOkrSchema.refine(
