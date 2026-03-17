@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql, asc, and as drizzleAnd } from "drizzle-orm";
 import * as oidcClient from "openid-client";
 import {
   insertStaffSchema,
@@ -29,8 +29,10 @@ import {
   editLogs,
   universityObjectives,
   universityKeyResults,
+  analyticsDashboards,
+  analyticsWidgets,
 } from "@shared/schema";
-import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole } from "@shared/schema";
+import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole, AnalyticsData } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear } from "@shared/schema";
 import { z } from "zod";
 
@@ -558,6 +560,302 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, updatedAt: now });
     } catch (error) {
       res.status(500).json({ error: "Failed to update date" });
+    }
+  });
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+
+  async function computeAnalyticsData(
+    source: string,
+    filters: { quarter?: string; year?: number; spuId?: string },
+  ): Promise<AnalyticsData> {
+    const { quarter, year, spuId } = filters;
+
+    const buildOkrWhere = () => {
+      const parts: string[] = [];
+      if (quarter) parts.push(`o.quarter = '${quarter.replace(/'/g, "''")}'`);
+      if (year) parts.push(`o.year = ${year}`);
+      if (spuId) parts.push(`o.spu_id = '${spuId.replace(/'/g, "''")}'`);
+      return parts.length ? `AND ${parts.join(" AND ")}` : "";
+    };
+
+    const buildQuWhere = () => {
+      const parts: string[] = [];
+      if (quarter) parts.push(`o.quarter = '${quarter.replace(/'/g, "''")}'`);
+      if (year) parts.push(`o.year = ${year}`);
+      if (spuId) parts.push(`o.spu_id = '${spuId.replace(/'/g, "''")}'`);
+      return parts.length ? `AND ${parts.join(" AND ")}` : "";
+    };
+
+    const simpleRows = async (rawSql: string) => {
+      const result = await db.execute(sql.raw(rawSql));
+      return (result as any).rows as { label: string; value: number }[];
+    };
+
+    switch (source) {
+      case "okr_count_by_spu": {
+        const rows = await simpleRows(`
+          SELECT s.name AS label, COUNT(o.id)::int AS value
+          FROM okrs o JOIN spus s ON o.spu_id = s.id
+          WHERE 1=1 ${buildOkrWhere()}
+          GROUP BY s.name ORDER BY value DESC`);
+        return { type: "series", data: rows };
+      }
+      case "okr_count_by_quarter": {
+        const rows = await simpleRows(`
+          SELECT o.quarter AS label, COUNT(*)::int AS value
+          FROM okrs o WHERE 1=1 ${buildOkrWhere()}
+          GROUP BY o.quarter ORDER BY o.quarter`);
+        return { type: "series", data: rows };
+      }
+      case "okr_count_by_year": {
+        const rows = await simpleRows(`
+          SELECT o.year::text AS label, COUNT(*)::int AS value
+          FROM okrs o WHERE 1=1 ${spuId ? `AND o.spu_id='${spuId.replace(/'/g,"''")}'` : ""}
+          GROUP BY o.year ORDER BY o.year`);
+        return { type: "series", data: rows };
+      }
+      case "okr_count_by_status": {
+        const rows = await simpleRows(`
+          SELECT COALESCE(o.status, 'No Status') AS label, COUNT(*)::int AS value
+          FROM okrs o WHERE 1=1 ${buildOkrWhere()}
+          GROUP BY o.status ORDER BY value DESC`);
+        return { type: "series", data: rows };
+      }
+      case "avg_score_by_spu": {
+        const rows = await simpleRows(`
+          SELECT s.name AS label, ROUND(AVG(qu.average_score))::int AS value
+          FROM quarterly_updates qu
+          JOIN okrs o ON qu.okr_id = o.id
+          JOIN spus s ON o.spu_id = s.id
+          WHERE qu.average_score IS NOT NULL AND qu.is_primary_score = true ${buildQuWhere()}
+          GROUP BY s.name ORDER BY value DESC`);
+        return { type: "series", data: rows };
+      }
+      case "avg_score_by_quarter": {
+        const rows = await simpleRows(`
+          SELECT qu.quarter AS label, ROUND(AVG(qu.average_score))::int AS value
+          FROM quarterly_updates qu
+          JOIN okrs o ON qu.okr_id = o.id
+          WHERE qu.average_score IS NOT NULL AND qu.is_primary_score = true ${buildQuWhere()}
+          GROUP BY qu.quarter ORDER BY qu.quarter`);
+        return { type: "series", data: rows };
+      }
+      case "score_distribution": {
+        const rows = await simpleRows(`
+          SELECT qu.average_score::text AS label, COUNT(*)::int AS value
+          FROM quarterly_updates qu
+          JOIN okrs o ON qu.okr_id = o.id
+          WHERE qu.average_score IS NOT NULL AND qu.is_primary_score = true ${buildQuWhere()}
+          GROUP BY qu.average_score ORDER BY qu.average_score`);
+        const labeled = rows.map(r => ({ label: `Score ${r.label}`, value: r.value }));
+        return { type: "series", data: labeled };
+      }
+      case "staff_count_by_spu": {
+        const rows = await simpleRows(`
+          SELECT s.name AS label, COUNT(st.id)::int AS value
+          FROM staff st JOIN spus s ON st.spu_id = s.id
+          GROUP BY s.name ORDER BY value DESC`);
+        return { type: "series", data: rows };
+      }
+      case "completion_rate_by_spu": {
+        const allOkrs = await db.execute(sql.raw(`
+          SELECT o.id, o.spu_id, s.name AS spu_name
+          FROM okrs o JOIN spus s ON o.spu_id = s.id
+          WHERE 1=1 ${buildOkrWhere()}`));
+        const hasUpdate = await db.execute(sql.raw(`
+          SELECT DISTINCT qu.okr_id FROM quarterly_updates qu
+          JOIN okrs o ON qu.okr_id = o.id
+          WHERE qu.is_primary_score = true ${buildQuWhere()}`));
+        const updatedIds = new Set((hasUpdate as any).rows.map((r: any) => r.okr_id));
+        const spuMap: Record<string, { total: number; complete: number }> = {};
+        for (const row of (allOkrs as any).rows as any[]) {
+          if (!spuMap[row.spu_name]) spuMap[row.spu_name] = { total: 0, complete: 0 };
+          spuMap[row.spu_name].total++;
+          if (updatedIds.has(row.id)) spuMap[row.spu_name].complete++;
+        }
+        const data = Object.entries(spuMap)
+          .map(([label, { total, complete }]) => ({ label, value: total > 0 ? Math.round((complete / total) * 100) : 0 }))
+          .sort((a, b) => b.value - a.value);
+        return { type: "series", data };
+      }
+      case "okrs_by_university_objective": {
+        const okrRows = await db.execute(sql.raw(`
+          SELECT o.university_objective FROM okrs o WHERE 1=1 ${buildOkrWhere()}`));
+        const objCount: Record<string, number> = {};
+        for (const row of (okrRows as any).rows as any[]) {
+          if (!row.university_objective) continue;
+          try {
+            const parsed = JSON.parse(row.university_objective);
+            const items = Array.isArray(parsed) ? parsed : [parsed];
+            for (const item of items) {
+              const key = String(item).trim();
+              if (key) objCount[key] = (objCount[key] || 0) + 1;
+            }
+          } catch { /* not JSON */ }
+        }
+        const data = Object.entries(objCount)
+          .map(([label, value]) => ({ label, value }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 20);
+        return { type: "series", data };
+      }
+      case "okr_progress_distribution": {
+        const rows = await simpleRows(`
+          SELECT
+            CASE
+              WHEN qu.progress <= 25 THEN '0–25%'
+              WHEN qu.progress <= 50 THEN '26–50%'
+              WHEN qu.progress <= 75 THEN '51–75%'
+              ELSE '76–100%'
+            END AS label,
+            COUNT(*)::int AS value
+          FROM quarterly_updates qu
+          JOIN okrs o ON qu.okr_id = o.id
+          WHERE qu.is_primary_score = true ${buildQuWhere()}
+          GROUP BY 1 ORDER BY MIN(qu.progress)`);
+        return { type: "series", data: rows };
+      }
+      case "total_okr_count": {
+        const rows = await simpleRows(`SELECT COUNT(*)::int AS value, 'Total OKRs' AS label FROM okrs o WHERE 1=1 ${buildOkrWhere()}`);
+        return { type: "metric", data: [], metricValue: rows[0]?.value ?? 0, metricLabel: "Total OKRs" };
+      }
+      case "total_staff_count": {
+        const rows = await simpleRows(`SELECT COUNT(*)::int AS value, 'Total Staff' AS label FROM staff`);
+        return { type: "metric", data: [], metricValue: rows[0]?.value ?? 0, metricLabel: "Total Staff" };
+      }
+      case "avg_overall_score": {
+        const rows = await simpleRows(`
+          SELECT ROUND(AVG(qu.average_score))::int AS value, 'Avg Score' AS label
+          FROM quarterly_updates qu JOIN okrs o ON qu.okr_id = o.id
+          WHERE qu.average_score IS NOT NULL AND qu.is_primary_score = true ${buildQuWhere()}`);
+        return { type: "metric", data: [], metricValue: rows[0]?.value ?? 0, metricLabel: "Average Score (1–4)" };
+      }
+      case "total_spu_count": {
+        const rows = await simpleRows(`SELECT COUNT(*)::int AS value, 'Total SPUs' AS label FROM spus`);
+        return { type: "metric", data: [], metricValue: rows[0]?.value ?? 0, metricLabel: "Total SPUs" };
+      }
+      default:
+        return { type: "series", data: [] };
+    }
+  }
+
+  app.get("/api/analytics/data", async (req, res) => {
+    try {
+      const source = String(req.query.source || "");
+      const quarter = req.query.quarter ? String(req.query.quarter) : undefined;
+      const year = req.query.year ? parseInt(String(req.query.year)) : undefined;
+      const spuId = req.query.spuId ? String(req.query.spuId) : undefined;
+      if (!source) return res.status(400).json({ error: "source is required" });
+      const data = await computeAnalyticsData(source, { quarter, year, spuId });
+      res.json(data);
+    } catch (error) {
+      console.error("Analytics data error:", error);
+      res.status(500).json({ error: "Failed to compute analytics data" });
+    }
+  });
+
+  app.get("/api/analytics/dashboards", async (req, res) => {
+    try {
+      const session = (req as any).session;
+      const isAdminSession = session?.isAdmin === true;
+      const dashboards = isAdminSession
+        ? await storage.getAllAnalyticsDashboards()
+        : await storage.getPublishedAnalyticsDashboards();
+      res.json(dashboards);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch dashboards" });
+    }
+  });
+
+  app.post("/api/analytics/dashboards", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1),
+        description: z.string().default(""),
+        sortOrder: z.number().int().default(0),
+        isPublished: z.boolean().default(false),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data" });
+      const dashboard = await storage.createAnalyticsDashboard(parsed.data);
+      res.status(201).json(dashboard);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create dashboard" });
+    }
+  });
+
+  app.patch("/api/analytics/dashboards/:id", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        sortOrder: z.number().int().optional(),
+        isPublished: z.boolean().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data" });
+      const dashboard = await storage.updateAnalyticsDashboard(req.params.id, parsed.data);
+      res.json(dashboard);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update dashboard" });
+    }
+  });
+
+  app.delete("/api/analytics/dashboards/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteAnalyticsDashboard(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete dashboard" });
+    }
+  });
+
+  app.post("/api/analytics/widgets", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        dashboardId: z.string().min(1),
+        title: z.string().min(1),
+        chartType: z.string().min(1),
+        dataSource: z.string().min(1),
+        config: z.string().default("{}"),
+        sortOrder: z.number().int().default(0),
+        width: z.enum(["full", "half"]).default("full"),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data" });
+      const widget = await storage.createAnalyticsWidget(parsed.data);
+      res.status(201).json(widget);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create widget" });
+    }
+  });
+
+  app.patch("/api/analytics/widgets/:id", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).optional(),
+        chartType: z.string().min(1).optional(),
+        dataSource: z.string().min(1).optional(),
+        config: z.string().optional(),
+        sortOrder: z.number().int().optional(),
+        width: z.enum(["full", "half"]).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid data" });
+      const widget = await storage.updateAnalyticsWidget(req.params.id, parsed.data);
+      res.json(widget);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update widget" });
+    }
+  });
+
+  app.delete("/api/analytics/widgets/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteAnalyticsWidget(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete widget" });
     }
   });
 

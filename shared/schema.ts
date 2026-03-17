@@ -67,6 +67,26 @@ export const universityKeyResults = pgTable("university_key_results", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
+export const analyticsDashboards = pgTable("analytics_dashboards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isPublished: boolean("is_published").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const analyticsWidgets = pgTable("analytics_widgets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  dashboardId: varchar("dashboard_id").notNull().references(() => analyticsDashboards.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  chartType: text("chart_type").notNull(),
+  dataSource: text("data_source").notNull(),
+  config: text("config").notNull().default("{}"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  width: text("width").notNull().default("full"),
+});
+
 export const universityKeyResultProgress = pgTable("university_key_result_progress", {
   keyResultId: varchar("key_result_id").primaryKey().references(() => universityKeyResults.id, { onDelete: "cascade" }),
   progressPercent: integer("progress_percent").notNull().default(0),
@@ -229,6 +249,9 @@ export function parseMultiSelectField(value: string): string[] {
 export const insertUniversityObjectiveSchema = createInsertSchema(universityObjectives).omit({ id: true });
 export const insertUniversityKeyResultSchema = createInsertSchema(universityKeyResults).omit({ id: true });
 
+export const insertAnalyticsDashboardSchema = createInsertSchema(analyticsDashboards).omit({ id: true, createdAt: true });
+export const insertAnalyticsWidgetSchema = createInsertSchema(analyticsWidgets).omit({ id: true });
+
 export const insertSpuSchema = createInsertSchema(spus).omit({ id: true });
 export const insertSubUnitSchema = createInsertSchema(subUnits).omit({ id: true });
 export const insertYearSchema = createInsertSchema(years).omit({ id: true });
@@ -327,6 +350,14 @@ export type InsertLeaderBasicAssignment = z.infer<typeof insertLeaderBasicAssign
 
 export type InsertUniversityObjective = z.infer<typeof insertUniversityObjectiveSchema>;
 export type InsertUniversityKeyResult = z.infer<typeof insertUniversityKeyResultSchema>;
+
+export type AnalyticsDashboard = typeof analyticsDashboards.$inferSelect;
+export type AnalyticsWidget = typeof analyticsWidgets.$inferSelect;
+export type InsertAnalyticsDashboard = z.infer<typeof insertAnalyticsDashboardSchema>;
+export type InsertAnalyticsWidget = z.infer<typeof insertAnalyticsWidgetSchema>;
+export type AnalyticsDashboardWithWidgets = AnalyticsDashboard & { widgets: AnalyticsWidget[] };
+export type AnalyticsDataPoint = { label: string; value: number };
+export type AnalyticsData = { type: "series" | "metric"; data: AnalyticsDataPoint[]; metricValue?: number; metricLabel?: string };
 
 export type UniversityObjective = typeof universityObjectives.$inferSelect;
 export type UniversityKeyResult = typeof universityKeyResults.$inferSelect;

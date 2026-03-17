@@ -16,13 +16,529 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw } from "lucide-react";
-import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData } from "@shared/schema";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard } from "lucide-react";
+import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, AnalyticsDashboardWithWidgets, AnalyticsWidget } from "@shared/schema";
+import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames } from "@/lib/utils";
 
 interface AdminProps {
   staff: StaffWithDetails;
+}
+
+// ── Analytics Builder ────────────────────────────────────────────────────────
+
+const DATA_SOURCES = [
+  {
+    group: "OKR Counts",
+    sources: [
+      { value: "okr_count_by_spu",      label: "OKRs by SPU",      desc: "OKR count per Strategic Planning Unit" },
+      { value: "okr_count_by_quarter",  label: "OKRs by Quarter",  desc: "OKR count per quarter" },
+      { value: "okr_count_by_year",     label: "OKRs by Year",     desc: "OKR count per year" },
+      { value: "okr_count_by_status",   label: "OKRs by Status",   desc: "OKR count grouped by submission status" },
+    ],
+  },
+  {
+    group: "Scores & Progress",
+    sources: [
+      { value: "avg_score_by_spu",            label: "Avg Score by SPU",         desc: "Average quarterly update score per SPU" },
+      { value: "avg_score_by_quarter",        label: "Avg Score by Quarter",     desc: "Average score per quarter" },
+      { value: "score_distribution",          label: "Score Distribution",       desc: "OKR count at each score level (1–4)" },
+      { value: "okr_progress_distribution",   label: "Progress Distribution",    desc: "OKRs grouped by completion range" },
+      { value: "completion_rate_by_spu",      label: "Completion Rate by SPU",   desc: "% of OKRs with a quarterly update" },
+    ],
+  },
+  {
+    group: "Alignment",
+    sources: [
+      { value: "okrs_by_university_objective", label: "OKRs by Strategic Objective", desc: "OKR count aligned to each university objective" },
+    ],
+  },
+  {
+    group: "Staff",
+    sources: [
+      { value: "staff_count_by_spu", label: "Staff by SPU", desc: "Number of staff per SPU" },
+    ],
+  },
+  {
+    group: "Summary Metrics",
+    sources: [
+      { value: "total_okr_count",    label: "Total OKR Count",  desc: "Overall OKR count — use Metric chart type" },
+      { value: "total_staff_count",  label: "Total Staff",      desc: "Total staff count — use Metric chart type" },
+      { value: "avg_overall_score",  label: "Average Score",    desc: "Overall average score — use Metric chart type" },
+      { value: "total_spu_count",    label: "Total SPUs",       desc: "Number of SPUs — use Metric chart type" },
+    ],
+  },
+];
+
+const CHART_TYPES = [
+  { value: "bar",            label: "Bar",      Icon: BarChart2 },
+  { value: "horizontal_bar", label: "H-Bar",    Icon: BarChartHorizontal },
+  { value: "line",           label: "Line",     Icon: LineChart },
+  { value: "pie",            label: "Pie",      Icon: PieChart },
+  { value: "donut",          label: "Donut",    Icon: PieChart },
+  { value: "metric",         label: "Metric",   Icon: Hash },
+  { value: "table",          label: "Table",    Icon: Table2 },
+];
+
+const COLOR_SCHEMES = [
+  { value: "mixed",   label: "Multicolor", colors: ["#2563eb","#16a34a","#ea580c","#7c3aed"] },
+  { value: "blue",    label: "Blue",       colors: ["#2563eb","#3b82f6","#60a5fa","#93c5fd"] },
+  { value: "green",   label: "Green",      colors: ["#16a34a","#22c55e","#4ade80","#86efac"] },
+  { value: "orange",  label: "Orange",     colors: ["#ea580c","#f97316","#fb923c","#fdba74"] },
+  { value: "purple",  label: "Purple",     colors: ["#7c3aed","#8b5cf6","#a78bfa","#c4b5fd"] },
+  { value: "default", label: "Primary",    colors: ["hsl(var(--primary))"] },
+];
+
+function dataSourceLabel(value: string) {
+  for (const g of DATA_SOURCES) {
+    const src = g.sources.find(s => s.value === value);
+    if (src) return src.label;
+  }
+  return value;
+}
+
+function AnalyticsBuilderTab() {
+  const { toast } = useToast();
+
+  const { data: spus } = useQuery<Spu[]>({ queryKey: ["/api/spus"] });
+  const { data: yearsData } = useQuery<Year[]>({ queryKey: ["/api/years"] });
+
+  const { data: dashboards, isLoading: dashLoading } = useQuery<AnalyticsDashboardWithWidgets[]>({
+    queryKey: ["/api/analytics/dashboards"],
+  });
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedDashboard = dashboards?.find(d => d.id === selectedId) ?? null;
+
+  // Sync local name/desc with selected dashboard
+  useEffect(() => {
+    setDashName(selectedDashboard?.name ?? "");
+    setDashDesc(selectedDashboard?.description ?? "");
+  }, [selectedDashboard?.id]);
+
+  // Widget dialog state
+  const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
+  const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null);
+  const [wTitle, setWTitle]         = useState("");
+  const [wChartType, setWChartType] = useState("bar");
+  const [wDataSource, setWDataSource] = useState("okr_count_by_spu");
+  const [wWidth, setWWidth]         = useState<"full" | "half">("full");
+  const [wColorScheme, setWColorScheme] = useState("mixed");
+  const [wFilterQuarter, setWFilterQuarter] = useState("");
+  const [wFilterYear, setWFilterYear]       = useState("");
+  const [wFilterSpu, setWFilterSpu]         = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [dashName, setDashName] = useState("");
+  const [dashDesc, setDashDesc] = useState("");
+
+  const buildConfig = () => {
+    const filters: Record<string, any> = {};
+    if (wFilterQuarter) filters.quarter = wFilterQuarter;
+    if (wFilterYear)    filters.year    = parseInt(wFilterYear);
+    if (wFilterSpu)     filters.spuId   = wFilterSpu;
+    return JSON.stringify({ filters, colorScheme: wColorScheme });
+  };
+
+  const previewWidget: AnalyticsWidget = {
+    id: "__preview__",
+    dashboardId: selectedId ?? "",
+    title: wTitle || "Preview",
+    chartType: wChartType,
+    dataSource: wDataSource,
+    config: buildConfig(),
+    sortOrder: 0,
+    width: wWidth,
+  };
+
+  const openAddWidget = () => {
+    setEditingWidgetId(null);
+    setWTitle(""); setWChartType("bar"); setWDataSource("okr_count_by_spu");
+    setWWidth("full"); setWColorScheme("mixed");
+    setWFilterQuarter(""); setWFilterYear(""); setWFilterSpu("");
+    setShowFilters(false);
+    setWidgetDialogOpen(true);
+  };
+
+  const openEditWidget = (w: AnalyticsWidget) => {
+    setEditingWidgetId(w.id);
+    setWTitle(w.title); setWChartType(w.chartType); setWDataSource(w.dataSource);
+    setWWidth(w.width as "full" | "half");
+    try {
+      const cfg = JSON.parse(w.config);
+      setWColorScheme(cfg.colorScheme ?? "mixed");
+      setWFilterQuarter(cfg.filters?.quarter ?? "");
+      setWFilterYear(cfg.filters?.year ? String(cfg.filters.year) : "");
+      setWFilterSpu(cfg.filters?.spuId ?? "");
+    } catch { setWColorScheme("mixed"); setWFilterQuarter(""); setWFilterYear(""); setWFilterSpu(""); }
+    setShowFilters(false);
+    setWidgetDialogOpen(true);
+  };
+
+  // Mutations
+  const createDashMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/analytics/dashboards", { name: "New Dashboard", description: "", isPublished: false, sortOrder: dashboards?.length ?? 0 }),
+    onSuccess: async (res: any) => {
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboards"] });
+      setSelectedId(data.id);
+      toast({ title: "Dashboard Created" });
+    },
+  });
+
+  const updateDashMutation = useMutation({
+    mutationFn: (payload: { id: string; name?: string; description?: string; isPublished?: boolean }) => {
+      const { id, ...rest } = payload;
+      return apiRequest("PATCH", `/api/analytics/dashboards/${id}`, rest);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboards"] }),
+  });
+
+  const deleteDashMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/analytics/dashboards/${id}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboards"] });
+      setSelectedId(null);
+      toast({ title: "Dashboard Deleted" });
+    },
+  });
+
+  const saveWidgetMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        dashboardId: selectedId!,
+        title: wTitle,
+        chartType: wChartType,
+        dataSource: wDataSource,
+        config: buildConfig(),
+        width: wWidth,
+        sortOrder: editingWidgetId ? undefined : (selectedDashboard?.widgets.length ?? 0),
+      };
+      if (editingWidgetId) return apiRequest("PATCH", `/api/analytics/widgets/${editingWidgetId}`, payload);
+      return apiRequest("POST", "/api/analytics/widgets", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboards"] });
+      setWidgetDialogOpen(false);
+      toast({ title: editingWidgetId ? "Widget Updated" : "Widget Added" });
+    },
+  });
+
+  const deleteWidgetMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/analytics/widgets/${id}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboards"] });
+      toast({ title: "Widget Removed" });
+    },
+  });
+
+  const years = yearsData?.map(y => y.year).sort((a, b) => b - a) ?? [];
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Left: Dashboard list */}
+      <div className="lg:col-span-1 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Dashboards</h3>
+          <Button size="sm" onClick={() => createDashMutation.mutate()} disabled={createDashMutation.isPending} data-testid="button-create-dashboard">
+            <Plus className="h-4 w-4 mr-1" />
+            New
+          </Button>
+        </div>
+
+        {dashLoading ? (
+          <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
+        ) : (dashboards ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">No dashboards yet. Click New to get started.</p>
+        ) : (
+          (dashboards ?? []).map(d => (
+            <Card
+              key={d.id}
+              className={`cursor-pointer transition-all ${selectedId === d.id ? "ring-2 ring-primary" : "hover-elevate"}`}
+              onClick={() => setSelectedId(d.id)}
+              data-testid={`card-dashboard-${d.id}`}
+            >
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-sm font-medium truncate">{d.name}</span>
+                  <Badge variant={d.isPublished ? "default" : "secondary"} className="text-xs shrink-0">
+                    {d.isPublished ? "Published" : "Draft"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">{d.widgets.length} widget{d.widgets.length !== 1 ? "s" : ""}</p>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* Right: Editor */}
+      <div className="lg:col-span-2">
+        {!selectedDashboard ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center text-muted-foreground">
+            <LayoutDashboard className="h-10 w-10 mb-3 opacity-40" />
+            <p className="font-medium">Select a dashboard to edit, or create a new one.</p>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {/* Dashboard header */}
+            <Card>
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Dashboard Name</Label>
+                    <Input
+                      value={dashName}
+                      onChange={e => setDashName(e.target.value)}
+                      onBlur={() => { if (dashName.trim()) updateDashMutation.mutate({ id: selectedDashboard.id, name: dashName.trim() }); }}
+                      className="text-sm"
+                      data-testid="input-dashboard-name"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 items-end shrink-0">
+                    <div className="flex items-center gap-2">
+                      {selectedDashboard.isPublished ? <Eye className="h-4 w-4 text-muted-foreground" /> : <EyeOff className="h-4 w-4 text-muted-foreground" />}
+                      <Switch
+                        checked={selectedDashboard.isPublished}
+                        onCheckedChange={v => updateDashMutation.mutate({ id: selectedDashboard.id, isPublished: v })}
+                        data-testid="switch-publish-dashboard"
+                      />
+                      <span className="text-sm">{selectedDashboard.isPublished ? "Published" : "Draft"}</span>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => deleteDashMutation.mutate(selectedDashboard.id)} data-testid="button-delete-dashboard">
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Description (optional)</Label>
+                  <Textarea
+                    value={dashDesc}
+                    onChange={e => setDashDesc(e.target.value)}
+                    onBlur={() => updateDashMutation.mutate({ id: selectedDashboard.id, description: dashDesc })}
+                    className="resize-none text-sm min-h-14"
+                    placeholder="Brief description shown on the Analytics tab"
+                    data-testid="textarea-dashboard-description"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Widget list */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold">Widgets ({selectedDashboard.widgets.length})</h4>
+                <Button size="sm" onClick={openAddWidget} data-testid="button-add-widget">
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Widget
+                </Button>
+              </div>
+
+              {selectedDashboard.widgets.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic py-4 text-center">No widgets yet. Click Add Widget to create your first chart.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {selectedDashboard.widgets.map(w => (
+                    <div key={w.id} className={w.width === "full" ? "md:col-span-2" : ""} data-testid={`widget-card-${w.id}`}>
+                      <Card>
+                        <CardHeader className="pb-1 pt-3 px-4">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div>
+                              <p className="text-sm font-semibold">{w.title}</p>
+                              <p className="text-xs text-muted-foreground">{dataSourceLabel(w.dataSource)} · {w.chartType} · {w.width}</p>
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <Button size="icon" variant="ghost" onClick={() => openEditWidget(w)} data-testid={`button-edit-widget-${w.id}`}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" onClick={() => deleteWidgetMutation.mutate(w.id)} data-testid={`button-delete-widget-${w.id}`}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-0 px-4 pb-3">
+                          <AnalyticsWidgetCard widget={w} height={200} />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Widget Builder Dialog */}
+      <Dialog open={widgetDialogOpen} onOpenChange={setWidgetDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingWidgetId ? "Edit Widget" : "Add Widget"}</DialogTitle>
+            <DialogDescription>Configure the chart and click Save to add it to your dashboard.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 py-2">
+            {/* Left: config */}
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <Label>Widget Title</Label>
+                <Input value={wTitle} onChange={e => setWTitle(e.target.value)} placeholder="e.g., OKRs per Department" data-testid="input-widget-title" />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Chart Type</Label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {CHART_TYPES.map(ct => (
+                    <button
+                      key={ct.value}
+                      type="button"
+                      onClick={() => setWChartType(ct.value)}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-md border text-xs transition-colors ${wChartType === ct.value ? "border-primary bg-primary/10 text-primary" : "border-muted hover-elevate"}`}
+                      data-testid={`button-chart-type-${ct.value}`}
+                    >
+                      <ct.Icon className="h-5 w-5" />
+                      {ct.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Data Source</Label>
+                <Select value={wDataSource} onValueChange={setWDataSource}>
+                  <SelectTrigger data-testid="select-data-source">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DATA_SOURCES.map(g => (
+                      <div key={g.group}>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{g.group}</div>
+                        {g.sources.map(s => (
+                          <SelectItem key={s.value} value={s.value}>
+                            <div>
+                              <div className="font-medium text-sm">{s.label}</div>
+                              <div className="text-xs text-muted-foreground">{s.desc}</div>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </div>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Width</Label>
+                <RadioGroup value={wWidth} onValueChange={v => setWWidth(v as "full" | "half")} className="flex gap-4">
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="full" id="w-full" />
+                    <Label htmlFor="w-full" className="cursor-pointer">Full width</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="half" id="w-half" />
+                    <Label htmlFor="w-half" className="cursor-pointer">Half width</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Color Scheme</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {COLOR_SCHEMES.map(cs => (
+                    <button
+                      key={cs.value}
+                      type="button"
+                      onClick={() => setWColorScheme(cs.value)}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs transition-colors ${wColorScheme === cs.value ? "border-primary bg-primary/10" : "border-muted hover-elevate"}`}
+                    >
+                      <div className="flex gap-0.5">
+                        {cs.colors.slice(0, 3).map((c, i) => (
+                          <div key={i} className="h-3 w-3 rounded-sm" style={{ background: c }} />
+                        ))}
+                      </div>
+                      {cs.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(f => !f)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showFilters ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  Filters (optional)
+                </button>
+                {showFilters && (
+                  <div className="space-y-2 pl-4 border-l-2 border-muted">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Quarter</Label>
+                      <Select value={wFilterQuarter || "__all__"} onValueChange={v => setWFilterQuarter(v === "__all__" ? "" : v)}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">All Quarters</SelectItem>
+                          {["Q1","Q2","Q3","Q4"].map(q => <SelectItem key={q} value={q}>{q}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Year</Label>
+                      <Select value={wFilterYear || "__all__"} onValueChange={v => setWFilterYear(v === "__all__" ? "" : v)}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">All Years</SelectItem>
+                          {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">SPU</Label>
+                      <Select value={wFilterSpu || "__all__"} onValueChange={v => setWFilterSpu(v === "__all__" ? "" : v)}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">All SPUs</SelectItem>
+                          {(spus ?? []).map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: preview */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Live Preview</Label>
+              <Card className="overflow-hidden">
+                <CardHeader className="pb-1 pt-3 px-4">
+                  <p className="text-sm font-semibold">{wTitle || "Untitled Widget"}</p>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <AnalyticsWidgetCard widget={previewWidget} height={220} />
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWidgetDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => saveWidgetMutation.mutate()}
+              disabled={!wTitle || !wDataSource || !selectedId || saveWidgetMutation.isPending}
+              data-testid="button-save-widget"
+            >
+              {saveWidgetMutation.isPending ? "Saving…" : editingWidgetId ? "Save Changes" : "Add Widget"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
 
 export default function Admin({ staff }: AdminProps) {
@@ -732,6 +1248,12 @@ export default function Admin({ staff }: AdminProps) {
             <TabsTrigger value="strategic" data-testid="tab-strategic">
               <Target className="h-4 w-4 mr-2" />
               Strategic Planning
+            </TabsTrigger>
+          )}
+          {staff.role === "super_admin" && (
+            <TabsTrigger value="analytics" data-testid="tab-analytics">
+              <BarChart2 className="h-4 w-4 mr-2" />
+              Analytics Builder
             </TabsTrigger>
           )}
           {staff.role === "super_admin" && (
@@ -2537,6 +3059,24 @@ export default function Admin({ staff }: AdminProps) {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+        {staff.role === "super_admin" && (
+          <TabsContent value="analytics">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart2 className="h-5 w-5" />
+                  Analytics Builder
+                </CardTitle>
+                <CardDescription>
+                  Create dashboards with charts and metrics. Published dashboards appear on the University Achievement Analytics tab.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AnalyticsBuilderTab />
               </CardContent>
             </Card>
           </TabsContent>

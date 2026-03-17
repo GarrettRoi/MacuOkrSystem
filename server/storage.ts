@@ -23,6 +23,11 @@ import {
   type UniversityKeyResult,
   type UniversityObjectiveWithKeyResults,
   type StrategicAdvancementData,
+  type AnalyticsDashboard,
+  type AnalyticsWidget,
+  type InsertAnalyticsDashboard,
+  type InsertAnalyticsWidget,
+  type AnalyticsDashboardWithWidgets,
   type EditLog,
   type InsertEditLog,
   type UnmatchedScore,
@@ -46,6 +51,8 @@ import {
   universityKeyResults,
   universityKeyResultProgress,
   universityObjectiveComments,
+  analyticsDashboards,
+  analyticsWidgets,
   editLogs,
   unmatchedScores,
 } from "@shared/schema";
@@ -139,6 +146,16 @@ export interface IStorage {
   getStrategicAdvancementData(): Promise<import("@shared/schema").StrategicAdvancementData>;
   setKeyResultProgress(keyResultId: string, progressPercent: number): Promise<void>;
   setObjectiveComment(objectiveId: string, comment: string): Promise<void>;
+
+  // Analytics Dashboards
+  getAllAnalyticsDashboards(): Promise<AnalyticsDashboardWithWidgets[]>;
+  getPublishedAnalyticsDashboards(): Promise<AnalyticsDashboardWithWidgets[]>;
+  createAnalyticsDashboard(data: InsertAnalyticsDashboard): Promise<AnalyticsDashboard>;
+  updateAnalyticsDashboard(id: string, data: Partial<InsertAnalyticsDashboard>): Promise<AnalyticsDashboard>;
+  deleteAnalyticsDashboard(id: string): Promise<void>;
+  createAnalyticsWidget(data: InsertAnalyticsWidget): Promise<AnalyticsWidget>;
+  updateAnalyticsWidget(id: string, data: Partial<InsertAnalyticsWidget>): Promise<AnalyticsWidget>;
+  deleteAnalyticsWidget(id: string): Promise<void>;
 
   // App Settings
   getSetting(key: string): Promise<string | null>;
@@ -1172,6 +1189,51 @@ export class DatabaseStorage implements IStorage {
       .insert(universityObjectiveComments)
       .values({ objectiveId, comment })
       .onConflictDoUpdate({ target: universityObjectiveComments.objectiveId, set: { comment } });
+  }
+
+  private async getDashboardsWithWidgets(filter?: { isPublished: boolean }): Promise<AnalyticsDashboardWithWidgets[]> {
+    let query = db.select().from(analyticsDashboards).orderBy(asc(analyticsDashboards.sortOrder), asc(analyticsDashboards.createdAt));
+    const rows = filter !== undefined
+      ? await db.select().from(analyticsDashboards).where(eq(analyticsDashboards.isPublished, filter.isPublished)).orderBy(asc(analyticsDashboards.sortOrder), asc(analyticsDashboards.createdAt))
+      : await query;
+    const widgets = await db.select().from(analyticsWidgets).orderBy(asc(analyticsWidgets.sortOrder));
+    return rows.map(d => ({ ...d, widgets: widgets.filter(w => w.dashboardId === d.id) }));
+  }
+
+  async getAllAnalyticsDashboards(): Promise<AnalyticsDashboardWithWidgets[]> {
+    return this.getDashboardsWithWidgets();
+  }
+
+  async getPublishedAnalyticsDashboards(): Promise<AnalyticsDashboardWithWidgets[]> {
+    return this.getDashboardsWithWidgets({ isPublished: true });
+  }
+
+  async createAnalyticsDashboard(data: InsertAnalyticsDashboard): Promise<AnalyticsDashboard> {
+    const [result] = await db.insert(analyticsDashboards).values(data).returning();
+    return result;
+  }
+
+  async updateAnalyticsDashboard(id: string, data: Partial<InsertAnalyticsDashboard>): Promise<AnalyticsDashboard> {
+    const [result] = await db.update(analyticsDashboards).set(data).where(eq(analyticsDashboards.id, id)).returning();
+    return result;
+  }
+
+  async deleteAnalyticsDashboard(id: string): Promise<void> {
+    await db.delete(analyticsDashboards).where(eq(analyticsDashboards.id, id));
+  }
+
+  async createAnalyticsWidget(data: InsertAnalyticsWidget): Promise<AnalyticsWidget> {
+    const [result] = await db.insert(analyticsWidgets).values(data).returning();
+    return result;
+  }
+
+  async updateAnalyticsWidget(id: string, data: Partial<InsertAnalyticsWidget>): Promise<AnalyticsWidget> {
+    const [result] = await db.update(analyticsWidgets).set(data).where(eq(analyticsWidgets.id, id)).returning();
+    return result;
+  }
+
+  async deleteAnalyticsWidget(id: string): Promise<void> {
+    await db.delete(analyticsWidgets).where(eq(analyticsWidgets.id, id));
   }
 
   async createEditLog(log: InsertEditLog): Promise<EditLog> {

@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar } from "lucide-react";
-import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, AnalyticsDashboardWithWidgets } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
+import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 
@@ -676,6 +677,71 @@ function TrendsTab() {
   );
 }
 
+function AnalyticsTab() {
+  const { data: publishedDashboards, isLoading } = useQuery<AnalyticsDashboardWithWidgets[]>({
+    queryKey: ["/api/analytics/dashboards"],
+  });
+
+  return (
+    <div className="space-y-10">
+      {isLoading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : publishedDashboards && publishedDashboards.length > 0 ? (
+        publishedDashboards.map((dashboard) => (
+          <section key={dashboard.id} data-testid={`analytics-dashboard-${dashboard.id}`}>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">{dashboard.name}</h2>
+              {dashboard.description && (
+                <p className="text-sm text-muted-foreground mt-0.5">{dashboard.description}</p>
+              )}
+            </div>
+            {dashboard.widgets.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">No widgets in this dashboard yet.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {dashboard.widgets.map((widget) => (
+                  <div
+                    key={widget.id}
+                    className={widget.width === "full" ? "md:col-span-2" : ""}
+                    data-testid={`analytics-widget-${widget.id}`}
+                  >
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold">{widget.title}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <AnalyticsWidgetCard widget={widget} />
+                      </CardContent>
+                    </Card>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        ))
+      ) : (
+        <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+          <TrendingUp className="h-10 w-10 mb-3 opacity-40" />
+          <p className="text-base font-medium">No analytics dashboards published yet.</p>
+          <p className="text-sm mt-1">A super admin can build and publish dashboards in the Admin panel.</p>
+        </div>
+      )}
+
+      {/* Built-in: Historical Trends */}
+      <section>
+        <div className="mb-4 pb-2 border-b">
+          <h2 className="text-lg font-semibold">Historical Trends</h2>
+          <p className="text-sm text-muted-foreground">Year-over-year comparisons and progress trends</p>
+        </div>
+        <TrendsTab />
+      </section>
+    </div>
+  );
+}
+
 function StrategicAdvancementTab() {
   const { data, isLoading } = useQuery<StrategicAdvancementData>({
     queryKey: ["/api/strategic-advancement"],
@@ -782,7 +848,7 @@ export default function UniversityAchievement() {
       <Tabs defaultValue="dashboard" className="space-y-6">
         <TabsList data-testid="tabs-achievement">
           <TabsTrigger value="dashboard" data-testid="tab-dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="trends" data-testid="tab-trends">Historical Trends</TabsTrigger>
+          <TabsTrigger value="trends" data-testid="tab-trends">Analytics</TabsTrigger>
           <TabsTrigger value="strategic-advancement" data-testid="tab-strategic-advancement">Strategic Advancement</TabsTrigger>
         </TabsList>
 
@@ -791,7 +857,7 @@ export default function UniversityAchievement() {
         </TabsContent>
 
         <TabsContent value="trends">
-          <TrendsTab />
+          <AnalyticsTab />
         </TabsContent>
 
         <TabsContent value="strategic-advancement">
