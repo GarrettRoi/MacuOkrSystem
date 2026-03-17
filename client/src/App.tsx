@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import PasswordGate from "@/pages/password-gate";
 import StaffSelection from "@/pages/staff-selection";
+import SetupWizard from "@/pages/setup";
 import Home from "@/pages/home";
 import SubmitOkr from "@/pages/submit-okr";
 import QuarterlyUpdate from "@/pages/quarterly-update";
@@ -46,6 +47,7 @@ function AppContent() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<StaffWithDetails | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
 
   const { data: session, isLoading: sessionLoading } = useQuery<{
     authenticated: boolean;
@@ -54,6 +56,12 @@ function AppContent() {
   }>({
     queryKey: ["/api/auth/session"],
     retry: false,
+  });
+
+  const { data: setupStatus, isLoading: setupLoading } = useQuery<{ completed: boolean }>({
+    queryKey: ["/api/setup/status"],
+    retry: false,
+    enabled: !!session?.authenticated,
   });
 
   const selectStaffMutation = useMutation({
@@ -76,34 +84,38 @@ function AppContent() {
       setSelectedStaff(null);
       setIsAuthenticated(false);
       setIsAdmin(false);
+      setSetupComplete(null);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
     },
   });
 
   useEffect(() => {
     if (!sessionLoading && session) {
-      if (!sessionChecked) {
-        setSessionChecked(true);
-      }
-      
+      if (!sessionChecked) setSessionChecked(true);
       if (session.authenticated) {
         setIsAuthenticated(true);
         setIsAdmin(session.isAdmin || false);
-        if (session.selectedStaff) {
-          setSelectedStaff(session.selectedStaff);
-        }
+        if (session.selectedStaff) setSelectedStaff(session.selectedStaff);
       } else {
         setIsAuthenticated(false);
         setIsAdmin(false);
         setSelectedStaff(null);
+        setSetupComplete(null);
       }
     }
   }, [session, sessionLoading, sessionChecked]);
+
+  useEffect(() => {
+    if (setupStatus !== undefined) {
+      setSetupComplete(setupStatus.completed);
+    }
+  }, [setupStatus]);
 
   const handleAuthenticated = (adminAccess: boolean) => {
     setIsAdmin(adminAccess);
     setIsAuthenticated(true);
     queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/setup/status"] });
   };
 
   const handleStaffSelected = (staff: StaffWithDetails) => {
@@ -114,7 +126,21 @@ function AppContent() {
     logoutMutation.mutate();
   };
 
+  const handleSetupComplete = () => {
+    setSetupComplete(true);
+    queryClient.invalidateQueries({ queryKey: ["/api/setup/status"] });
+  };
+
   if (sessionLoading || !sessionChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  // Still checking setup status
+  if (isAuthenticated && setupLoading && setupComplete === null) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
@@ -126,6 +152,8 @@ function AppContent() {
     <>
       {!isAuthenticated ? (
         <PasswordGate onAuthenticated={handleAuthenticated} />
+      ) : setupComplete === false ? (
+        <SetupWizard onComplete={handleSetupComplete} />
       ) : !selectedStaff ? (
         <StaffSelection
           onStaffSelected={handleStaffSelected}

@@ -8,13 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal } from "lucide-react";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2 } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames } from "@/lib/utils";
@@ -161,6 +162,18 @@ export default function Admin({ staff }: AdminProps) {
   });
   const [editingStartYear, setEditingStartYear] = useState<string>("");
   const planStartYear = planStartYearData?.startYear || 2024;
+
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetConfirmDialogOpen, setResetConfirmDialogOpen] = useState(false);
+
+  const resetMutation = useMutation({
+    mutationFn: async () => await apiRequest("POST", "/api/setup/reset", {}),
+    onSuccess: () => {
+      toast({ title: "System Reset Complete", description: "All data has been cleared. Redirecting to setup…" });
+      setTimeout(() => window.location.reload(), 1500);
+    },
+    onError: (err: any) => toast({ title: "Reset Failed", description: err.message, variant: "destructive" }),
+  });
 
   const { data: universityObjectives, isLoading: objectivesLoading } = useQuery<UniversityObjectiveWithKeyResults[]>({
     queryKey: ["/api/university-objectives"],
@@ -2499,11 +2512,85 @@ export default function Admin({ staff }: AdminProps) {
                     Example: If start year is {planStartYear}, then Q3 {planStartYear} = Year 1 Q3, Q1 {planStartYear + 1} = Year 2 Q1.
                   </p>
                 </div>
+
+                {staff.role === "super_admin" && (
+                  <div className="p-4 border border-destructive/40 rounded-md space-y-3 bg-destructive/5">
+                    <div className="space-y-1">
+                      <Label className="text-base font-medium text-destructive flex items-center gap-2">
+                        <TriangleAlert className="h-4 w-4" /> System Reset
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Permanently deletes all organizational data: staff, SPUs, sub-units, OKRs, quarterly updates,
+                        and university objectives. This resets the system to its initial state and cannot be undone.
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setResetDialogOpen(true)}
+                      data-testid="button-system-reset"
+                    >
+                      <TriangleAlert className="h-4 w-4 mr-1.5" /> Reset System
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
         )}
       </Tabs>
+
+      {/* First reset confirmation */}
+      <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <TriangleAlert className="h-5 w-5" /> Are you sure you want to reset?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all staff, SPUs, sub-units, OKRs, quarterly updates, and university objectives.
+              System settings (passwords, SSO, strategic plan year) will be preserved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-reset-cancel-1">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { setResetDialogOpen(false); setResetConfirmDialogOpen(true); }}
+              data-testid="button-reset-continue"
+            >
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Second (final) reset confirmation */}
+      <AlertDialog open={resetConfirmDialogOpen} onOpenChange={setResetConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <TriangleAlert className="h-5 w-5" /> This cannot be undone. Proceed?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to permanently erase ALL organizational data from the system.
+              There is no recovery option. The system will restart in setup mode after the reset completes.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-reset-cancel-2">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { setResetConfirmDialogOpen(false); resetMutation.mutate(); }}
+              disabled={resetMutation.isPending}
+              data-testid="button-reset-confirm-final"
+            >
+              {resetMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : null}
+              Yes, Delete Everything
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

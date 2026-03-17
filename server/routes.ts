@@ -1,6 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import * as oidcClient from "openid-client";
 import {
   insertStaffSchema,
@@ -15,6 +17,18 @@ import {
   insertStaffSpuAssignmentSchema,
   insertLeaderBasicAssignmentSchema,
   USER_ROLES,
+  spus,
+  subUnits,
+  staff,
+  staffSpuAssignments,
+  leaderBasicAssignments,
+  okrs,
+  okrResponsibilities,
+  quarterlyUpdates,
+  unmatchedScores,
+  editLogs,
+  universityObjectives,
+  universityKeyResults,
 } from "@shared/schema";
 import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear } from "@shared/schema";
@@ -953,7 +967,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         message: `Promoted "${subUnit.name}" to a full SPU. Reassigned ${result.staffMoved} staff, ${result.okrsMoved} OKRs, moved ${result.subUnitsMoved} sub-units.`,
-        newSpuId: result.newSpuId,
         ...result,
       });
     } catch (error) {
@@ -2888,6 +2901,337 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  });
+
+  // ─── Setup / Initial Load endpoints ───────────────────────────────────────
+
+  app.get("/api/setup/status", async (req, res) => {
+    const val = await storage.getSetting("setup_completed");
+    if (val === "true") return res.json({ completed: true });
+    if (val === "false") return res.json({ completed: false });
+    // Flag not yet set — auto-detect based on whether SPUs exist
+    // (handles existing deployments or fresh installs with seeded data)
+    const existingSpus = await storage.getAllSpus();
+    if (existingSpus.length > 0) {
+      await storage.setSetting("setup_completed", "true");
+      return res.json({ completed: true });
+    }
+    return res.json({ completed: false });
+  });
+
+  // Example CSV downloads — headers only, no test data
+  app.get("/api/setup/example-csv/:type", (req, res) => {
+    const { type } = req.params;
+    let filename = "";
+    let content = "";
+    if (type === "spu-staff") {
+      filename = "spu-staff-import-template.csv";
+      content = "SPU Name,Sub-Unit Name,SPU Admin Name,Sub-Unit Team Members\n";
+    } else if (type === "objectives") {
+      filename = "university-objectives-template.csv";
+      content = "Objective Number,Objective Title,Key Result Number,Key Result Description,Applicable Years\n";
+    } else {
+      return res.status(404).json({ error: "Unknown template type" });
+    }
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(content);
+  });
+
+  // Preview SPU + Staff CSV
+  app.post("/api/setup/preview/spu-staff", requireAdmin, async (req, res) => {
+    try {
+      const { csvData } = req.body;
+      if (!csvData) return res.status(400).json({ error: "CSV data is required" });
+
+      const rows = parseCSV(csvData);
+      if (rows.length < 2) return res.status(400).json({ error: "CSV must have a header row and at least one data row" });
+
+      const headers = rows[0].map((h: string) => h.trim().toLowerCase());
+      const colSpuName = headers.indexOf("spu name");
+      const colSubUnit = headers.indexOf("sub-unit name");
+      const colAdmin = headers.indexOf("spu admin name");
+      const colMembers = headers.indexOf("sub-unit team members");
+
+      const missing: string[] = [];
+      if (colSpuName < 0) missing.push("SPU Name");
+      if (colAdmin < 0) missing.push("SPU Admin Name");
+      if (colMembers < 0) missing.push("Sub-Unit Team Members");
+      if (missing.length > 0) return res.status(400).json({ error: `Missing required columns: ${missing.join(", ")}` });
+
+      interface SpuEntry {
+        name: string; admin: string;
+        subUnits: Map<string, { name: string; members: string[] }>;
+        directMembers: string[];
+      }
+      const spuMap = new Map<string, SpuEntry>();
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] as string[];
+        const spuName = (row[colSpuName] || "").trim();
+        if (!spuName) continue;
+        const subUnitName = colSubUnit >= 0 ? (row[colSubUnit] || "").trim() : "";
+        const adminName = (row[colAdmin] || "").trim();
+        const memberStr = (row[colMembers] || "").trim();
+        const members = memberStr ? memberStr.split(";").map((m: string) => m.trim()).filter(Boolean) : [];
+
+        if (!spuMap.has(spuName)) spuMap.set(spuName, { name: spuName, admin: "", subUnits: new Map(), directMembers: [] });
+        const spu = spuMap.get(spuName)!;
+        if (adminName && !spu.admin) spu.admin = adminName;
+
+        const isPlaceholder = isPlaceholderSubUnit(subUnitName);
+        if (!isPlaceholder && subUnitName) {
+          if (!spu.subUnits.has(subUnitName)) spu.subUnits.set(subUnitName, { name: subUnitName, members: [] });
+          spu.subUnits.get(subUnitName)!.members.push(...members);
+        } else {
+          spu.directMembers.push(...members);
+        }
+      }
+
+      const allStaffNames = new Set<string>();
+      const spuList = Array.from(spuMap.values()).map(spu => {
+        if (spu.admin) allStaffNames.add(spu.admin);
+        const subUnitList = Array.from(spu.subUnits.values()).map(su => {
+          su.members.forEach((m: string) => allStaffNames.add(m));
+          return { name: su.name, memberCount: su.members.length, members: su.members };
+        });
+        spu.directMembers.forEach((m: string) => allStaffNames.add(m));
+        return { name: spu.name, admin: spu.admin, subUnits: subUnitList, directMemberCount: spu.directMembers.length, directMembers: spu.directMembers };
+      });
+
+      res.json({
+        spus: spuList,
+        totals: { spus: spuMap.size, subUnits: spuList.reduce((n, s) => n + s.subUnits.length, 0), staff: allStaffNames.size },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Confirm SPU + Staff CSV — actually creates the records
+  app.post("/api/setup/confirm/spu-staff", requireAdmin, async (req, res) => {
+    try {
+      const { csvData } = req.body;
+      if (!csvData) return res.status(400).json({ error: "CSV data is required" });
+
+      const rows = parseCSV(csvData);
+      const headers = rows[0].map((h: string) => h.trim().toLowerCase());
+      const colSpuName = headers.indexOf("spu name");
+      const colSubUnit = headers.indexOf("sub-unit name");
+      const colAdmin = headers.indexOf("spu admin name");
+      const colMembers = headers.indexOf("sub-unit team members");
+
+      // Load existing SPUs and staff to avoid duplicates
+      const existingSpus = await storage.getAllSpus();
+      const existingStaff = await storage.getAllStaff();
+      const spuByName = new Map(existingSpus.map(s => [s.name.toLowerCase(), s]));
+      const staffByEmail = new Map(existingStaff.map(s => [s.email.toLowerCase(), s]));
+      const staffByName = new Map(existingStaff.map(s => [s.name.toLowerCase(), s]));
+
+      const created = { spus: 0, subUnits: 0, staff: 0 };
+      const subUnitByKey = new Map<string, any>();
+
+      const getOrCreateSpu = async (name: string) => {
+        const key = name.toLowerCase();
+        if (spuByName.has(key)) return spuByName.get(key)!;
+        const spu = await storage.createSpu({ name });
+        spuByName.set(key, spu);
+        created.spus++;
+        return spu;
+      };
+
+      const getOrCreateSubUnit = async (name: string, spuId: string) => {
+        const key = `${spuId}:${name.toLowerCase()}`;
+        if (subUnitByKey.has(key)) return subUnitByKey.get(key)!;
+        const allSubUnitsForSpu = await db.select().from(subUnits).where(eq(subUnits.spuId, spuId));
+        const existing = allSubUnitsForSpu.find(su => su.name.toLowerCase() === name.toLowerCase());
+        if (existing) { subUnitByKey.set(key, existing); return existing; }
+        const su = await storage.createSubUnit({ name, spuId });
+        subUnitByKey.set(key, su);
+        created.subUnits++;
+        return su;
+      };
+
+      const getOrCreateStaff = async (name: string, role: "super_admin" | "leader" | "basic", spuId: string, subUnitId: string | null) => {
+        const nameKey = name.toLowerCase();
+        if (staffByName.has(nameKey)) return staffByName.get(nameKey)!;
+        const emailBase = name.toLowerCase().replace(/[^a-z0-9]/g, ".").replace(/\.+/g, ".");
+        let email = `${emailBase}@macu.edu`;
+        let suffix = 1;
+        while (staffByEmail.has(email.toLowerCase())) { email = `${emailBase}${suffix}@macu.edu`; suffix++; }
+        const staffMember = await storage.createStaff({ name, email, spuId, subUnitId, role, isAdmin: false });
+        staffByName.set(nameKey, staffMember);
+        staffByEmail.set(email.toLowerCase(), staffMember);
+        created.staff++;
+        return staffMember;
+      };
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] as string[];
+        const spuName = (row[colSpuName] || "").trim();
+        if (!spuName) continue;
+        const subUnitName = colSubUnit >= 0 ? (row[colSubUnit] || "").trim() : "";
+        const adminName = (row[colAdmin] || "").trim();
+        const memberStr = (row[colMembers] || "").trim();
+        const members = memberStr ? memberStr.split(";").map((m: string) => m.trim()).filter(Boolean) : [];
+
+        const spu = await getOrCreateSpu(spuName);
+        const isPlaceholder = isPlaceholderSubUnit(subUnitName);
+        const subUnit = (!isPlaceholder && subUnitName) ? await getOrCreateSubUnit(subUnitName, spu.id) : null;
+
+        if (adminName) await getOrCreateStaff(adminName, "leader", spu.id, null);
+        for (const memberName of members) {
+          await getOrCreateStaff(memberName, "basic", spu.id, subUnit?.id ?? null);
+        }
+      }
+
+      res.json({ success: true, created });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Preview University Objectives CSV
+  app.post("/api/setup/preview/objectives", requireAdmin, async (req, res) => {
+    try {
+      const { csvData } = req.body;
+      if (!csvData) return res.status(400).json({ error: "CSV data is required" });
+
+      const rows = parseCSV(csvData);
+      if (rows.length < 2) return res.status(400).json({ error: "CSV must have a header row and at least one data row" });
+
+      const headers = rows[0].map((h: string) => h.trim().toLowerCase());
+      const colObjNum = headers.indexOf("objective number");
+      const colObjTitle = headers.indexOf("objective title");
+      const colKrNum = headers.indexOf("key result number");
+      const colKrDesc = headers.indexOf("key result description");
+      const colYears = headers.indexOf("applicable years");
+
+      const missing: string[] = [];
+      if (colObjNum < 0) missing.push("Objective Number");
+      if (colObjTitle < 0) missing.push("Objective Title");
+      if (colKrNum < 0) missing.push("Key Result Number");
+      if (colKrDesc < 0) missing.push("Key Result Description");
+      if (missing.length > 0) return res.status(400).json({ error: `Missing required columns: ${missing.join(", ")}` });
+
+      interface ObjEntry { number: string; title: string; keyResults: { number: string; description: string }[]; years: number[] }
+      const objMap = new Map<string, ObjEntry>();
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] as string[];
+        const objNum = (row[colObjNum] || "").trim();
+        const objTitle = (row[colObjTitle] || "").trim();
+        const krNum = (row[colKrNum] || "").trim();
+        const krDesc = (row[colKrDesc] || "").trim();
+        const yearsStr = colYears >= 0 ? (row[colYears] || "").trim() : "";
+        if (!objNum || !objTitle) continue;
+
+        const years = yearsStr ? yearsStr.split(";").map((y: string) => parseInt(y.trim())).filter((y: number) => !isNaN(y)) : [];
+
+        if (!objMap.has(objNum)) objMap.set(objNum, { number: objNum, title: objTitle, keyResults: [], years });
+        const obj = objMap.get(objNum)!;
+        if (krNum && krDesc) obj.keyResults.push({ number: krNum, description: krDesc });
+      }
+
+      res.json({
+        objectives: Array.from(objMap.values()),
+        totals: { objectives: objMap.size, keyResults: Array.from(objMap.values()).reduce((n, o) => n + o.keyResults.length, 0) },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Confirm University Objectives CSV — creates records
+  app.post("/api/setup/confirm/objectives", requireAdmin, async (req, res) => {
+    try {
+      const { csvData } = req.body;
+      if (!csvData) return res.status(400).json({ error: "CSV data is required" });
+
+      const rows = parseCSV(csvData);
+      const headers = rows[0].map((h: string) => h.trim().toLowerCase());
+      const colObjNum = headers.indexOf("objective number");
+      const colObjTitle = headers.indexOf("objective title");
+      const colKrNum = headers.indexOf("key result number");
+      const colKrDesc = headers.indexOf("key result description");
+      const colYears = headers.indexOf("applicable years");
+
+      interface ObjEntry { number: string; title: string; keyResults: { number: string; description: string; sortOrder: number }[]; years: number[]; sortOrder: number }
+      const objMap = new Map<string, ObjEntry>();
+      let objOrder = 0;
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] as string[];
+        const objNum = (row[colObjNum] || "").trim();
+        const objTitle = (row[colObjTitle] || "").trim();
+        const krNum = (row[colKrNum] || "").trim();
+        const krDesc = (row[colKrDesc] || "").trim();
+        const yearsStr = colYears >= 0 ? (row[colYears] || "").trim() : "";
+        if (!objNum || !objTitle) continue;
+        const years = yearsStr ? yearsStr.split(";").map((y: string) => parseInt(y.trim())).filter((y: number) => !isNaN(y)) : [];
+        if (!objMap.has(objNum)) { objMap.set(objNum, { number: objNum, title: objTitle, keyResults: [], years, sortOrder: objOrder++ }); }
+        const obj = objMap.get(objNum)!;
+        if (krNum && krDesc) obj.keyResults.push({ number: krNum, description: krDesc, sortOrder: obj.keyResults.length });
+      }
+
+      const created = { objectives: 0, keyResults: 0 };
+      for (const obj of Array.from(objMap.values())) {
+        const label = `${obj.number}: ${obj.title}`;
+        const newObj = await storage.createUniversityObjective({
+          label, description: obj.title, sortOrder: obj.sortOrder, applicableYears: obj.years, isActive: true,
+        });
+        created.objectives++;
+        for (const kr of obj.keyResults) {
+          await storage.createUniversityKeyResult({
+            objectiveId: newObj.id, label: `KR ${obj.number}.${kr.number}`, description: kr.description, sortOrder: kr.sortOrder,
+          });
+          created.keyResults++;
+        }
+      }
+
+      res.json({ success: true, created });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Mark setup as complete
+  app.post("/api/setup/complete", requireAdmin, async (req, res) => {
+    await storage.setSetting("setup_completed", "true");
+    res.json({ success: true });
+  });
+
+  // System Reset — requires super_admin role, clears all organizational data
+  app.post("/api/setup/reset", requireAdmin, async (req, res) => {
+    const staffId = (req.session as any).staffId;
+    if (staffId) {
+      const staffMember = await storage.getStaff(staffId);
+      if (!staffMember || staffMember.role !== "super_admin") {
+        return res.status(403).json({ error: "Only super admins can perform a system reset" });
+      }
+    } else if (!(req.session as any).isAdmin) {
+      return res.status(403).json({ error: "Only super admins can perform a system reset" });
+    }
+
+    // Delete all transactional and organizational data in dependency order
+    await db.delete(editLogs);
+    await db.delete(okrResponsibilities);
+    await db.delete(quarterlyUpdates);
+    await db.delete(unmatchedScores);
+    await db.delete(okrs);
+    await db.delete(leaderBasicAssignments);
+    await db.delete(staffSpuAssignments);
+    await db.delete(staff);
+    await db.delete(universityKeyResults);
+    await db.delete(universityObjectives);
+    await db.delete(subUnits);
+    await db.delete(spus);
+
+    await storage.setSetting("setup_completed", "false");
+
+    // Destroy the current session so the admin is re-authenticated fresh
+    req.session.destroy(() => {});
+    res.json({ success: true });
   });
 
   const httpServer = createServer(app);
