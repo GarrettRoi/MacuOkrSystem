@@ -701,11 +701,11 @@ function AnalyticsTab() {
             {dashboard.widgets.length === 0 ? (
               <p className="text-sm text-muted-foreground italic">No widgets in this dashboard yet.</p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {dashboard.widgets.map((widget) => (
                   <div
                     key={widget.id}
-                    className={widget.width === "full" ? "md:col-span-2" : ""}
+                    className={widget.width === "full" ? "sm:col-span-2" : ""}
                     data-testid={`analytics-widget-${widget.id}`}
                   >
                     <Card>

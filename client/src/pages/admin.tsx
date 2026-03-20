@@ -19,7 +19,8 @@ import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, AnalyticsDashboardWithWidgets, AnalyticsWidget } from "@shared/schema";
-import { AnalyticsWidgetCard } from "@/components/analytics-widget";
+import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
+import type { WidgetConfig } from "@/components/analytics-widget";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames } from "@/lib/utils";
 
@@ -386,15 +387,36 @@ function AnalyticsBuilderTab() {
   const [wFilterYear, setWFilterYear]       = useState("");
   const [wFilterSpu, setWFilterSpu]         = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  // Style controls
+  const [wValueFontSize, setWValueFontSize]     = useState("text-5xl");
+  const [wLabelFontSize, setWLabelFontSize]     = useState("11");
+  const [wValueColor, setWValueColor]           = useState("");
+  const [wMetricSuffix, setWMetricSuffix]       = useState("");
+  const [wMetricDecimals, setWMetricDecimals]   = useState(0);
+  const [wMetricLabel, setWMetricLabel]         = useState("");
+  const [wShowLegend, setWShowLegend]           = useState(true);
+  const [wShowDataLabels, setWShowDataLabels]   = useState(false);
+  const [wWidgetHeight, setWWidgetHeight]       = useState<number | "">(260);
+  const [styleTab, setStyleTab]                 = useState<"data" | "style">("data");
   const [dashName, setDashName] = useState("");
   const [dashDesc, setDashDesc] = useState("");
 
-  const buildConfig = () => {
-    const filters: Record<string, any> = {};
-    if (wFilterQuarter) filters.quarter = wFilterQuarter;
-    if (wFilterYear)    filters.year    = parseInt(wFilterYear);
-    if (wFilterSpu)     filters.spuId   = wFilterSpu;
-    return JSON.stringify({ filters, colorScheme: wColorScheme });
+  const buildConfig = (): string => {
+    const cfg: WidgetConfig = { filters: {}, colorScheme: wColorScheme };
+    if (wFilterQuarter) cfg.filters!.quarter = wFilterQuarter;
+    if (wFilterYear)    cfg.filters!.year    = parseInt(wFilterYear);
+    if (wFilterSpu)     cfg.filters!.spuId   = wFilterSpu;
+    if (!wFilterQuarter && !wFilterYear && !wFilterSpu) delete cfg.filters;
+    cfg.valueFontSize  = wValueFontSize;
+    cfg.labelFontSize  = wLabelFontSize;
+    if (wValueColor)    cfg.valueColor    = wValueColor;
+    if (wMetricSuffix)  cfg.metricSuffix  = wMetricSuffix;
+    if (wMetricDecimals > 0) cfg.metricDecimals = wMetricDecimals;
+    if (wMetricLabel)   cfg.metricLabelOverride = wMetricLabel;
+    cfg.showLegend      = wShowLegend;
+    cfg.showDataLabels  = wShowDataLabels;
+    if (wWidgetHeight && wWidgetHeight !== 260) cfg.widgetHeight = Number(wWidgetHeight);
+    return JSON.stringify(cfg);
   };
 
   const previewWidget: AnalyticsWidget = {
@@ -413,7 +435,10 @@ function AnalyticsBuilderTab() {
     setWTitle(""); setWChartType("bar"); setWDataSource("okr_count_by_spu");
     setWWidth("full"); setWColorScheme("mixed");
     setWFilterQuarter(""); setWFilterYear(""); setWFilterSpu("");
-    setShowFilters(false);
+    setShowFilters(false); setStyleTab("data");
+    setWValueFontSize("text-5xl"); setWLabelFontSize("11"); setWValueColor("");
+    setWMetricSuffix(""); setWMetricDecimals(0); setWMetricLabel("");
+    setWShowLegend(true); setWShowDataLabels(false); setWWidgetHeight(260);
     setWidgetDialogOpen(true);
   };
 
@@ -421,14 +446,22 @@ function AnalyticsBuilderTab() {
     setEditingWidgetId(w.id);
     setWTitle(w.title); setWChartType(w.chartType); setWDataSource(w.dataSource);
     setWWidth(w.width as "full" | "half");
-    try {
-      const cfg = JSON.parse(w.config);
-      setWColorScheme(cfg.colorScheme ?? "mixed");
-      setWFilterQuarter(cfg.filters?.quarter ?? "");
-      setWFilterYear(cfg.filters?.year ? String(cfg.filters.year) : "");
-      setWFilterSpu(cfg.filters?.spuId ?? "");
-    } catch { setWColorScheme("mixed"); setWFilterQuarter(""); setWFilterYear(""); setWFilterSpu(""); }
-    setShowFilters(false);
+    const cfg = parseConfig(w.config);
+    setWColorScheme(cfg.colorScheme ?? "mixed");
+    setWFilterQuarter(cfg.filters?.quarter ?? "");
+    setWFilterYear(cfg.filters?.year ? String(cfg.filters.year) : "");
+    setWFilterSpu(cfg.filters?.spuId ?? "");
+    setWValueFontSize(cfg.valueFontSize ?? "text-5xl");
+    setWLabelFontSize(cfg.labelFontSize ?? "11");
+    setWValueColor(cfg.valueColor ?? "");
+    setWMetricSuffix(cfg.metricSuffix ?? "");
+    setWMetricDecimals(cfg.metricDecimals ?? 0);
+    setWMetricLabel(cfg.metricLabelOverride ?? "");
+    setWShowLegend(cfg.showLegend !== false);
+    setWShowDataLabels(cfg.showDataLabels === true);
+    setWWidgetHeight(cfg.widgetHeight ?? 260);
+    setShowFilters(!!(cfg.filters?.quarter || cfg.filters?.year || cfg.filters?.spuId));
+    setStyleTab("data");
     setWidgetDialogOpen(true);
   };
 
@@ -595,9 +628,9 @@ function AnalyticsBuilderTab() {
               {selectedDashboard.widgets.length === 0 ? (
                 <p className="text-sm text-muted-foreground italic py-4 text-center">No widgets yet. Click Add Widget to create your first chart.</p>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   {selectedDashboard.widgets.map(w => (
-                    <div key={w.id} className={w.width === "full" ? "md:col-span-2" : ""} data-testid={`widget-card-${w.id}`}>
+                    <div key={w.id} className={w.width === "full" ? "col-span-2" : ""} data-testid={`widget-card-${w.id}`}>
                       <Card>
                         <CardHeader className="pb-1 pt-3 px-4">
                           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -630,158 +663,282 @@ function AnalyticsBuilderTab() {
 
       {/* Widget Builder Dialog */}
       <Dialog open={widgetDialogOpen} onOpenChange={setWidgetDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{editingWidgetId ? "Edit Widget" : "Add Widget"}</DialogTitle>
-            <DialogDescription>Configure the chart and click Save to add it to your dashboard.</DialogDescription>
+            <DialogDescription>Configure your widget, then click Save.</DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 py-2">
-            {/* Left: config */}
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <Label>Widget Title</Label>
-                <Input value={wTitle} onChange={e => setWTitle(e.target.value)} placeholder="e.g., OKRs per Department" data-testid="input-widget-title" />
+          <div className="flex flex-col md:flex-row gap-5 flex-1 min-h-0 overflow-hidden py-2">
+            {/* Left: config panels */}
+            <div className="md:w-96 shrink-0 flex flex-col overflow-hidden">
+              {/* Tab switcher */}
+              <div className="flex border-b mb-3 shrink-0">
+                {(["data","style"] as const).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setStyleTab(t)}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors capitalize ${styleTab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  >
+                    {t === "data" ? "Data & Layout" : "Style"}
+                  </button>
+                ))}
               </div>
 
-              <div className="space-y-1">
-                <Label>Chart Type</Label>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {CHART_TYPES.map(ct => (
-                    <button
-                      key={ct.value}
-                      type="button"
-                      onClick={() => setWChartType(ct.value)}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-md border text-xs transition-colors ${wChartType === ct.value ? "border-primary bg-primary/10 text-primary" : "border-muted hover-elevate"}`}
-                      data-testid={`button-chart-type-${ct.value}`}
-                    >
-                      <ct.Icon className="h-5 w-5" />
-                      {ct.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+                {styleTab === "data" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Widget Title</Label>
+                      <Input value={wTitle} onChange={e => setWTitle(e.target.value)} placeholder="e.g., OKRs per Department" data-testid="input-widget-title" />
+                    </div>
 
-              <div className="space-y-1">
-                <Label>Data Source</Label>
-                <Select value={wDataSource} onValueChange={setWDataSource}>
-                  <SelectTrigger data-testid="select-data-source">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DATA_SOURCES.map(g => (
-                      <div key={g.group}>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{g.group}</div>
-                        {g.sources.map(s => (
-                          <SelectItem key={s.value} value={s.value}>
-                            <div>
-                              <div className="font-medium text-sm">{s.label}</div>
-                              <div className="text-xs text-muted-foreground">{s.desc}</div>
+                    <div className="space-y-1">
+                      <Label>Chart Type</Label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {CHART_TYPES.map(ct => (
+                          <button
+                            key={ct.value}
+                            type="button"
+                            onClick={() => setWChartType(ct.value)}
+                            className={`flex flex-col items-center gap-1 p-2 rounded-md border text-xs transition-colors ${wChartType === ct.value ? "border-primary bg-primary/10 text-primary" : "border-muted hover-elevate"}`}
+                            data-testid={`button-chart-type-${ct.value}`}
+                          >
+                            <ct.Icon className="h-5 w-5" />
+                            {ct.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label>Data Source</Label>
+                      <Select value={wDataSource} onValueChange={setWDataSource}>
+                        <SelectTrigger data-testid="select-data-source">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DATA_SOURCES.map(g => (
+                            <div key={g.group}>
+                              <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{g.group}</div>
+                              {g.sources.map(s => (
+                                <SelectItem key={s.value} value={s.value}>
+                                  <div>
+                                    <div className="font-medium text-sm">{s.label}</div>
+                                    <div className="text-xs text-muted-foreground">{s.desc}</div>
+                                  </div>
+                                </SelectItem>
+                              ))}
                             </div>
-                          </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label>Width</Label>
+                      <RadioGroup value={wWidth} onValueChange={v => setWWidth(v as "full" | "half")} className="flex gap-4">
+                        <div className="flex items-center gap-2">
+                          <RadioGroupItem value="full" id="w-full" />
+                          <Label htmlFor="w-full" className="cursor-pointer">Full width</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <RadioGroupItem value="half" id="w-half" />
+                          <Label htmlFor="w-half" className="cursor-pointer">Half width</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label>Height (px)</Label>
+                      <Input
+                        type="number"
+                        min={120}
+                        max={600}
+                        value={wWidgetHeight}
+                        onChange={e => setWWidgetHeight(e.target.value === "" ? "" : Number(e.target.value))}
+                        placeholder="260"
+                        data-testid="input-widget-height"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowFilters(f => !f)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showFilters ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        Filters (optional)
+                      </button>
+                      {showFilters && (
+                        <div className="space-y-2 pl-4 border-l-2 border-muted">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Quarter</Label>
+                            <Select value={wFilterQuarter || "__all__"} onValueChange={v => setWFilterQuarter(v === "__all__" ? "" : v)}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__all__">All Quarters</SelectItem>
+                                {["Q1","Q2","Q3","Q4"].map(q => <SelectItem key={q} value={q}>{q}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Year</Label>
+                            <Select value={wFilterYear || "__all__"} onValueChange={v => setWFilterYear(v === "__all__" ? "" : v)}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__all__">All Years</SelectItem>
+                                {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">SPU</Label>
+                            <Select value={wFilterSpu || "__all__"} onValueChange={v => setWFilterSpu(v === "__all__" ? "" : v)}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__all__">All SPUs</SelectItem>
+                                {(spus ?? []).map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {styleTab === "style" && (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Color Scheme</Label>
+                      <div className="flex gap-2 flex-wrap">
+                        {COLOR_SCHEMES.map(cs => (
+                          <button
+                            key={cs.value}
+                            type="button"
+                            onClick={() => setWColorScheme(cs.value)}
+                            className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs transition-colors ${wColorScheme === cs.value ? "border-primary bg-primary/10" : "border-muted hover-elevate"}`}
+                          >
+                            <div className="flex gap-0.5">
+                              {cs.colors.slice(0, 3).map((c, i) => (
+                                <div key={i} className="h-3 w-3 rounded-sm" style={{ background: c }} />
+                              ))}
+                            </div>
+                            {cs.label}
+                          </button>
                         ))}
                       </div>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    </div>
 
-              <div className="space-y-1">
-                <Label>Width</Label>
-                <RadioGroup value={wWidth} onValueChange={v => setWWidth(v as "full" | "half")} className="flex gap-4">
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="full" id="w-full" />
-                    <Label htmlFor="w-full" className="cursor-pointer">Full width</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="half" id="w-half" />
-                    <Label htmlFor="w-half" className="cursor-pointer">Half width</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <div className="space-y-1">
-                <Label>Color Scheme</Label>
-                <div className="flex gap-2 flex-wrap">
-                  {COLOR_SCHEMES.map(cs => (
-                    <button
-                      key={cs.value}
-                      type="button"
-                      onClick={() => setWColorScheme(cs.value)}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs transition-colors ${wColorScheme === cs.value ? "border-primary bg-primary/10" : "border-muted hover-elevate"}`}
-                    >
-                      <div className="flex gap-0.5">
-                        {cs.colors.slice(0, 3).map((c, i) => (
-                          <div key={i} className="h-3 w-3 rounded-sm" style={{ background: c }} />
+                    <div className="space-y-1">
+                      <Label>Value / Accent Color</Label>
+                      <div className="flex gap-2 flex-wrap">
+                        {VALUE_COLOR_OPTIONS.map(vc => (
+                          <button
+                            key={vc.value}
+                            type="button"
+                            onClick={() => setWValueColor(vc.value)}
+                            className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs transition-colors ${wValueColor === vc.value ? "border-primary bg-primary/10" : "border-muted hover-elevate"}`}
+                          >
+                            <div className="h-3 w-3 rounded-full border" style={{ background: vc.swatch }} />
+                            {vc.label}
+                          </button>
                         ))}
                       </div>
-                      {cs.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                    </div>
 
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setShowFilters(f => !f)}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showFilters ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                  Filters (optional)
-                </button>
-                {showFilters && (
-                  <div className="space-y-2 pl-4 border-l-2 border-muted">
+                    {wChartType === "metric" && (
+                      <>
+                        <div className="space-y-1">
+                          <Label>Value Font Size</Label>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {FONT_SIZE_OPTIONS.map(fs => (
+                              <button
+                                key={fs.value}
+                                type="button"
+                                onClick={() => setWValueFontSize(fs.value)}
+                                className={`px-3 py-1 rounded-md border text-xs transition-colors ${wValueFontSize === fs.value ? "border-primary bg-primary/10 text-primary font-semibold" : "border-muted hover-elevate"}`}
+                              >
+                                {fs.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Value Suffix</Label>
+                          <Input value={wMetricSuffix} onChange={e => setWMetricSuffix(e.target.value)} placeholder='e.g.  %  or  " OKRs"' />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Decimal Places</Label>
+                          <div className="flex gap-1.5">
+                            {[0, 1, 2].map(d => (
+                              <button
+                                key={d}
+                                type="button"
+                                onClick={() => setWMetricDecimals(d)}
+                                className={`px-3 py-1 rounded-md border text-xs transition-colors ${wMetricDecimals === d ? "border-primary bg-primary/10 text-primary font-semibold" : "border-muted hover-elevate"}`}
+                              >
+                                {d === 0 ? "None" : d === 1 ? "1 place" : "2 places"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Label Override</Label>
+                          <Input value={wMetricLabel} onChange={e => setWMetricLabel(e.target.value)} placeholder="Overrides the default label" />
+                        </div>
+                      </>
+                    )}
+
                     <div className="space-y-1">
-                      <Label className="text-xs">Quarter</Label>
-                      <Select value={wFilterQuarter || "__all__"} onValueChange={v => setWFilterQuarter(v === "__all__" ? "" : v)}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__all__">All Quarters</SelectItem>
-                          {["Q1","Q2","Q3","Q4"].map(q => <SelectItem key={q} value={q}>{q}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <Label>Label Font Size</Label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {LABEL_FONT_SIZE_OPTIONS.map(lf => (
+                          <button
+                            key={lf.value}
+                            type="button"
+                            onClick={() => setWLabelFontSize(lf.value)}
+                            className={`px-3 py-1 rounded-md border text-xs transition-colors ${wLabelFontSize === lf.value ? "border-primary bg-primary/10 text-primary font-semibold" : "border-muted hover-elevate"}`}
+                          >
+                            {lf.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Year</Label>
-                      <Select value={wFilterYear || "__all__"} onValueChange={v => setWFilterYear(v === "__all__" ? "" : v)}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__all__">All Years</SelectItem>
-                          {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="cursor-pointer" htmlFor="sw-legend">Show Legend</Label>
+                        <Switch id="sw-legend" checked={wShowLegend} onCheckedChange={setWShowLegend} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="cursor-pointer" htmlFor="sw-datalabels">Show Data Labels</Label>
+                        <Switch id="sw-datalabels" checked={wShowDataLabels} onCheckedChange={setWShowDataLabels} />
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">SPU</Label>
-                      <Select value={wFilterSpu || "__all__"} onValueChange={v => setWFilterSpu(v === "__all__" ? "" : v)}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__all__">All SPUs</SelectItem>
-                          {(spus ?? []).map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                  </>
                 )}
               </div>
             </div>
 
-            {/* Right: preview */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Live Preview</Label>
-              <Card className="overflow-hidden">
-                <CardHeader className="pb-1 pt-3 px-4">
+            {/* Right: live preview */}
+            <div className="flex-1 min-w-0 space-y-2 flex flex-col">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide shrink-0">Live Preview</Label>
+              <Card className="flex-1 flex flex-col min-h-0">
+                <CardHeader className="pb-1 pt-3 px-4 shrink-0">
                   <p className="text-sm font-semibold">{wTitle || "Untitled Widget"}</p>
                 </CardHeader>
-                <CardContent className="px-4 pb-4">
-                  <AnalyticsWidgetCard widget={previewWidget} height={220} />
+                <CardContent className="px-4 pb-4 flex-1 min-h-0">
+                  <AnalyticsWidgetCard widget={previewWidget} height={Number(wWidgetHeight) || 260} />
                 </CardContent>
               </Card>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 pt-2 border-t">
             <Button variant="outline" onClick={() => setWidgetDialogOpen(false)}>Cancel</Button>
             <Button
               onClick={() => saveWidgetMutation.mutate()}
