@@ -86,6 +86,12 @@ export default function Data() {
   const [dismissingScoreId, setDismissingScoreId] = useState<string | null>(null);
   const [dismissReason, setDismissReason] = useState("");
 
+  // Cell detail dialog (click to see full text)
+  const [cellDetailDialog, setCellDetailDialog] = useState<{ open: boolean; label: string; content: string }>({ open: false, label: "", content: "" });
+  const showCellDetail = (label: string, content: string) => {
+    if (content && content !== "-") setCellDetailDialog({ open: true, label, content });
+  };
+
   // Import states
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -465,9 +471,7 @@ export default function Data() {
     },
     onSuccess: (data: any) => {
       const rows = (data.rows || []).slice().sort((a: any, b: any) => {
-        const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return dateA - dateB;
+        return (a.rowIndex || 0) - (b.rowIndex || 0);
       });
       setImportPreviewData(rows);
       setImportSummary({
@@ -1923,6 +1927,21 @@ export default function Data() {
         </DialogContent>
       </Dialog>
 
+      {/* Cell Detail Dialog */}
+      <Dialog open={cellDetailDialog.open} onOpenChange={(open) => !open && setCellDetailDialog(d => ({ ...d, open: false }))}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{cellDetailDialog.label}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm whitespace-pre-wrap break-words">{cellDetailDialog.content}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCellDetailDialog(d => ({ ...d, open: false }))} data-testid="button-close-cell-detail">Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Dismiss Unmatched Score Dialog */}
       <Dialog open={dismissDialogOpen} onOpenChange={(open) => { if (!open) { setDismissDialogOpen(false); setDismissingScoreId(null); setDismissReason(""); } }}>
         <DialogContent>
@@ -2540,14 +2559,37 @@ export default function Data() {
                             </div>
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap" title={row.timestamp || "-"}>{row.timestamp ? new Date(row.timestamp).toLocaleDateString() : "-"}</TableCell>
-                          <TableCell className="text-sm font-medium max-w-[120px] truncate" title={row.staffName}>{row.staffName}</TableCell>
+                          <TableCell
+                            className="text-sm font-medium max-w-[120px] truncate cursor-pointer hover:text-primary"
+                            title="Click to see full name"
+                            onClick={() => showCellDetail("Staff Name", row.staffName)}
+                          >{row.staffName}</TableCell>
                           <TableCell className="text-sm">{row.quarter}</TableCell>
                           <TableCell className="text-sm">{row.year}</TableCell>
                           <TableCell className="text-sm">{row.okrNumber}</TableCell>
-                          <TableCell className="text-sm max-w-[150px] truncate" title={row.spuName}>{row.spuName}</TableCell>
-                          <TableCell className="text-sm max-w-[100px] truncate" title={row.subUnitName || "-"}>{row.subUnitName || "-"}</TableCell>
-                          <TableCell className="text-sm max-w-[200px] truncate" title={row.objectiveStatement || "-"}>{row.objectiveStatement || "-"}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          <TableCell
+                            className="text-sm max-w-[150px] truncate cursor-pointer hover:text-primary"
+                            title="Click to see full SPU name"
+                            onClick={() => showCellDetail("SPU", row.spuName)}
+                          >{row.spuName}</TableCell>
+                          <TableCell
+                            className="text-sm max-w-[100px] truncate cursor-pointer hover:text-primary"
+                            title="Click to see full sub-unit name"
+                            onClick={() => showCellDetail("Sub-unit", row.subUnitName || "-")}
+                          >{row.subUnitName || "-"}</TableCell>
+                          <TableCell
+                            className="text-sm max-w-[200px] truncate cursor-pointer hover:text-primary"
+                            title="Click to see full objective statement"
+                            onClick={() => showCellDetail("Objective Statement", row.objectiveStatement || "-")}
+                          >{row.objectiveStatement || "-"}</TableCell>
+                          <TableCell
+                            className="text-xs text-muted-foreground whitespace-nowrap cursor-pointer hover:text-primary"
+                            title="Click to see all key results"
+                            onClick={() => {
+                              const krs = [row.keyResult1, row.keyResult2, row.keyResult3, row.keyResult4, row.keyResult5, row.keyResult6].filter(Boolean);
+                              showCellDetail("Key Results", krs.map((kr, i) => `KR${i + 1}: ${kr}`).join("\n\n"));
+                            }}
+                          >
                             {[row.keyResult1, row.keyResult2, row.keyResult3, row.keyResult4, row.keyResult5, row.keyResult6].filter(Boolean).length} KR(s)
                           </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">
