@@ -104,12 +104,15 @@ function DashboardTab() {
   
   
   const okrsNeedingUpdate = filteredOkrs.filter((okr) => {
+    if (quarterFilter === "All") {
+      return getOkrProgress(okr.id) < 100;
+    }
     const hasRecentUpdate = updates?.some((update) => {
       const quarterMatch = update.quarter === quarterFilter;
       const yearMatch = yearFilter === "All" || update.year === Number(yearFilter);
       return update.okrId === okr.id && quarterMatch && yearMatch;
     });
-    return !hasRecentUpdate && quarterFilter !== "All";
+    return !hasRecentUpdate;
   }).length;
 
   const spuProgress = spus?.map((spu) => {
