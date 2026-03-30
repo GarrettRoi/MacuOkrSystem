@@ -161,8 +161,7 @@ export interface IStorage {
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
 
-  // Staff lookup by ID number or email
-  getStaffByIdNumber(staffIdNumber: string): Promise<Staff | undefined>;
+  // Staff lookup by email
   getStaffByEmail(email: string): Promise<Staff | undefined>;
   
   getEmployeeProgress(filters: {
@@ -221,7 +220,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: staff.id,
-        staffIdNumber: staff.staffIdNumber,
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
@@ -237,7 +235,6 @@ export class DatabaseStorage implements IStorage {
 
     return result.map((row) => ({
       id: row.id,
-      staffIdNumber: row.staffIdNumber,
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
@@ -258,7 +255,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: staff.id,
-        staffIdNumber: staff.staffIdNumber,
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
@@ -278,7 +274,6 @@ export class DatabaseStorage implements IStorage {
     const row = result[0];
     return {
       id: row.id,
-      staffIdNumber: row.staffIdNumber,
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
@@ -596,7 +591,6 @@ export class DatabaseStorage implements IStorage {
         subUnit: row.staffSubUnit || null,
       } : {
         id: row.okr.staffId || "deleted",
-        staffIdNumber: null,
         name: row.okr.submitterName || "Unknown",
         email: "",
         spuId: row.okr.spuId,
@@ -931,7 +925,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: staff.id,
-        staffIdNumber: staff.staffIdNumber,
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
@@ -949,7 +942,6 @@ export class DatabaseStorage implements IStorage {
 
     return result.map((row) => ({
       id: row.id,
-      staffIdNumber: row.staffIdNumber,
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
@@ -966,7 +958,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: staff.id,
-        staffIdNumber: staff.staffIdNumber,
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
@@ -984,7 +975,6 @@ export class DatabaseStorage implements IStorage {
 
     return result.map((row) => ({
       id: row.id,
-      staffIdNumber: row.staffIdNumber,
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
@@ -1000,7 +990,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: staff.id,
-        staffIdNumber: staff.staffIdNumber,
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
@@ -1018,7 +1007,6 @@ export class DatabaseStorage implements IStorage {
 
     return result.map((row) => ({
       id: row.id,
-      staffIdNumber: row.staffIdNumber,
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
@@ -1048,7 +1036,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: staff.id,
-        staffIdNumber: staff.staffIdNumber,
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
@@ -1068,7 +1055,6 @@ export class DatabaseStorage implements IStorage {
 
     return result.map((row) => ({
       id: row.id,
-      staffIdNumber: row.staffIdNumber,
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
@@ -1108,12 +1094,6 @@ export class DatabaseStorage implements IStorage {
       .insert(appSettings)
       .values({ key, value })
       .onConflictDoUpdate({ target: appSettings.key, set: { value } });
-  }
-
-  // Staff lookup by ID number or email
-  async getStaffByIdNumber(staffIdNumber: string): Promise<Staff | undefined> {
-    const [result] = await db.select().from(staff).where(eq(staff.staffIdNumber, staffIdNumber));
-    return result || undefined;
   }
 
   async getStaffByEmail(email: string): Promise<Staff | undefined> {

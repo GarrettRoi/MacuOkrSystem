@@ -23,7 +23,6 @@ export const years = pgTable("years", {
 
 export const staff = pgTable("staff", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  staffIdNumber: text("staff_id_number").unique(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   spuId: varchar("spu_id").notNull().references(() => spus.id),

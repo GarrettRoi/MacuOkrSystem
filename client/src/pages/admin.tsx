@@ -970,7 +970,6 @@ export default function Admin({ staff }: AdminProps) {
   const [newSubUnitName, setNewSubUnitName] = useState("");
   const [newSubUnitParent, setNewSubUnitParent] = useState("");
   
-  const [newStaffIdNumber, setNewStaffIdNumber] = useState("");
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffEmail, setNewStaffEmail] = useState("");
   const [newStaffSpu, setNewStaffSpu] = useState("");
@@ -1386,12 +1385,11 @@ export default function Admin({ staff }: AdminProps) {
   });
 
   const addStaffMutation = useMutation({
-    mutationFn: async (data: { staffIdNumber?: string; name: string; email: string; spuId: string; subUnitId?: string; role: string }) => {
+    mutationFn: async (data: { name: string; email: string; spuId: string; subUnitId?: string; role: string }) => {
       return await apiRequest("POST", "/api/staff", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
-      setNewStaffIdNumber("");
       setNewStaffRole("basic");
       setStaffDialogOpen(false);
       setNewStaffName("");
@@ -1422,7 +1420,7 @@ export default function Admin({ staff }: AdminProps) {
   });
 
   const updateStaffMutation = useMutation({
-    mutationFn: async (data: { id: string; staffIdNumber?: string | null; name?: string; email?: string; role?: string; spuId?: string; subUnitId?: string }) => {
+    mutationFn: async (data: { id: string; name?: string; email?: string; role?: string; spuId?: string; subUnitId?: string }) => {
       const { id, ...updates } = data;
       return await apiRequest("PUT", `/api/staff/${id}`, updates);
     },
@@ -1708,7 +1706,6 @@ export default function Admin({ staff }: AdminProps) {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>ID Number</TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Primary SPU</TableHead>
@@ -1718,7 +1715,6 @@ export default function Admin({ staff }: AdminProps) {
                     <TableBody>
                       {myTeam.sort((a, b) => compareNames(a.name, b.name)).map((member) => (
                         <TableRow key={member.id} data-testid={`row-team-${member.id}`}>
-                          <TableCell className="text-muted-foreground">{member.staffIdNumber || "-"}</TableCell>
                           <TableCell className="font-medium">{member.name}</TableCell>
                           <TableCell>{member.email}</TableCell>
                           <TableCell>
@@ -1830,16 +1826,6 @@ export default function Admin({ staff }: AdminProps) {
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
-                        <Label htmlFor="staff-id-number">Staff ID Number</Label>
-                        <Input
-                          id="staff-id-number"
-                          value={newStaffIdNumber}
-                          onChange={(e) => setNewStaffIdNumber(e.target.value)}
-                          placeholder="e.g., 322503"
-                          data-testid="input-staff-id-number"
-                        />
-                      </div>
-                      <div className="space-y-2">
                         <Label htmlFor="staff-name">Name *</Label>
                         <Input
                           id="staff-name"
@@ -1909,7 +1895,6 @@ export default function Admin({ staff }: AdminProps) {
                         onClick={() => {
                           if (newStaffName && newStaffEmail && newStaffSpu) {
                             addStaffMutation.mutate({
-                              staffIdNumber: newStaffIdNumber || undefined,
                               name: newStaffName,
                               email: newStaffEmail,
                               spuId: newStaffSpu,
@@ -1947,7 +1932,6 @@ export default function Admin({ staff }: AdminProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Staff ID</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
@@ -1973,7 +1957,6 @@ export default function Admin({ staff }: AdminProps) {
                         .sort((a, b) => compareNames(a.name, b.name))
                         .map((member) => (
                         <TableRow key={member.id} data-testid={`row-staff-${member.id}`}>
-                          <TableCell className="text-muted-foreground">{member.staffIdNumber || "-"}</TableCell>
                           <TableCell className="font-medium">{member.name}</TableCell>
                           <TableCell>{member.email}</TableCell>
                           <TableCell>
@@ -2062,16 +2045,6 @@ export default function Admin({ staff }: AdminProps) {
                 <DialogDescription>Update staff member details and SPU assignments</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-staff-id-number">Staff ID Number</Label>
-                  <Input
-                    id="edit-staff-id-number"
-                    value={editingStaff?.staffIdNumber || ""}
-                    onChange={(e) => setEditingStaff(editingStaff ? { ...editingStaff, staffIdNumber: e.target.value || null } : null)}
-                    placeholder="e.g., 322503"
-                    data-testid="input-edit-staff-id-number"
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-staff-name">Name *</Label>
                   <Input
@@ -2162,7 +2135,6 @@ export default function Admin({ staff }: AdminProps) {
                     if (editingStaff && editingStaff.name && editingStaff.email && editingStaff.spuId) {
                       updateStaffMutation.mutate({
                         id: editingStaff.id,
-                        staffIdNumber: editingStaff.staffIdNumber,
                         name: editingStaff.name,
                         email: editingStaff.email,
                         role: editingStaff.role,

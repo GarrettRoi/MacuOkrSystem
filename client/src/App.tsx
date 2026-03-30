@@ -163,7 +163,6 @@ function AppContent() {
               id: "admin-bypass",
               name: "Administrator",
               email: "",
-              staffIdNumber: "",
               isAdmin: true,
               role: "super_admin",
               spuId: "",

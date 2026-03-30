@@ -981,18 +981,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Staff lookup by ID number or email
-  app.get("/api/staff/by-id-number/:staffIdNumber", async (req, res) => {
-    try {
-      const staff = await storage.getStaffByIdNumber(req.params.staffIdNumber);
-      if (!staff) {
-        return res.status(404).json({ error: "Staff not found" });
-      }
-      res.json(staff);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch staff" });
-    }
-  });
-
   app.get("/api/staff/by-email/:email", async (req, res) => {
     try {
       const staff = await storage.getStaffByEmail(decodeURIComponent(req.params.email));
@@ -1132,23 +1120,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sessionStaffId = req.session.selectedStaffId!;
       const sessionStaff = await storage.getStaff(sessionStaffId);
       
-      const { staffIdNumber, name, email, spuId, subUnitId, role } = req.body;
+      const { name, email, spuId, subUnitId, role } = req.body;
       
       // Leaders can only create basic users
       if (sessionStaff?.role === "leader" && role !== "basic") {
         return res.status(403).json({ error: "Leaders can only create basic users" });
-      }
-      
-      // Check if user already exists
-      if (staffIdNumber) {
-        const existingByIdNumber = await storage.getStaffByIdNumber(staffIdNumber);
-        if (existingByIdNumber) {
-          return res.status(409).json({ 
-            error: "User already exists", 
-            existingUser: existingByIdNumber,
-            message: "A user with this Staff ID Number already exists. Would you like to add them to your SPU instead?"
-          });
-        }
       }
       
       const existingByEmail = await storage.getStaffByEmail(email);
@@ -1161,7 +1137,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const parsed = insertStaffSchema.safeParse({
-        staffIdNumber,
         name,
         email,
         spuId,
