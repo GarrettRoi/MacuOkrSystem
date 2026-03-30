@@ -2141,6 +2141,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return rows;
   };
 
+  // Parse TSV (tab-separated values) — used for OKR form response exports
+  const parseTSV = (text: string): string[][] => {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    const rows: string[][] = [];
+    for (const line of lines) {
+      if (line.trim() === '') continue;
+      rows.push(line.split('\t'));
+    }
+    return rows;
+  };
+
   // Map OKR number text to format
   const mapOkrNumber = (text: string): string => {
     const normalized = text.trim().toUpperCase();
@@ -2167,17 +2178,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
   };
 
-  // CSV Preview endpoint - parses CSV and returns structured data for review
+  // TSV Import Preview endpoint — parses form-response TSV and returns structured data for review
+  // NOTE: Imports must use TSV (tab-separated values) format, not CSV.
   app.post("/api/import/csv/preview", requireAdmin, async (req, res) => {
     try {
-      const { csvData } = req.body;
-      if (!csvData || typeof csvData !== 'string') {
-        return res.status(400).json({ error: "CSV data is required" });
+      const rawData: string = req.body.tsvData || req.body.csvData;
+      if (!rawData || typeof rawData !== 'string') {
+        return res.status(400).json({ error: "TSV data is required" });
       }
 
-      const rows = parseCSV(csvData);
+      // Detect format: use TSV parser if the first line contains tabs, else fall back to CSV
+      const firstLine = rawData.split('\n')[0] || '';
+      const rows = firstLine.includes('\t') ? parseTSV(rawData) : parseCSV(rawData);
+
       if (rows.length < 2) {
-        return res.status(400).json({ error: "CSV must have at least a header row and one data row" });
+        return res.status(400).json({ error: "File must have at least a header row and one data row" });
       }
 
       const headers = rows[0];
@@ -2191,21 +2206,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return -1;
       };
 
-      const colTimestamp = getColIndex(['Timestamp']);
-      const colEmail = getColIndex(['Email']);
-      const colName = getColIndex(['Your Name', 'Name']);
-      const colQuarterYear = getColIndex(['year and quarter', 'quarter']);
-      const colOkrNumber = getColIndex(['numbered OKR', 'OKR number', 'Which numbered']);
-      const colSpu = getColIndex(['parent SPU', 'SPU']);
-      const colSubUnit = getColIndex(['sub-unit', 'sub unit', 'division']);
-      const colCollabSpu = getColIndex(['collaborating', 'collaboration']);
+      // Column mapping — matches the TSV form response export format
+      const colTimestamp    = getColIndex(['Timestamp']);
+      const colEmail        = getColIndex(['Email']);
+      const colName         = getColIndex(['Your Name', 'Name']);
+      const colQuarterYear  = getColIndex(['year and quarter', 'quarter']);
+      const colOkrNumber    = getColIndex(['numbered OKR', 'OKR number', 'Which numbered']);
+      const colSpu          = getColIndex(['parent SPU', 'SPU']);
+      const colSubUnit      = getColIndex(['sub-unit', 'sub unit', 'division']);
+      const colCollabSpu    = getColIndex(['collaborating', 'collaboration']);
       const colUniObjective = getColIndex(['Strategic Objective', 'University Level Strategic']);
       const colUniKeyResult = getColIndex(['University-Level Key Result', 'Key Result for your OKR']);
-      const colObjectiveStmt = getColIndex(['Objective Statement', 'Write your Objective']);
-      const colKR1 = getColIndex(['first Key Result', 'Key Result Statement']);
-      const colKR2 = getColIndex(['second Key Result']);
-      const colKR3 = getColIndex(['remaining Key Result', 'any remaining']);
-      const colResponsible = getColIndex(['individuals who are working', 'responsible', 'working on this']);
+      const colObjectiveStmt= getColIndex(['Objective Statement', 'Write your Objective']);
+      const colKR1          = getColIndex(['first Key Result', 'Write your first']);
+      const colKR2          = getColIndex(['second Key Result']);
+      const colKR3          = getColIndex(['third Key Result', 'third key result']);
+      const colKR4          = getColIndex(['fourth Key Result']);
+      const colKR5          = getColIndex(['fifth Key Result']);
+      const colKR6          = getColIndex(['sixth Key Result']);
+      const colScoreKR1     = getColIndex(['Score: KR1', 'Score KR1', 'score.*kr1']);
+      const colScoreKR2     = getColIndex(['Score: KR2', 'Score KR2']);
+      const colScoreKR3     = getColIndex(['Score: KR3', 'Score KR3']);
+      const colScoreKR4     = getColIndex(['Score: KR4', 'Score KR4']);
+      const colScoreKR5     = getColIndex(['Score: KR5', 'Score KR5']);
+      const colScoreKR6     = getColIndex(['Score: KR6', 'Score KR6']);
+      const colComments     = getColIndex(['Comments', 'comments']);
 
       const missingColumns: string[] = [];
       if (colName === -1) missingColumns.push('Your Name');
@@ -2218,7 +2243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           error: "Missing required columns",
           missingColumns,
           detectedHeaders: headers,
-          message: `CSV is missing required columns: ${missingColumns.join(', ')}.`
+          message: `File is missing required columns: ${missingColumns.join(', ')}. Make sure you are uploading the TSV export from the OKR submission form.`
         });
       }
 
@@ -2273,27 +2298,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const csvSeenTimestamps = new Map<string, number>();
       const csvSeenKeys = new Map<string, number>();
 
+      const parseScore = (val: string): number | null => {
+        const n = parseFloat(val.trim());
+        return isNaN(n) ? null : Math.max(0, Math.min(100, Math.round(n)));
+      };
+
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i];
-        const staffName = (row[colName] || '').trim();
-        const quarterYearText = (row[colQuarterYear] || '').trim();
-        const okrNumberText = (row[colOkrNumber] || '').trim();
-        const spuText = (row[colSpu] || '').trim();
-        const subUnitText = colSubUnit !== -1 ? (row[colSubUnit] || '').trim() : '';
-        const collabSpuText = colCollabSpu !== -1 ? (row[colCollabSpu] || '').trim() : '';
-        const uniObjective = colUniObjective !== -1 ? (row[colUniObjective] || '').trim() : '';
-        const uniKeyResult = colUniKeyResult !== -1 ? (row[colUniKeyResult] || '').trim() : '';
-        const objectiveStmt = colObjectiveStmt !== -1 ? (row[colObjectiveStmt] || '').trim() : '';
-        const kr1Text = colKR1 !== -1 ? (row[colKR1] || '').trim() : '';
-        const kr2Text = colKR2 !== -1 ? (row[colKR2] || '').trim() : '';
-        const kr3Text = colKR3 !== -1 ? (row[colKR3] || '').trim() : '';
-        const responsibleText = colResponsible !== -1 ? (row[colResponsible] || '').trim() : '';
-        const emailText = colEmail !== -1 ? (row[colEmail] || '').trim() : '';
-        const timestampText = colTimestamp !== -1 ? (row[colTimestamp] || '').trim() : '';
+        const staffName      = (row[colName] || '').trim();
+        const quarterYearText= (row[colQuarterYear] || '').trim();
+        const okrNumberText  = (row[colOkrNumber] || '').trim();
+        const spuText        = (row[colSpu] || '').trim();
+        const subUnitText    = colSubUnit !== -1 ? (row[colSubUnit] || '').trim() : '';
+        const collabSpuText  = colCollabSpu !== -1 ? (row[colCollabSpu] || '').trim() : '';
+        const uniObjective   = colUniObjective !== -1 ? (row[colUniObjective] || '').trim() : '';
+        const uniKeyResult   = colUniKeyResult !== -1 ? (row[colUniKeyResult] || '').trim() : '';
+        const objectiveStmt  = colObjectiveStmt !== -1 ? (row[colObjectiveStmt] || '').trim() : '';
+        const kr1Text        = colKR1 !== -1 ? (row[colKR1] || '').trim() : '';
+        const kr2Text        = colKR2 !== -1 ? (row[colKR2] || '').trim() : '';
+        const kr3Text        = colKR3 !== -1 ? (row[colKR3] || '').trim() : '';
+        const kr4Text        = colKR4 !== -1 ? (row[colKR4] || '').trim() : '';
+        const kr5Text        = colKR5 !== -1 ? (row[colKR5] || '').trim() : '';
+        const kr6Text        = colKR6 !== -1 ? (row[colKR6] || '').trim() : '';
+        const scoreKr1       = colScoreKR1 !== -1 ? parseScore(row[colScoreKR1] || '') : null;
+        const scoreKr2       = colScoreKR2 !== -1 ? parseScore(row[colScoreKR2] || '') : null;
+        const scoreKr3       = colScoreKR3 !== -1 ? parseScore(row[colScoreKR3] || '') : null;
+        const scoreKr4       = colScoreKR4 !== -1 ? parseScore(row[colScoreKR4] || '') : null;
+        const scoreKr5       = colScoreKR5 !== -1 ? parseScore(row[colScoreKR5] || '') : null;
+        const scoreKr6       = colScoreKR6 !== -1 ? parseScore(row[colScoreKR6] || '') : null;
+        const commentsText   = colComments !== -1 ? (row[colComments] || '').trim() : '';
+        const emailText      = colEmail !== -1 ? (row[colEmail] || '').trim() : '';
+        const timestampText  = colTimestamp !== -1 ? (row[colTimestamp] || '').trim() : '';
 
-        if (!staffName && !spuText && !okrNumberText) {
-          continue;
-        }
+        if (!staffName && !spuText && !okrNumberText) continue;
 
         const { quarter, year } = parseQuarterYear(quarterYearText);
         const okrNumber = mapOkrNumber(okrNumberText);
@@ -2306,6 +2343,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const cleanSubUnit = isPlaceholderSubUnit(subUnitText) ? '' : subUnitText;
 
+        // Clean up collaboration SPU — "Not Applicable" variants → empty
+        const cleanCollab = /not applicable/i.test(collabSpuText) ? '' : collabSpuText;
+
         let isDuplicate = false;
         let duplicateType: string | null = null;
 
@@ -2315,15 +2355,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (timestampText) {
           const tsKey = `${timestampText.trim()}|${staffName.toLowerCase().trim()}|${primarySpuText}|${okrNumber}`;
           if (existingTimestamps.has(tsKey)) {
-            isDuplicate = true;
-            duplicateType = 'existing';
+            isDuplicate = true; duplicateType = 'existing';
             rowErrors.push('Duplicate: This OKR already exists in the database');
-            console.log(`[DEDUP] Row ${i+2} DB-timestamp match: ts="${tsKey}"`);
           } else if (csvSeenTimestamps.has(tsKey)) {
-            isDuplicate = true;
-            duplicateType = 'csv';
+            isDuplicate = true; duplicateType = 'csv';
             rowErrors.push(`Duplicate: Same OKR as row ${csvSeenTimestamps.get(tsKey)} in this file`);
-            console.log(`[DEDUP] Row ${i+2} CSV-timestamp match with row ${csvSeenTimestamps.get(tsKey)}: ts="${tsKey}"`);
           }
           csvSeenTimestamps.set(tsKey, i + 2);
         }
@@ -2336,32 +2372,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (resolvedStaffId && resolvedSpuId) {
             const idKey = `${resolvedStaffId}|${resolvedSpuId}|${quarter}|${year}|${okrNumber}`;
             if (existingOkrKeys.has(idKey)) {
-              isDuplicate = true;
-              duplicateType = 'existing';
+              isDuplicate = true; duplicateType = 'existing';
               rowErrors.push('Duplicate: This OKR already exists in the database');
-              console.log(`[DEDUP] Row ${i+2} DB-ID match: key=${idKey}`);
             } else if (csvSeenKeys.has(idKey)) {
-              isDuplicate = true;
-              duplicateType = 'csv';
+              isDuplicate = true; duplicateType = 'csv';
               rowErrors.push(`Duplicate: Same as row ${csvSeenKeys.get(idKey)} in this file`);
-              console.log(`[DEDUP] Row ${i+2} CSV-ID match with row ${csvSeenKeys.get(idKey)}: key=${idKey}`);
             }
             csvSeenKeys.set(idKey, i + 2);
           } else {
             if (existingOkrNameKeys.has(nameKey)) {
-              isDuplicate = true;
-              duplicateType = 'existing';
+              isDuplicate = true; duplicateType = 'existing';
               rowErrors.push('Duplicate: This OKR already exists in the database');
-              console.log(`[DEDUP] Row ${i+2} DB-name match: key=${nameKey}`);
             } else if (csvSeenKeys.has(nameKey)) {
-              isDuplicate = true;
-              duplicateType = 'csv';
+              isDuplicate = true; duplicateType = 'csv';
               rowErrors.push(`Duplicate: Same as row ${csvSeenKeys.get(nameKey)} in this file`);
-              console.log(`[DEDUP] Row ${i+2} CSV-name match with row ${csvSeenKeys.get(nameKey)}: key=${nameKey}`);
             }
             csvSeenKeys.set(nameKey, i + 2);
           }
         }
+
+        // Calculate average score from present KR scores
+        const allScores = [scoreKr1, scoreKr2, scoreKr3, scoreKr4, scoreKr5, scoreKr6];
+        const presentScores = allScores.filter((s): s is number => s !== null);
+        const averageScore = presentScores.length > 0
+          ? Math.round(presentScores.reduce((a, b) => a + b, 0) / presentScores.length)
+          : null;
+        const hasScores = presentScores.length > 0;
 
         previewRows.push({
           rowIndex: i + 2,
@@ -2373,14 +2409,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           okrNumber,
           spuName: spuText,
           subUnitName: cleanSubUnit,
-          collaborationSpu: collabSpuText,
+          collaborationSpu: cleanCollab,
           universityObjective: uniObjective,
           universityKeyResult: uniKeyResult,
           objectiveStatement: objectiveStmt,
           keyResult1: kr1Text,
           keyResult2: kr2Text,
           keyResult3: kr3Text,
-          responsibleParties: responsibleText,
+          keyResult4: kr4Text,
+          keyResult5: kr5Text,
+          keyResult6: kr6Text,
+          scoreKr1,
+          scoreKr2,
+          scoreKr3,
+          scoreKr4,
+          scoreKr5,
+          scoreKr6,
+          averageScore,
+          hasScores,
+          comments: commentsText,
           errors: rowErrors,
           include: rowErrors.length === 0 && !isDuplicate,
           isDuplicate,
@@ -2402,12 +2449,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
     } catch (error: any) {
-      console.error("CSV preview error:", error);
-      res.status(500).json({ error: "Failed to parse CSV", details: error.message });
+      console.error("TSV preview error:", error);
+      res.status(500).json({ error: "Failed to parse file", details: error.message });
     }
   });
 
-  // CSV Import confirm endpoint - imports reviewed/corrected data
+  // TSV Import confirm endpoint — imports reviewed data and optionally creates quarterly updates from embedded scores
   app.post("/api/import/csv/confirm", requireAdmin, async (req, res) => {
     try {
       const { rows } = req.body;
@@ -2421,6 +2468,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         staffCreated: 0,
         yearsCreated: 0,
         okrsCreated: 0,
+        updatesCreated: 0,
         rowsSkipped: 0,
         duplicatesSkipped: 0,
         errors: [] as string[],
@@ -2461,7 +2509,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const { staffName, quarter, year, okrNumber, spuName, subUnitName, collaborationSpu,
                   universityObjective, universityKeyResult, objectiveStatement,
-                  keyResult1, keyResult2, keyResult3, responsibleParties, timestamp: rowTimestamp } = row;
+                  keyResult1, keyResult2, keyResult3, keyResult4, keyResult5, keyResult6,
+                  scoreKr1, scoreKr2, scoreKr3, scoreKr4, scoreKr5, scoreKr6,
+                  averageScore, hasScores, comments,
+                  timestamp: rowTimestamp } = row;
 
           if (!staffName || !spuName || !okrNumber) {
             results.rowsSkipped++;
@@ -2502,14 +2553,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           let collabSpu = null;
-          if (collaborationSpu) {
-            if (spuCache.has(collaborationSpu.toLowerCase())) {
-              collabSpu = spuCache.get(collaborationSpu.toLowerCase());
-            } else {
-              const existingBefore = await storage.getSpuByName(collaborationSpu);
-              collabSpu = await storage.findOrCreateSpu(collaborationSpu);
-              spuCache.set(collaborationSpu.toLowerCase(), collabSpu);
-              if (!existingBefore) results.spusCreated++;
+          if (collaborationSpu && !/not applicable/i.test(collaborationSpu)) {
+            // Collaboration SPU can be a comma-separated list; create/find each
+            const collabNames = collaborationSpu.split(',').map((s: string) => s.trim()).filter(Boolean);
+            for (const cName of collabNames) {
+              if (spuCache.has(cName.toLowerCase())) {
+                collabSpu = spuCache.get(cName.toLowerCase());
+              } else {
+                const existingBefore = await storage.getSpuByName(cName);
+                collabSpu = await storage.findOrCreateSpu(cName);
+                spuCache.set(cName.toLowerCase(), collabSpu);
+                if (!existingBefore) results.spusCreated++;
+              }
+              break; // only store the first collaboration SPU reference on the OKR
             }
           }
 
@@ -2523,30 +2579,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!existingBefore) results.staffCreated++;
           }
 
-          const keyResultsArray: { description: string; percentage: number }[] = [];
-          if (keyResult1) keyResultsArray.push({ description: keyResult1, percentage: 100 });
-          if (keyResult2) keyResultsArray.push({ description: keyResult2, percentage: 100 });
-          if (keyResult3) keyResultsArray.push({ description: keyResult3, percentage: 100 });
+          // Build key results array from up to 6 KR columns
+          const krTexts = [keyResult1, keyResult2, keyResult3, keyResult4, keyResult5, keyResult6]
+            .map((t: any) => (t || '').trim())
+            .filter(Boolean);
 
-          if (keyResultsArray.length === 0) {
-            keyResultsArray.push({ description: 'Key Result 1', percentage: 100 });
-          }
+          const keyResultsArray: { description: string; percentage: number }[] = krTexts.length > 0
+            ? krTexts.map((t: string) => ({ description: t, percentage: 100 }))
+            : [{ description: 'Key Result 1', percentage: 100 }];
 
           const perKr = Math.floor(100 / keyResultsArray.length);
-          keyResultsArray.forEach((kr, idx) => {
-            kr.percentage = idx === keyResultsArray.length - 1 ? 100 - perKr * (keyResultsArray.length - 1) : perKr;
+          keyResultsArray.forEach((kr: any, idx: number) => {
+            kr.percentage = idx === keyResultsArray.length - 1
+              ? 100 - perKr * (keyResultsArray.length - 1)
+              : perKr;
           });
 
+          // Server-side duplicate guard
           let isConfirmDuplicate = false;
           if (rowTimestamp) {
-            const staffNameLower = staffRecord.name.toLowerCase().trim();
-            const spuNameLower = primarySpu.name.toLowerCase().trim();
-            const tsKey = `${rowTimestamp.trim()}|${staffNameLower}|${spuNameLower}|${okrNumber}`;
+            const tsKey = `${rowTimestamp.trim()}|${staffRecord.name.toLowerCase().trim()}|${primarySpu.name.toLowerCase().trim()}|${okrNumber}`;
             if (existingTimestamps.has(tsKey) || importedTimestamps.has(tsKey)) {
               isConfirmDuplicate = true;
             }
             importedTimestamps.add(tsKey);
-          } else if (!rowTimestamp) {
+          } else {
             const confirmDedupKey = `${staffRecord.id}|${primarySpu.id}|${quarter}|${year}|${okrNumber}`;
             if (existingOkrKeys.has(confirmDedupKey) || importedKeys.has(confirmDedupKey)) {
               isConfirmDuplicate = true;
@@ -2569,12 +2626,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
             collaborationSpuId: collabSpu?.id || null,
             universityObjective: universityObjective || '',
             universityKeyResult: universityKeyResult || '',
-            objectiveStatement: objectiveStatement || `Imported OKR`,
+            objectiveStatement: objectiveStatement || 'Imported OKR',
             keyResults: JSON.stringify(keyResultsArray),
             submissionTimestamp: rowTimestamp || null,
           });
-          if (rowTimestamp) importedTimestamps.add(rowTimestamp.trim());
           results.okrsCreated++;
+
+          // If the row has embedded scores, create a quarterly update
+          if (hasScores) {
+            const krScoresRaw = [scoreKr1, scoreKr2, scoreKr3, scoreKr4, scoreKr5, scoreKr6];
+            // Only include scores for KRs that actually exist
+            const krScoresForKrs = krScoresRaw.slice(0, keyResultsArray.length);
+            const keyResultScores = JSON.stringify(krScoresForKrs);
+            const presentScores = krScoresForKrs.filter((s: any): s is number => s !== null);
+            const avgScore = presentScores.length > 0
+              ? Math.round(presentScores.reduce((a: number, b: number) => a + b, 0) / presentScores.length)
+              : 0;
+
+            await storage.createQuarterlyUpdate({
+              okrId: okr.id,
+              staffId: staffRecord.id,
+              scorerName: staffRecord.name,
+              quarter,
+              year,
+              progress: avgScore,
+              keyResultScores,
+              averageScore: avgScore,
+              additionalKeyResults: null,
+              notes: comments || '',
+              isPrimaryScore: true,
+              isCollaborativeScore: false,
+            });
+            results.updatesCreated++;
+          }
 
         } catch (rowError: any) {
           results.errors.push(`Row ${row.rowIndex}: ${rowError.message}`);
@@ -2582,7 +2666,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const errorCount = results.errors.length;
-      let message = `Import completed: ${results.okrsCreated} OKRs created, ${results.staffCreated} new staff, ${results.spusCreated} new SPUs, ${results.subUnitsCreated} new sub-units.`;
+      let message = `Import completed: ${results.okrsCreated} OKRs created`;
+      if (results.updatesCreated > 0) message += `, ${results.updatesCreated} quarterly updates created`;
+      message += `, ${results.staffCreated} new staff, ${results.spusCreated} new SPUs, ${results.subUnitsCreated} new sub-units.`;
       if (results.duplicatesSkipped > 0) message += ` ${results.duplicatesSkipped} duplicate(s) skipped.`;
       if (results.rowsSkipped > 0) message += ` ${results.rowsSkipped} rows skipped.`;
       if (errorCount > 0) message += ` ${errorCount} error(s).`;
@@ -2590,8 +2676,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, results, message });
 
     } catch (error: any) {
-      console.error("CSV import error:", error);
-      res.status(500).json({ error: "Failed to import CSV", details: error.message });
+      console.error("TSV import error:", error);
+      res.status(500).json({ error: "Failed to import file", details: error.message });
     }
   });
 

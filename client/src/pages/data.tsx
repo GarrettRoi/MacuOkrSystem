@@ -454,8 +454,8 @@ export default function Data() {
   });
 
   const previewCsvMutation = useMutation({
-    mutationFn: async (csvData: string) => {
-      const res = await apiRequest("POST", "/api/import/csv/preview", { csvData });
+    mutationFn: async (tsvData: string) => {
+      const res = await apiRequest("POST", "/api/import/csv/preview", { tsvData });
       return await res.json();
     },
     onSuccess: (data: any) => {
@@ -475,8 +475,8 @@ export default function Data() {
     },
     onError: (error: any) => {
       toast({
-        title: "Failed to Parse CSV",
-        description: error?.message || "Could not parse the CSV file. Please check the format.",
+        title: "Failed to Parse TSV",
+        description: error?.message || "Could not parse the TSV file. Make sure it is a tab-separated export from the OKR form.",
         variant: "destructive",
       });
     },
@@ -645,8 +645,8 @@ export default function Data() {
 
   const handlePreviewCsv = async () => {
     if (!importFile) return;
-    const csvData = await importFile.text();
-    previewCsvMutation.mutate(csvData);
+    const tsvData = await importFile.text();
+    previewCsvMutation.mutate(tsvData);
   };
 
   const handleConfirmImport = async () => {
@@ -2329,12 +2329,12 @@ export default function Data() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileUp className="h-5 w-5" />
-              {importStep === "upload" && "Import OKR Data from CSV"}
+              {importStep === "upload" && "Import OKR Data from TSV"}
               {importStep === "preview" && "Review Import Data"}
               {importStep === "importing" && "Importing..."}
             </DialogTitle>
             <DialogDescription>
-              {importStep === "upload" && "Upload a CSV file from the OKR tracking spreadsheet. You'll be able to review and fix data before importing."}
+              {importStep === "upload" && "Upload a TSV file exported from the OKR submission Google Form. Scores and comments in the file will be imported as quarterly updates automatically."}
               {importStep === "preview" && `${importPreviewData.filter(r => r.include).length} of ${importPreviewData.length} rows selected for import. Click a row to edit, or uncheck to exclude.`}
               {importStep === "importing" && "Please wait while the data is being imported..."}
             </DialogDescription>
@@ -2345,7 +2345,7 @@ export default function Data() {
               <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
                 <input
                   type="file"
-                  accept=".csv"
+                  accept=".tsv,.txt"
                   onChange={handleFileSelect}
                   className="hidden"
                   id="csv-file-input"
@@ -2357,20 +2357,25 @@ export default function Data() {
                     {importFile ? (
                       <span className="text-foreground font-medium">{importFile.name}</span>
                     ) : (
-                      <>Click to select a CSV file</>
+                      <>Click to select a TSV file</>
                     )}
                   </p>
                 </label>
               </div>
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md p-3 text-sm flex gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-amber-800 dark:text-amber-300 text-xs">Future imports must use <strong>TSV (tab-separated values)</strong> format, not CSV. Export directly from the OKR submission Google Form.</p>
+              </div>
               <div className="bg-muted/50 rounded-md p-4 text-sm">
-                <p className="font-medium mb-2">Expected CSV columns:</p>
+                <p className="font-medium mb-2">Expected TSV columns (24 columns):</p>
                 <ul className="list-disc list-inside space-y-1 text-muted-foreground text-xs">
                   <li>Timestamp, Email Address, Your Name</li>
                   <li>Year and Quarter, Numbered OKR</li>
                   <li>Parent SPU, Sub-unit, Collaboration SPU</li>
                   <li>University Strategic Objective, University Key Result</li>
-                  <li>Objective Statement, Key Result Statements (1-3)</li>
-                  <li>Responsible Parties</li>
+                  <li>Objective Statement, Key Result Statements (1–6)</li>
+                  <li>Scores: KR1–KR6 (0–100 % progress per key result)</li>
+                  <li>Comments (imported as quarterly update notes)</li>
                 </ul>
               </div>
               <DialogFooter>
@@ -2378,7 +2383,7 @@ export default function Data() {
                   Cancel
                 </Button>
                 <Button onClick={handlePreviewCsv} disabled={!importFile || previewCsvMutation.isPending} data-testid="button-preview-csv">
-                  {previewCsvMutation.isPending ? "Parsing..." : "Preview Data"}
+                  {previewCsvMutation.isPending ? "Parsing..." : "Preview TSV Data"}
                 </Button>
               </DialogFooter>
             </div>
@@ -2436,7 +2441,8 @@ export default function Data() {
                       <TableHead>SPU</TableHead>
                       <TableHead>Sub-unit</TableHead>
                       <TableHead>Objective Statement</TableHead>
-                      <TableHead>KR 1</TableHead>
+                      <TableHead>KRs</TableHead>
+                      <TableHead>Scores</TableHead>
                       <TableHead className="w-10">Edit</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -2472,7 +2478,18 @@ export default function Data() {
                           <TableCell className="text-sm max-w-[150px] truncate" title={row.spuName}>{row.spuName}</TableCell>
                           <TableCell className="text-sm max-w-[100px] truncate" title={row.subUnitName || "-"}>{row.subUnitName || "-"}</TableCell>
                           <TableCell className="text-sm max-w-[200px] truncate" title={row.objectiveStatement || "-"}>{row.objectiveStatement || "-"}</TableCell>
-                          <TableCell className="text-sm max-w-[150px] truncate" title={row.keyResult1 || "-"}>{row.keyResult1 || "-"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                            {[row.keyResult1, row.keyResult2, row.keyResult3, row.keyResult4, row.keyResult5, row.keyResult6].filter(Boolean).length} KR(s)
+                          </TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {row.hasScores ? (
+                              <span className="text-green-700 dark:text-green-400 font-medium">
+                                avg {row.averageScore}%
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
@@ -2486,7 +2503,7 @@ export default function Data() {
                         </TableRow>
                         {editingImportRow === idx && (
                           <TableRow key={`edit-${idx}`}>
-                            <TableCell colSpan={12} className="bg-muted/30 p-4">
+                            <TableCell colSpan={13} className="bg-muted/30 p-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 <div className="space-y-1">
                                   <label className="text-xs font-medium text-muted-foreground">Submitted</label>
@@ -2548,7 +2565,7 @@ export default function Data() {
                                     data-testid={`input-import-subunit-${idx}`}
                                   />
                                 </div>
-                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                <div className="space-y-1 md:col-span-2 lg:col-span-2">
                                   <label className="text-xs font-medium text-muted-foreground">Collaboration SPU</label>
                                   <Input
                                     value={row.collaborationSpu}
@@ -2583,41 +2600,53 @@ export default function Data() {
                                     data-testid={`input-import-obj-stmt-${idx}`}
                                   />
                                 </div>
-                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
-                                  <label className="text-xs font-medium text-muted-foreground">Key Result 1</label>
-                                  <Textarea
-                                    value={row.keyResult1}
-                                    onChange={(e) => updateImportRow(idx, "keyResult1", e.target.value)}
-                                    rows={2}
-                                    data-testid={`input-import-kr1-${idx}`}
-                                  />
-                                </div>
-                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
-                                  <label className="text-xs font-medium text-muted-foreground">Key Result 2</label>
-                                  <Textarea
-                                    value={row.keyResult2}
-                                    onChange={(e) => updateImportRow(idx, "keyResult2", e.target.value)}
-                                    rows={2}
-                                    data-testid={`input-import-kr2-${idx}`}
-                                  />
-                                </div>
-                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
-                                  <label className="text-xs font-medium text-muted-foreground">Key Result 3 / Additional</label>
-                                  <Textarea
-                                    value={row.keyResult3}
-                                    onChange={(e) => updateImportRow(idx, "keyResult3", e.target.value)}
-                                    rows={2}
-                                    data-testid={`input-import-kr3-${idx}`}
-                                  />
-                                </div>
-                                <div className="space-y-1 md:col-span-2 lg:col-span-3">
-                                  <label className="text-xs font-medium text-muted-foreground">Responsible Parties</label>
-                                  <Input
-                                    value={row.responsibleParties}
-                                    onChange={(e) => updateImportRow(idx, "responsibleParties", e.target.value)}
-                                    data-testid={`input-import-responsible-${idx}`}
-                                  />
-                                </div>
+                                {[
+                                  { field: "keyResult1", label: "Key Result 1" },
+                                  { field: "keyResult2", label: "Key Result 2" },
+                                  { field: "keyResult3", label: "Key Result 3" },
+                                  { field: "keyResult4", label: "Key Result 4" },
+                                  { field: "keyResult5", label: "Key Result 5" },
+                                  { field: "keyResult6", label: "Key Result 6" },
+                                ].map(({ field, label }, krIdx) => (row[field] || krIdx === 0) ? (
+                                  <div key={field} className="space-y-1 md:col-span-2 lg:col-span-3">
+                                    <label className="text-xs font-medium text-muted-foreground">{label}</label>
+                                    <Textarea
+                                      value={row[field] || ""}
+                                      onChange={(e) => updateImportRow(idx, field, e.target.value)}
+                                      rows={2}
+                                      data-testid={`input-import-${field}-${idx}`}
+                                    />
+                                  </div>
+                                ) : null)}
+                                {row.hasScores && (
+                                  <div className="md:col-span-2 lg:col-span-3 space-y-1">
+                                    <label className="text-xs font-medium text-muted-foreground">Scores from TSV (read-only, will create a quarterly update)</label>
+                                    <div className="flex flex-wrap gap-2 py-2">
+                                      {[
+                                        { label: "KR1", val: row.scoreKr1 },
+                                        { label: "KR2", val: row.scoreKr2 },
+                                        { label: "KR3", val: row.scoreKr3 },
+                                        { label: "KR4", val: row.scoreKr4 },
+                                        { label: "KR5", val: row.scoreKr5 },
+                                        { label: "KR6", val: row.scoreKr6 },
+                                      ].filter(s => s.val !== null && s.val !== undefined).map(s => (
+                                        <Badge key={s.label} variant="secondary" className="text-xs">{s.label}: {s.val}%</Badge>
+                                      ))}
+                                      <Badge variant="outline" className="text-xs font-semibold">Avg: {row.averageScore}%</Badge>
+                                    </div>
+                                  </div>
+                                )}
+                                {row.comments && (
+                                  <div className="space-y-1 md:col-span-2 lg:col-span-3">
+                                    <label className="text-xs font-medium text-muted-foreground">Comments (will be imported as quarterly update notes)</label>
+                                    <Textarea
+                                      value={row.comments}
+                                      onChange={(e) => updateImportRow(idx, "comments", e.target.value)}
+                                      rows={2}
+                                      data-testid={`input-import-comments-${idx}`}
+                                    />
+                                  </div>
+                                )}
                                 {row.errors.length > 0 && (
                                   <div className="md:col-span-2 lg:col-span-3">
                                     <div className="flex items-center gap-2 text-destructive text-xs">
