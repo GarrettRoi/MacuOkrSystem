@@ -3321,7 +3321,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { action } = req.query;
       if (action === "dismiss") {
+        const reason = req.body?.reason || "No reason provided";
+        const score = await storage.getUnmatchedScore(req.params.id);
         await storage.dismissUnmatchedScore(req.params.id);
+        await storage.createEditLog({
+          okrId: null,
+          editedBy: null,
+          editedByName: "Admin",
+          actionType: "delete",
+          reason,
+          changedFields: JSON.stringify(["status"]),
+          previousValues: JSON.stringify({
+            type: "unmatched_score",
+            id: req.params.id,
+            spuName: score?.spuName,
+            subUnitName: score?.subUnitName,
+            quarter: score?.quarter,
+            year: score?.year,
+            okrNumber: score?.okrNumber,
+            status: "pending",
+          }),
+          newValues: JSON.stringify({ status: "dismissed" }),
+        });
       } else {
         await storage.deleteUnmatchedScore(req.params.id);
       }

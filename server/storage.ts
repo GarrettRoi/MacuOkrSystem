@@ -187,6 +187,7 @@ export interface IStorage {
   // Unmatched Scores
   getAllUnmatchedScores(): Promise<UnmatchedScore[]>;
   getPendingUnmatchedScores(): Promise<UnmatchedScore[]>;
+  getUnmatchedScore(id: string): Promise<UnmatchedScore | undefined>;
   createUnmatchedScore(score: InsertUnmatchedScore): Promise<UnmatchedScore>;
   matchUnmatchedScore(id: string, okrId: string): Promise<UnmatchedScore>;
   dismissUnmatchedScore(id: string): Promise<void>;
@@ -1253,6 +1254,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(unmatchedScores)
       .where(eq(unmatchedScores.status, "pending"))
       .orderBy(desc(unmatchedScores.importedAt));
+  }
+
+  async getUnmatchedScore(id: string): Promise<UnmatchedScore | undefined> {
+    const [result] = await db.select().from(unmatchedScores).where(eq(unmatchedScores.id, id));
+    return result;
   }
 
   async createUnmatchedScore(score: InsertUnmatchedScore): Promise<UnmatchedScore> {

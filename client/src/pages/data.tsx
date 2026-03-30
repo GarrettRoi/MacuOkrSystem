@@ -81,6 +81,11 @@ export default function Data() {
   const [deleteMode, setDeleteMode] = useState<"single" | "bulk">("single");
   const [singleDeleteId, setSingleDeleteId] = useState<string | null>(null);
 
+  // Dismiss dialog states
+  const [dismissDialogOpen, setDismissDialogOpen] = useState(false);
+  const [dismissingScoreId, setDismissingScoreId] = useState<string | null>(null);
+  const [dismissReason, setDismissReason] = useState("");
+
   // Import states
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -605,18 +610,37 @@ export default function Data() {
   });
 
   const dismissUnmatchedScoreMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest("DELETE", `/api/unmatched-scores/${id}?action=dismiss`);
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await apiRequest("DELETE", `/api/unmatched-scores/${id}?action=dismiss`, { reason });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/unmatched-scores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/edit-logs"] });
       toast({ title: "Score Dismissed", description: "The unmatched score has been dismissed." });
     },
     onError: () => {
       toast({ title: "Dismiss Failed", description: "Could not dismiss this score.", variant: "destructive" });
     },
   });
+
+  const handleDismissScore = (scoreId: string) => {
+    setDismissingScoreId(scoreId);
+    setDismissReason("");
+    setDismissDialogOpen(true);
+  };
+
+  const confirmDismiss = () => {
+    if (!dismissReason.trim()) {
+      toast({ title: "Reason Required", description: "Please provide a reason for dismissing this score.", variant: "destructive" });
+      return;
+    }
+    if (!dismissingScoreId) return;
+    dismissUnmatchedScoreMutation.mutate({ id: dismissingScoreId, reason: dismissReason.trim() });
+    setDismissDialogOpen(false);
+    setDismissingScoreId(null);
+    setDismissReason("");
+  };
 
   const resetImportState = () => {
     setImportFile(null);
@@ -1679,7 +1703,7 @@ export default function Data() {
                                   size="sm"
                                   className="h-7 text-xs text-muted-foreground shrink-0"
                                   data-testid={`button-dismiss-unmatched-${score.id}`}
-                                  onClick={() => dismissUnmatchedScoreMutation.mutate(score.id)}
+                                  onClick={() => handleDismissScore(score.id)}
                                 >
                                   <X className="h-3 w-3 mr-1" />
                                   Dismiss
@@ -1849,7 +1873,7 @@ export default function Data() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Reason for deletion</label>
+              <label className="text-sm font-medium">Reason for deletion <span className="text-destructive">*</span></label>
               <Textarea
                 value={deleteReason}
                 onChange={(e) => setDeleteReason(e.target.value)}
@@ -1888,11 +1912,56 @@ export default function Data() {
               onClick={confirmDelete}
               disabled={
                 deleteConfirmText !== (deleteMode === "single" ? "DELETE" : `DELETE ${selectedOkrIds.size}`) ||
+                !deleteReason.trim() ||
                 deleteOkrMutation.isPending
               }
               data-testid="button-confirm-delete"
             >
               {deleteOkrMutation.isPending ? "Deleting..." : "Delete Permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dismiss Unmatched Score Dialog */}
+      <Dialog open={dismissDialogOpen} onOpenChange={(open) => { if (!open) { setDismissDialogOpen(false); setDismissingScoreId(null); setDismissReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Dismiss Unmatched Score
+            </DialogTitle>
+            <DialogDescription>
+              This score will be dismissed and removed from the pending queue. This action is recorded in the audit log.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reason for dismissal <span className="text-destructive">*</span></label>
+              <Textarea
+                value={dismissReason}
+                onChange={(e) => setDismissReason(e.target.value)}
+                placeholder="Why are you dismissing this score? (recorded in audit log)"
+                rows={3}
+                data-testid="input-dismiss-reason"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setDismissDialogOpen(false); setDismissingScoreId(null); setDismissReason(""); }}
+              data-testid="button-cancel-dismiss"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDismiss}
+              disabled={!dismissReason.trim() || dismissUnmatchedScoreMutation.isPending}
+              data-testid="button-confirm-dismiss"
+            >
+              {dismissUnmatchedScoreMutation.isPending ? "Dismissing..." : "Dismiss Score"}
             </Button>
           </DialogFooter>
         </DialogContent>
