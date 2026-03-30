@@ -23,6 +23,8 @@ import {
   type UniversityKeyResult,
   type UniversityObjectiveWithKeyResults,
   type StrategicAdvancementData,
+  type StrategicChartData,
+  type StrategicChartRange,
   type AnalyticsDashboard,
   type AnalyticsWidget,
   type InsertAnalyticsDashboard,
@@ -51,6 +53,7 @@ import {
   universityKeyResults,
   universityKeyResultProgress,
   universityObjectiveComments,
+  universityProgressDatapoints,
   analyticsDashboards,
   analyticsWidgets,
   editLogs,
@@ -146,6 +149,9 @@ export interface IStorage {
   getStrategicAdvancementData(): Promise<import("@shared/schema").StrategicAdvancementData>;
   setKeyResultProgress(keyResultId: string, progressPercent: number): Promise<void>;
   setObjectiveComment(objectiveId: string, comment: string): Promise<void>;
+  getStrategicChartData(): Promise<import("@shared/schema").StrategicChartData>;
+  setChartRange(range: import("@shared/schema").StrategicChartRange): Promise<void>;
+  bulkUpsertChartDatapoints(items: Array<{ keyResultId: string; quarter: string; year: number; progressPercent: number | null }>): Promise<void>;
 
   // Analytics Dashboards
   getAllAnalyticsDashboards(): Promise<AnalyticsDashboardWithWidgets[]>;
@@ -1170,6 +1176,61 @@ export class DatabaseStorage implements IStorage {
       .insert(universityObjectiveComments)
       .values({ objectiveId, comment })
       .onConflictDoUpdate({ target: universityObjectiveComments.objectiveId, set: { comment } });
+  }
+
+  async getStrategicChartData(): Promise<StrategicChartData> {
+    const objectives = await db.select().from(universityObjectives).where(eq(universityObjectives.isActive, true)).orderBy(asc(universityObjectives.sortOrder));
+    const krs = await db.select().from(universityKeyResults).orderBy(asc(universityKeyResults.sortOrder));
+    const datapoints = await db.select().from(universityProgressDatapoints);
+    const commentRows = await db.select().from(universityObjectiveComments);
+    const commentMap = new Map(commentRows.map(r => [r.objectiveId, r.comment]));
+    const lastUpdatedRow = await db.select().from(appSettings).where(eq(appSettings.key, "strategic_advancement_updated_at"));
+    const rangeRow = await db.select().from(appSettings).where(eq(appSettings.key, "strategic_chart_range"));
+    let range: StrategicChartRange | null = null;
+    if (rangeRow[0]?.value) {
+      try { range = JSON.parse(rangeRow[0].value); } catch {}
+    }
+    return {
+      range,
+      objectives: objectives.map(obj => ({
+        id: obj.id,
+        label: obj.label,
+        description: obj.description,
+        comment: commentMap.get(obj.id) ?? "",
+        keyResults: krs
+          .filter(kr => kr.objectiveId === obj.id)
+          .map(kr => ({
+            id: kr.id,
+            label: kr.label,
+            description: kr.description,
+            datapoints: datapoints.filter(d => d.keyResultId === kr.id).map(d => ({ quarter: d.quarter, year: d.year, progressPercent: d.progressPercent })),
+          })),
+      })),
+      lastUpdated: lastUpdatedRow[0]?.value ?? null,
+    };
+  }
+
+  async setChartRange(range: StrategicChartRange): Promise<void> {
+    await db.insert(appSettings).values({ key: "strategic_chart_range", value: JSON.stringify(range) })
+      .onConflictDoUpdate({ target: appSettings.key, set: { value: JSON.stringify(range) } });
+  }
+
+  async bulkUpsertChartDatapoints(items: Array<{ keyResultId: string; quarter: string; year: number; progressPercent: number | null }>): Promise<void> {
+    for (const item of items) {
+      if (item.progressPercent === null) {
+        await db.delete(universityProgressDatapoints)
+          .where(and(eq(universityProgressDatapoints.keyResultId, item.keyResultId), eq(universityProgressDatapoints.quarter, item.quarter), eq(universityProgressDatapoints.year, item.year)));
+      } else {
+        const existing = await db.select().from(universityProgressDatapoints)
+          .where(and(eq(universityProgressDatapoints.keyResultId, item.keyResultId), eq(universityProgressDatapoints.quarter, item.quarter), eq(universityProgressDatapoints.year, item.year)));
+        if (existing.length > 0) {
+          await db.update(universityProgressDatapoints).set({ progressPercent: item.progressPercent })
+            .where(and(eq(universityProgressDatapoints.keyResultId, item.keyResultId), eq(universityProgressDatapoints.quarter, item.quarter), eq(universityProgressDatapoints.year, item.year)));
+        } else {
+          await db.insert(universityProgressDatapoints).values({ keyResultId: item.keyResultId, quarter: item.quarter, year: item.year, progressPercent: item.progressPercent });
+        }
+      }
+    }
   }
 
   private async getDashboardsWithWidgets(filter?: { isPublished: boolean }): Promise<AnalyticsDashboardWithWidgets[]> {

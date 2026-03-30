@@ -96,6 +96,18 @@ export const universityObjectiveComments = pgTable("university_objective_comment
   comment: text("comment").notNull().default(""),
 });
 
+export const universityProgressDatapoints = pgTable("university_progress_datapoints", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  keyResultId: varchar("key_result_id").notNull().references(() => universityKeyResults.id, { onDelete: "cascade" }),
+  quarter: text("quarter").notNull(),
+  year: integer("year").notNull(),
+  progressPercent: integer("progress_percent").notNull().default(0),
+});
+
+export const insertProgressDatapointSchema = createInsertSchema(universityProgressDatapoints).omit({ id: true });
+export type InsertProgressDatapoint = z.infer<typeof insertProgressDatapointSchema>;
+export type ProgressDatapoint = typeof universityProgressDatapoints.$inferSelect;
+
 export const okrs = pgTable("okrs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").references(() => staff.id, { onDelete: "set null" }),
@@ -378,6 +390,34 @@ export type StrategicAdvancementObjective = UniversityObjective & {
 
 export type StrategicAdvancementData = {
   objectives: StrategicAdvancementObjective[];
+  lastUpdated: string | null;
+};
+
+export type StrategicChartKR = {
+  id: string;
+  label: string;
+  description: string;
+  datapoints: Array<{ quarter: string; year: number; progressPercent: number }>;
+};
+
+export type StrategicChartObjective = {
+  id: string;
+  label: string;
+  description: string;
+  comment: string;
+  keyResults: StrategicChartKR[];
+};
+
+export type StrategicChartRange = {
+  startQuarter: string;
+  startYear: number;
+  endQuarter: string;
+  endYear: number;
+};
+
+export type StrategicChartData = {
+  range: StrategicChartRange | null;
+  objectives: StrategicChartObjective[];
   lastUpdated: string | null;
 };
 

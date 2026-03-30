@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
 import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar } from "lucide-react";
-import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, AnalyticsDashboardWithWidgets } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, StrategicChartData, AnalyticsDashboardWithWidgets } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
+import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 
@@ -742,42 +743,95 @@ function AnalyticsTab() {
   );
 }
 
+const QUARTER_LABELS: Record<string, string> = { Q1: "Q1", Q2: "Q2", Q3: "Q3", Q4: "Q4" };
+
 function StrategicAdvancementTab() {
-  const { data, isLoading } = useQuery<StrategicAdvancementData>({
-    queryKey: ["/api/strategic-advancement"],
+  const { data, isLoading } = useQuery<StrategicChartData>({
+    queryKey: ["/api/strategic-advancement/chart"],
   });
+
+  const allObjectiveIds = useMemo(() => (data?.objectives ?? []).map(o => `obj-${o.id}`), [data]);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (allObjectiveIds.length > 0 && selectedItems.size === 0) {
+      setSelectedItems(new Set(allObjectiveIds));
+    }
+  }, [allObjectiveIds]);
 
   const formatDate = (iso: string | null) => {
     if (!iso) return null;
-    return new Date(iso).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
+    return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  };
+
+  const objectives = data?.objectives ?? [];
+  const range = data?.range ?? null;
+  const lastUpdated = formatDate(data?.lastUpdated ?? null);
+
+  const periods = useMemo(() => {
+    if (!range) return [];
+    return generateQuarterPeriods(range.startQuarter, range.startYear, range.endQuarter, range.endYear);
+  }, [range]);
+
+  const allKRs = useMemo(() => objectives.flatMap(obj => obj.keyResults.map(kr => ({ ...kr, objId: obj.id, objLabel: obj.label }))), [objectives]);
+
+  const chartItems = useMemo(() => {
+    const items: Array<{ key: string; label: string; color: string; isObjective: boolean; objId?: string; krId?: string }> = [];
+    let colorIdx = 0;
+    for (const obj of objectives) {
+      if (selectedItems.has(`obj-${obj.id}`)) {
+        items.push({ key: `obj-${obj.id}`, label: `${obj.label} (avg)`, color: CHART_COLORS[colorIdx++ % CHART_COLORS.length], isObjective: true, objId: obj.id });
+      }
+      for (const kr of obj.keyResults) {
+        if (selectedItems.has(`kr-${kr.id}`)) {
+          items.push({ key: `kr-${kr.id}`, label: `${obj.label} ${kr.label}`, color: CHART_COLORS[colorIdx++ % CHART_COLORS.length], isObjective: false, krId: kr.id });
+        }
+      }
+    }
+    return items;
+  }, [objectives, selectedItems]);
+
+  const rechartsData = useMemo(() => {
+    if (!range || periods.length === 0) return [];
+    return periods.map(p => {
+      const point: Record<string, string | number | null> = { period: `${p.quarter} ${p.year}` };
+      for (const item of chartItems) {
+        if (item.isObjective && item.objId) {
+          const obj = objectives.find(o => o.id === item.objId);
+          if (!obj) { point[item.key] = null; continue; }
+          const vals = obj.keyResults.map(kr => {
+            const dp = kr.datapoints.find(d => d.quarter === p.quarter && d.year === p.year);
+            return dp?.progressPercent ?? null;
+          }).filter(v => v !== null) as number[];
+          point[item.key] = vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+        } else if (!item.isObjective && item.krId) {
+          const kr = allKRs.find(k => k.id === item.krId);
+          const dp = kr?.datapoints.find(d => d.quarter === p.quarter && d.year === p.year);
+          point[item.key] = dp?.progressPercent ?? null;
+        }
+      }
+      return point;
+    });
+  }, [periods, chartItems, objectives, allKRs, range]);
+
+  const toggleItem = (key: string) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
     });
   };
 
   if (isLoading) {
     return (
       <div className="space-y-6">
-        {[1, 2, 3].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-5 w-48" />
-              <Skeleton className="h-4 w-80" />
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-16 w-full" />
-            </CardContent>
-          </Card>
-        ))}
+        <Skeleton className="h-8 w-64 mx-auto" />
+        <Skeleton className="h-72 w-full" />
       </div>
     );
   }
 
-  const objectives = data?.objectives ?? [];
-  const lastUpdated = formatDate(data?.lastUpdated ?? null);
+  const hasChartData = range && periods.length > 0 && objectives.length > 0;
 
   return (
     <div className="space-y-6">
@@ -793,43 +847,121 @@ function StrategicAdvancementTab() {
           <p className="text-lg font-medium">No strategic objectives configured yet.</p>
           <p className="text-sm mt-1">An administrator can add objectives in the Strategic Planning section.</p>
         </div>
+      ) : !hasChartData ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center text-muted-foreground">
+          <TrendingUp className="h-10 w-10 mb-3 opacity-40" />
+          <p className="text-lg font-medium">No chart data configured yet.</p>
+          <p className="text-sm mt-1">An administrator can set the date range and enter progress data in the Strategic Planning section.</p>
+        </div>
       ) : (
-        objectives.map((obj) => (
-          <Card key={obj.id} data-testid={`card-objective-${obj.id}`}>
+        <>
+          {/* Item selector */}
+          <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
-                <Badge variant="outline" className="font-mono text-xs shrink-0">{obj.label}</Badge>
-                <span>{obj.description}</span>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Select Items to Display
               </CardTitle>
+              <CardDescription className="text-xs">Click objectives or individual key results to toggle lines on the chart</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
-              {obj.keyResults.length > 0 && (
-                <div className="space-y-3">
-                  {obj.keyResults.map((kr) => (
-                    <div key={kr.id} className="space-y-1" data-testid={`kr-progress-${kr.id}`}>
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-sm font-medium">
-                          <span className="text-muted-foreground font-mono mr-1">{kr.label}</span>
-                          {kr.description}
-                        </span>
-                        <span className="text-sm font-semibold tabular-nums shrink-0" data-testid={`text-kr-percent-${kr.id}`}>
-                          {kr.progressPercent}%
-                        </span>
-                      </div>
-                      <Progress value={kr.progressPercent} className="h-2" data-testid={`progress-kr-${kr.id}`} />
-                    </div>
-                  ))}
+            <CardContent className="space-y-3">
+              {objectives.map(obj => (
+                <div key={obj.id} className="space-y-2">
+                  <button
+                    onClick={() => toggleItem(`obj-${obj.id}`)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-opacity ${selectedItems.has(`obj-${obj.id}`) ? "opacity-100" : "opacity-40"}`}
+                    style={{ borderColor: "currentColor", color: CHART_COLORS[objectives.indexOf(obj) % CHART_COLORS.length] }}
+                    data-testid={`toggle-objective-${obj.id}`}
+                  >
+                    <span className="font-mono">{obj.label}</span>
+                    <span>{obj.description}</span>
+                    <span className="text-muted-foreground ml-1">(avg)</span>
+                  </button>
+                  <div className="flex flex-wrap gap-1.5 pl-4">
+                    {obj.keyResults.map(kr => (
+                      <button
+                        key={kr.id}
+                        onClick={() => toggleItem(`kr-${kr.id}`)}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border transition-opacity ${selectedItems.has(`kr-${kr.id}`) ? "opacity-100" : "opacity-40"}`}
+                        style={{ borderColor: "currentColor", color: CHART_COLORS[(objectives.indexOf(obj) * 3 + obj.keyResults.indexOf(kr) + objectives.length) % CHART_COLORS.length] }}
+                        data-testid={`toggle-kr-${kr.id}`}
+                      >
+                        <span className="font-mono">{kr.label}</span>
+                        <span>{kr.description}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              )}
+              ))}
+            </CardContent>
+          </Card>
 
-              {obj.comment && (
-                <div className="rounded-md bg-muted/50 p-4 text-sm text-muted-foreground whitespace-pre-wrap" data-testid={`text-objective-comment-${obj.id}`}>
-                  {obj.comment}
+          {/* Chart */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Strategic Progress Over Time</CardTitle>
+              <CardDescription>
+                {range.startQuarter} {range.startYear} — {range.endQuarter} {range.endYear} &nbsp;·&nbsp; 0% = start of period, 100% = full completion
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {chartItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                  <p className="text-sm">Select at least one item above to display it on the chart.</p>
                 </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={380}>
+                  <LineChart data={rechartsData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="period" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" height={50} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} width={45} />
+                    <Tooltip
+                      formatter={(value: unknown, name: string) => [value != null ? `${value}%` : "—", name]}
+                      contentStyle={{ fontSize: 12 }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                    <ReferenceLine y={100} stroke="#16a34a" strokeDasharray="4 4" opacity={0.4} />
+                    {chartItems.map(item => (
+                      <Line
+                        key={item.key}
+                        type="monotone"
+                        dataKey={item.key}
+                        name={item.label}
+                        stroke={item.color}
+                        strokeWidth={item.isObjective ? 2.5 : 1.5}
+                        strokeDasharray={item.isObjective ? undefined : "4 2"}
+                        dot={{ r: 3, fill: item.color }}
+                        activeDot={{ r: 5 }}
+                        connectNulls={false}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
-        ))
+
+          {/* Comments per objective */}
+          {objectives.some(o => o.comment) && (
+            <div className="space-y-4">
+              {objectives.filter(o => o.comment).map(obj => (
+                <Card key={obj.id} data-testid={`card-objective-comment-${obj.id}`}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="font-mono text-xs shrink-0">{obj.label}</Badge>
+                      <span>{obj.description}</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="rounded-md bg-muted/50 p-4 text-sm text-muted-foreground whitespace-pre-wrap" data-testid={`text-objective-comment-${obj.id}`}>
+                      {obj.comment}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

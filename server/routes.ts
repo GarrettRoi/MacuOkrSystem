@@ -563,6 +563,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/strategic-advancement/chart", async (_req, res) => {
+    try {
+      const data = await storage.getStrategicChartData();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch chart data" });
+    }
+  });
+
+  app.put("/api/strategic-advancement/chart/range", requireAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        startQuarter: z.enum(["Q1", "Q2", "Q3", "Q4"]),
+        startYear: z.number().int().min(2000).max(2100),
+        endQuarter: z.enum(["Q1", "Q2", "Q3", "Q4"]),
+        endYear: z.number().int().min(2000).max(2100),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid range" });
+      await storage.setChartRange(parsed.data);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save chart range" });
+    }
+  });
+
+  app.post("/api/strategic-advancement/chart/datapoints", requireAdmin, async (req, res) => {
+    try {
+      const itemSchema = z.object({
+        keyResultId: z.string(),
+        quarter: z.enum(["Q1", "Q2", "Q3", "Q4"]),
+        year: z.number().int().min(2000).max(2100),
+        progressPercent: z.number().int().min(0).max(100).nullable(),
+      });
+      const parsed = z.array(itemSchema).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid datapoints" });
+      await storage.bulkUpsertChartDatapoints(parsed.data);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save chart datapoints" });
+    }
+  });
+
   // ── Analytics ─────────────────────────────────────────────────────────────
 
   async function computeAnalyticsData(

@@ -17,12 +17,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check } from "lucide-react";
-import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, AnalyticsDashboardWithWidgets, AnalyticsWidget } from "@shared/schema";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp } from "lucide-react";
+import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
 import type { WidgetConfig } from "@/components/analytics-widget";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { compareNames } from "@/lib/utils";
+import { compareNames, generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
 
 interface AdminProps {
   staff: StaffWithDetails;
@@ -1112,6 +1112,59 @@ export default function Admin({ staff }: AdminProps) {
   const { data: advancementData, isLoading: advancementLoading } = useQuery<StrategicAdvancementData>({
     queryKey: ["/api/strategic-advancement"],
     enabled: staff.role === "super_admin",
+  });
+
+  const { data: chartData, isLoading: chartLoading } = useQuery<StrategicChartData>({
+    queryKey: ["/api/strategic-advancement/chart"],
+    enabled: staff.role === "super_admin",
+  });
+
+  const [chartStartQ, setChartStartQ] = useState("Q1");
+  const [chartStartY, setChartStartY] = useState(new Date().getFullYear());
+  const [chartEndQ, setChartEndQ] = useState("Q4");
+  const [chartEndY, setChartEndY] = useState(new Date().getFullYear());
+  const [localDatapoints, setLocalDatapoints] = useState<Record<string, Record<string, number | null>>>({});
+  const [chartRangeInitialized, setChartRangeInitialized] = useState(false);
+
+  useEffect(() => {
+    if (chartData && !chartRangeInitialized) {
+      if (chartData.range) {
+        setChartStartQ(chartData.range.startQuarter);
+        setChartStartY(chartData.range.startYear);
+        setChartEndQ(chartData.range.endQuarter);
+        setChartEndY(chartData.range.endYear);
+      }
+      const dp: Record<string, Record<string, number | null>> = {};
+      for (const obj of chartData.objectives) {
+        for (const kr of obj.keyResults) {
+          dp[kr.id] = {};
+          for (const d of kr.datapoints) {
+            dp[kr.id][`${d.quarter}-${d.year}`] = d.progressPercent;
+          }
+        }
+      }
+      setLocalDatapoints(dp);
+      setChartRangeInitialized(true);
+    }
+  }, [chartData, chartRangeInitialized]);
+
+  const saveChartRangeMutation = useMutation({
+    mutationFn: async (range: StrategicChartRange) => apiRequest("PUT", "/api/strategic-advancement/chart/range", range),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/strategic-advancement/chart"] });
+      toast({ title: "Range Saved", description: "Chart date range updated." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save range.", variant: "destructive" }),
+  });
+
+  const saveChartDatapointsMutation = useMutation({
+    mutationFn: async (items: Array<{ keyResultId: string; quarter: string; year: number; progressPercent: number | null }>) =>
+      apiRequest("POST", "/api/strategic-advancement/chart/datapoints", items),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/strategic-advancement/chart"] });
+      toast({ title: "Chart Data Saved", description: "Progress data updated and will appear on the Strategic Advancement tab." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save chart data.", variant: "destructive" }),
   });
 
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({});
@@ -3446,6 +3499,143 @@ export default function Admin({ staff }: AdminProps) {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Time-Series Progress Chart Data Entry */}
+            <Card className="mt-6">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5" />
+                      Time-Series Progress Chart
+                    </CardTitle>
+                    <CardDescription>Enter progress percentages per quarter to display multi-year trend lines on the Strategic Advancement tab</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Range picker */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Chart Date Range</Label>
+                  <div className="flex items-end gap-2 flex-wrap">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Start</Label>
+                      <div className="flex items-center gap-1">
+                        <Select value={chartStartQ} onValueChange={setChartStartQ}>
+                          <SelectTrigger className="w-20" data-testid="select-chart-start-quarter">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["Q1","Q2","Q3","Q4"].map(q => <SelectItem key={q} value={q}>{q}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Input type="number" value={chartStartY} onChange={e => setChartStartY(parseInt(e.target.value) || new Date().getFullYear())} className="w-20" min={2000} max={2100} data-testid="input-chart-start-year" />
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground mb-2" />
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">End</Label>
+                      <div className="flex items-center gap-1">
+                        <Select value={chartEndQ} onValueChange={setChartEndQ}>
+                          <SelectTrigger className="w-20" data-testid="select-chart-end-quarter">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["Q1","Q2","Q3","Q4"].map(q => <SelectItem key={q} value={q}>{q}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Input type="number" value={chartEndY} onChange={e => setChartEndY(parseInt(e.target.value) || new Date().getFullYear())} className="w-20" min={2000} max={2100} data-testid="input-chart-end-year" />
+                      </div>
+                    </div>
+                    <Button variant="outline" onClick={() => saveChartRangeMutation.mutate({ startQuarter: chartStartQ, startYear: chartStartY, endQuarter: chartEndQ, endYear: chartEndY })} disabled={saveChartRangeMutation.isPending} data-testid="button-save-chart-range">
+                      {saveChartRangeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                      <span className="ml-1">Save Range</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Data entry grid */}
+                {(() => {
+                  const allKRs = (chartData?.objectives ?? []).flatMap(obj =>
+                    obj.keyResults.map(kr => ({ ...kr, objLabel: obj.label, objId: obj.id }))
+                  );
+                  const periods = generateQuarterPeriods(chartStartQ, chartStartY, chartEndQ, chartEndY);
+                  if (chartLoading) return <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>;
+                  if (allKRs.length === 0) return <p className="text-sm text-muted-foreground text-center py-4">No active key results found. Add objectives and key results in the University Strategic Planning section above.</p>;
+                  if (periods.length === 0) return <p className="text-sm text-muted-foreground text-center py-4">Set a valid date range above to enter chart data.</p>;
+                  return (
+                    <div className="space-y-4">
+                      <p className="text-xs text-muted-foreground">Enter 0–100 for each quarter. Leave blank to remove that data point. Click "Save Chart Data" when done.</p>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/40">
+                              <th className="text-left p-2 font-medium text-xs text-muted-foreground w-24 shrink-0">Period</th>
+                              {allKRs.map((kr, idx) => (
+                                <th key={kr.id} className="p-2 text-center min-w-16" title={`${kr.objLabel} — ${kr.description}`}>
+                                  <span className="font-mono text-xs" style={{ color: CHART_COLORS[idx % CHART_COLORS.length] }}>{kr.objLabel} {kr.label}</span>
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {periods.map((p, rowIdx) => {
+                              const periodKey = `${p.quarter}-${p.year}`;
+                              return (
+                                <tr key={periodKey} className={rowIdx % 2 === 0 ? "" : "bg-muted/20"}>
+                                  <td className="p-2 font-mono text-xs text-muted-foreground whitespace-nowrap">{p.quarter} {p.year}</td>
+                                  {allKRs.map(kr => {
+                                    const val = localDatapoints[kr.id]?.[periodKey];
+                                    return (
+                                      <td key={kr.id} className="p-1 text-center">
+                                        <Input
+                                          type="number"
+                                          min={0} max={100}
+                                          value={val === null || val === undefined ? "" : val}
+                                          onChange={e => {
+                                            const raw = e.target.value;
+                                            const num = raw === "" ? null : Math.min(100, Math.max(0, parseInt(raw) || 0));
+                                            setLocalDatapoints(prev => ({ ...prev, [kr.id]: { ...prev[kr.id], [periodKey]: num } }));
+                                          }}
+                                          className="w-16 text-center text-xs px-1"
+                                          placeholder="—"
+                                          data-testid={`input-dp-${kr.id}-${periodKey}`}
+                                        />
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          onClick={() => {
+                            const allKRsList = (chartData?.objectives ?? []).flatMap(obj => obj.keyResults.map(kr => kr.id));
+                            const items: Array<{ keyResultId: string; quarter: string; year: number; progressPercent: number | null }> = [];
+                            for (const krId of allKRsList) {
+                              for (const p of periods) {
+                                const periodKey = `${p.quarter}-${p.year}`;
+                                const val = localDatapoints[krId]?.[periodKey];
+                                items.push({ keyResultId: krId, quarter: p.quarter, year: p.year, progressPercent: val === undefined ? null : val });
+                              }
+                            }
+                            saveChartDatapointsMutation.mutate(items);
+                          }}
+                          disabled={saveChartDatapointsMutation.isPending}
+                          data-testid="button-save-chart-data"
+                        >
+                          {saveChartDatapointsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                          Save Chart Data
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
