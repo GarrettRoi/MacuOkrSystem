@@ -8,7 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, Square, MessageSquare } from "lucide-react";
+import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, MessageSquare } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
@@ -188,8 +188,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
       return next;
     });
   };
-
-  const clearObjectives = () => setSelectedObjectiveLabels(new Set());
 
   const uniFilteredOkrs = useMemo(() => {
     if (!okrsWithUpdates || selectedObjectiveLabels.size === 0) return [];
@@ -538,12 +536,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                       ? "Select one or more university strategic objectives below"
                       : `${selectedObjectiveLabels.size} objective${selectedObjectiveLabels.size !== 1 ? "s" : ""} selected · ${uniFilteredOkrs.length} aligned OKRs`}
                   </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button variant="ghost" size="sm" onClick={clearObjectives} className="h-8 text-xs" data-testid="button-clear-objectives">
-                    <Square className="h-3 w-3 mr-1" />
-                    None
-                  </Button>
                 </div>
               </div>
 
