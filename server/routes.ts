@@ -6,6 +6,7 @@ import { eq, sql, asc, and as drizzleAnd } from "drizzle-orm";
 import * as oidcClient from "openid-client";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { sendInviteEmail } from "./email";
 import {
   insertStaffSchema,
   insertSpuSchema,
@@ -429,7 +430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: generate invite token for a staff member
+  // Admin: generate invite token for a staff member and email them the login link
   app.post("/api/admin/staff/:id/invite-token", requireAdmin, async (req, res) => {
     try {
       const staffId = req.params.id;
@@ -443,7 +444,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createInviteToken(staffId, token, expiresAt);
 
       const baseUrl = `${req.protocol}://${req.get("host")}`;
-      res.json({ url: `${baseUrl}/set-password?token=${token}` });
+      const loginLink = `${baseUrl}/set-password?token=${token}`;
+
+      try {
+        await sendInviteEmail(staffMember.email, staffMember.name, loginLink);
+        res.json({ success: true, emailSent: true, email: staffMember.email });
+      } catch (emailError) {
+        console.error("Failed to send invite email:", emailError);
+        res.status(500).json({ error: "Token generated but email could not be sent. Please share the login link manually.", url: loginLink });
+      }
     } catch (error) {
       res.status(500).json({ error: "Failed to generate invite token" });
     }

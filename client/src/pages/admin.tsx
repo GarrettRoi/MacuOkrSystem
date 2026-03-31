@@ -1517,19 +1517,38 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
 
   const generateInviteLinkMutation = useMutation({
     mutationFn: async (staffId: string) => {
-      const res = await apiRequest("POST", `/api/admin/staff/${staffId}/invite-token`, {});
-      return await res.json();
+      const res = await fetch(`/api/admin/staff/${staffId}/invite-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw Object.assign(new Error(data.error || "Could not send invite email."), { url: data.url });
+      return data;
     },
     onSuccess: (data: any) => {
-      setInviteLinkUrl(data.url || "");
+      setInviteLinkUrl("");
       setInviteLinkCopied(false);
+      setInviteLinkDialogOpen(false);
+      toast({
+        title: "Invite Email Sent",
+        description: `A login link has been sent to ${data.email}.`,
+      });
     },
     onError: (error: any) => {
-      toast({
-        title: "Failed to Generate Link",
-        description: error?.message || "Could not generate invite link.",
-        variant: "destructive",
-      });
+      const fallbackUrl = (error as any)?.url || "";
+      if (fallbackUrl) {
+        setInviteLinkUrl(fallbackUrl);
+        setInviteLinkCopied(false);
+      } else {
+        toast({
+          title: "Failed to Send Invite",
+          description: error?.message || "Could not generate invite link.",
+          variant: "destructive",
+        });
+        setInviteLinkDialogOpen(false);
+      }
     },
   });
 
@@ -2281,6 +2300,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
           </Dialog>
 
           <Dialog open={inviteLinkDialogOpen} onOpenChange={(open) => {
+            if (generateInviteLinkMutation.isPending) return;
             setInviteLinkDialogOpen(open);
             if (!open) {
               setInviteLinkStaff(null);
@@ -2293,9 +2313,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 <DialogTitle>Send Login Link</DialogTitle>
                 <DialogDescription>
                   {inviteLinkStaff ? (
-                    <>Generate a secure, single-use link for <strong>{inviteLinkStaff.name}</strong> to set their personal password.</>
+                    <>Send a secure, single-use login link to <strong>{inviteLinkStaff.name}</strong> so they can set their personal password.</>
                   ) : (
-                    "Generate a secure, single-use login link for this staff member."
+                    "Send a secure, single-use login link to this staff member."
                   )}
                 </DialogDescription>
               </DialogHeader>
@@ -2303,16 +2323,19 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 {generateInviteLinkMutation.isPending && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Generating link...
+                    Sending invite email...
                   </div>
                 )}
                 {inviteLinkUrl && (
                   <div className="space-y-3">
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" data-testid="text-email-failed-notice">
+                      The email could not be delivered. Copy this link and share it manually with the staff member.
+                    </div>
                     <div className="rounded-md border bg-muted/50 p-3 text-xs font-mono break-all" data-testid="text-invite-link">
                       {inviteLinkUrl}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      This link expires in 48 hours and can only be used once. Copy it and send it to the staff member manually.
+                      This link expires in 48 hours and can only be used once.
                     </p>
                     <Button
                       className="w-full"
@@ -2340,7 +2363,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setInviteLinkDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setInviteLinkDialogOpen(false)} disabled={generateInviteLinkMutation.isPending}>
                   Close
                 </Button>
               </DialogFooter>
