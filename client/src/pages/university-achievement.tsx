@@ -378,11 +378,12 @@ function DashboardTab() {
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredSpuProgress.map((spu) => {
+          {filteredSpuProgress.map((spu, index) => {
             const isSelected = selectedSpuId === spu.id;
             return (
               <Card
                 key={spu.name}
+                style={{ order: index * 2 }}
                 data-testid={`card-spu-${spu.name}`}
                 className={`cursor-pointer transition-colors hover-elevate ${isSelected ? "ring-2 ring-primary" : ""}`}
                 onClick={() => setSelectedSpuId(isSelected ? null : spu.id)}
@@ -406,14 +407,19 @@ function DashboardTab() {
               </Card>
             );
           })}
-        </div>
 
-        {/* SPU Drilldown */}
-        {selectedSpuId && (() => {
-          const spuName = spuProgress.find(s => s.id === selectedSpuId)?.name || "";
-          const totalSpuOkrs = selectedSpuOkrs.reduce((sum, s) => sum + s.okrs.length, 0);
-          return (
-            <div className="border rounded-lg overflow-hidden mt-2" data-testid={`section-spu-drill-${selectedSpuId}`}>
+          {/* SPU Drilldown — inline after the row of the clicked card */}
+          {selectedSpuId && (() => {
+            const selectedIndex = filteredSpuProgress.findIndex(s => s.id === selectedSpuId);
+            if (selectedIndex === -1) return null;
+            const spuName = spuProgress.find(s => s.id === selectedSpuId)?.name || "";
+            const totalSpuOkrs = selectedSpuOkrs.reduce((sum, s) => sum + s.okrs.length, 0);
+            return (
+              <div
+                style={{ order: selectedIndex * 2 + 1, gridColumn: "1 / -1" }}
+                className="border rounded-lg overflow-hidden"
+                data-testid={`section-spu-drill-${selectedSpuId}`}
+              >
               <div className="flex items-center gap-3 px-4 py-3 bg-muted/40 border-b">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
                 <span className="font-semibold text-base">{spuName}</span>
@@ -524,6 +530,7 @@ function DashboardTab() {
             </div>
           );
         })()}
+        </div>
       </div>
     </div>
   );
