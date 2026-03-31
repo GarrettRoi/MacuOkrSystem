@@ -970,6 +970,34 @@ function StrategicAdvancementTab() {
   );
 }
 
+export function UniversityAchievementContent({ hideAnalytics = false }: { hideAnalytics?: boolean } = {}) {
+  return (
+    <Tabs defaultValue="dashboard" className="space-y-6">
+      <TabsList data-testid="tabs-achievement">
+        <TabsTrigger value="dashboard" data-testid="tab-dashboard">Dashboard</TabsTrigger>
+        {!hideAnalytics && (
+          <TabsTrigger value="trends" data-testid="tab-trends">Analytics</TabsTrigger>
+        )}
+        <TabsTrigger value="strategic-advancement" data-testid="tab-strategic-advancement">Strategic Advancement</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="dashboard">
+        <DashboardTab />
+      </TabsContent>
+
+      {!hideAnalytics && (
+        <TabsContent value="trends">
+          <AnalyticsTab />
+        </TabsContent>
+      )}
+
+      <TabsContent value="strategic-advancement">
+        <StrategicAdvancementTab />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
 export default function UniversityAchievement() {
   return (
     <div className="p-6 space-y-6">
@@ -980,25 +1008,7 @@ export default function UniversityAchievement() {
         </p>
       </div>
 
-      <Tabs defaultValue="dashboard" className="space-y-6">
-        <TabsList data-testid="tabs-achievement">
-          <TabsTrigger value="dashboard" data-testid="tab-dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="trends" data-testid="tab-trends">Analytics</TabsTrigger>
-          <TabsTrigger value="strategic-advancement" data-testid="tab-strategic-advancement">Strategic Advancement</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="dashboard">
-          <DashboardTab />
-        </TabsContent>
-
-        <TabsContent value="trends">
-          <AnalyticsTab />
-        </TabsContent>
-
-        <TabsContent value="strategic-advancement">
-          <StrategicAdvancementTab />
-        </TabsContent>
-      </Tabs>
+      <UniversityAchievementContent />
     </div>
   );
 }

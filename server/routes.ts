@@ -4,6 +4,8 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { eq, sql, asc, and as drizzleAnd } from "drizzle-orm";
 import * as oidcClient from "openid-client";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import {
   insertStaffSchema,
   insertSpuSchema,
@@ -41,6 +43,11 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
     return res.status(403).json({ error: "Forbidden: Admin access required" });
   }
   next();
+}
+
+function sanitizeStaff<T extends { hashedPassword?: string | null }>(s: T): Omit<T, "hashedPassword"> {
+  const { hashedPassword: _h, ...safe } = s;
+  return safe as Omit<T, "hashedPassword">;
 }
 
 // Returns true for sub-unit values that mean "whole SPU / no sub-unit" so
@@ -333,11 +340,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { error: oauthError, state } = req.query;
 
       if (oauthError) {
-        return res.redirect(`/?sso_error=${encodeURIComponent(String(oauthError))}`);
+        return res.redirect(`/login?sso_error=${encodeURIComponent(String(oauthError))}`);
       }
 
       if (state !== req.session.ssoState) {
-        return res.redirect("/?sso_error=invalid_state");
+        return res.redirect("/login?sso_error=invalid_state");
       }
 
       const { issuerUrl, clientId, clientSecret } = await getSsoConfig();
@@ -359,28 +366,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
       delete req.session.ssoCodeVerifier;
 
       if (!email) {
-        return res.redirect("/?sso_error=no_email");
+        return res.redirect("/login?sso_error=no_email");
       }
 
       const staffMember = await storage.getStaffByEmail(email);
       if (!staffMember) {
-        return res.redirect(`/?sso_error=no_account&email=${encodeURIComponent(email)}`);
+        return res.redirect(`/login?sso_error=no_account&email=${encodeURIComponent(email)}`);
       }
 
       req.session.regenerate((err) => {
-        if (err) return res.redirect("/?sso_error=session_error");
+        if (err) return res.redirect("/login?sso_error=session_error");
         req.session.isAdmin = staffMember.isAdmin;
         req.session.selectedStaffId = staffMember.id;
         req.session.selectedStaffName = staffMember.name;
         req.session.sessionVersion = Date.now();
         req.session.save((err2) => {
-          if (err2) return res.redirect("/?sso_error=session_error");
+          if (err2) return res.redirect("/login?sso_error=session_error");
           res.redirect("/");
         });
       });
     } catch (error: any) {
       console.error("SSO callback error:", error);
-      res.redirect(`/?sso_error=callback_failed`);
+      res.redirect(`/login?sso_error=callback_failed`);
+    }
+  });
+
+  // Staff personal login (email + password)
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const schema = z.object({
+        email: z.string().email(),
+        password: z.string().min(1),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+
+      const staffMember = await storage.getStaffByEmailWithPassword(parsed.data.email);
+      if (!staffMember || !staffMember.hashedPassword) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      const valid = await bcrypt.compare(parsed.data.password, staffMember.hashedPassword);
+      if (!valid) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      req.session.regenerate((err) => {
+        if (err) return res.status(500).json({ error: "Session error" });
+        req.session.isAdmin = staffMember.isAdmin;
+        req.session.selectedStaffId = staffMember.id;
+        req.session.selectedStaffName = staffMember.name;
+        req.session.sessionVersion = Date.now();
+        req.session.save((err2) => {
+          if (err2) return res.status(500).json({ error: "Session save error" });
+          res.json({ success: true, isAdmin: staffMember.isAdmin });
+        });
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Admin: generate invite token for a staff member
+  app.post("/api/admin/staff/:id/invite-token", requireAdmin, async (req, res) => {
+    try {
+      const staffId = req.params.id;
+      const staffMember = await storage.getStaff(staffId);
+      if (!staffMember) {
+        return res.status(404).json({ error: "Staff member not found" });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+      await storage.createInviteToken(staffId, token, expiresAt);
+
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      res.json({ url: `${baseUrl}/set-password?token=${token}` });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate invite token" });
+    }
+  });
+
+  // Public: validate invite token
+  app.get("/api/invite/validate/:token", async (req, res) => {
+    try {
+      const inviteToken = await storage.getInviteToken(req.params.token);
+      if (!inviteToken) {
+        return res.status(404).json({ error: "Invalid or expired token" });
+      }
+      if (inviteToken.usedAt) {
+        return res.status(410).json({ error: "Token has already been used" });
+      }
+      if (new Date() > inviteToken.expiresAt) {
+        return res.status(410).json({ error: "Token has expired" });
+      }
+
+      const staffMember = await storage.getStaff(inviteToken.staffId);
+      if (!staffMember) {
+        return res.status(404).json({ error: "Staff member not found" });
+      }
+
+      res.json({ valid: true, staffName: staffMember.name, staffEmail: staffMember.email });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to validate token" });
+    }
+  });
+
+  // Public: set password via invite token
+  app.post("/api/invite/set-password", async (req, res) => {
+    try {
+      const schema = z.object({
+        token: z.string().min(1),
+        email: z.string().email("Please enter a valid email address"),
+        password: z.string().min(8, "Password must be at least 8 characters"),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+
+      const hashedPassword = await bcrypt.hash(parsed.data.password, 12);
+      const result = await storage.setPasswordViaToken(
+        parsed.data.token,
+        parsed.data.email,
+        hashedPassword
+      );
+
+      if ("error" in result) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set password" });
     }
   });
 
@@ -963,7 +1083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const staff = await storage.createStaff(parsed.data);
-      res.status(201).json(staff);
+      res.status(201).json(sanitizeStaff(staff));
     } catch (error) {
       res.status(500).json({ error: "Failed to create staff" });
     }
@@ -977,7 +1097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const updatedStaff = await storage.updateStaff(req.params.id, parsed.data);
-      res.json(updatedStaff);
+      res.json(sanitizeStaff(updatedStaff));
     } catch (error) {
       res.status(500).json({ error: "Failed to update staff" });
     }
@@ -1030,7 +1150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!staff) {
         return res.status(404).json({ error: "Staff not found" });
       }
-      res.json(staff);
+      res.json(sanitizeStaff(staff));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch staff" });
     }
@@ -1174,7 +1294,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existingByEmail) {
         return res.status(409).json({ 
           error: "User already exists", 
-          existingUser: existingByEmail,
+          existingUser: sanitizeStaff(existingByEmail),
           message: "A user with this email already exists. Would you like to add them to your SPU instead?"
         });
       }

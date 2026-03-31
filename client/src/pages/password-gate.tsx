@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { AlertCircle, Shield, User, LogIn } from "lucide-react";
+import { AlertCircle, ChevronLeft, Shield, User, LogIn, Mail } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface PasswordGateProps {
@@ -16,6 +17,10 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+
+  const [personalEmail, setPersonalEmail] = useState("");
+  const [personalPassword, setPersonalPassword] = useState("");
+  const [showPersonalLogin, setShowPersonalLogin] = useState(false);
 
   const { data: passwordSetting, isLoading: settingLoading } = useQuery<{ enabled: boolean }>({
     queryKey: ["/api/settings/password-login"],
@@ -47,7 +52,7 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
       };
       setError(messages[ssoError] || "Sign-in failed. Please try again.");
       setShowAdminLogin(true);
-      window.history.replaceState({}, "", "/");
+      window.history.replaceState({}, "", "/login");
     }
   }, []);
 
@@ -88,6 +93,33 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
       } else {
         setError("Incorrect password. Please try again.");
         setPassword("");
+      }
+    } catch {
+      setError("An error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePersonalLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: personalEmail, password: personalPassword }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        onAuthenticated(data.isAdmin);
+      } else {
+        const data = await response.json();
+        setError(data.error || "Invalid email or password.");
+        setPersonalPassword("");
       }
     } catch {
       setError("An error occurred. Please try again.");
@@ -141,7 +173,16 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
   const showSsoPrimary = ssoEnabled && !showAdminLogin;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex flex-col bg-background">
+      <div className="p-4">
+        <Link href="/">
+          <Button variant="ghost" size="sm" data-testid="button-back-home">
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+        </Link>
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
           <div className="flex justify-center mb-4">
@@ -156,7 +197,66 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
         </CardHeader>
         <CardContent className="space-y-4">
 
-          {showSsoPrimary && (
+          {/* Personal email/password login */}
+          {showPersonalLogin && (
+            <form onSubmit={handlePersonalLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="personal-email">Email</Label>
+                <Input
+                  id="personal-email"
+                  type="email"
+                  placeholder="your.email@macu.edu"
+                  value={personalEmail}
+                  onChange={(e) => setPersonalEmail(e.target.value)}
+                  autoFocus
+                  data-testid="input-personal-email"
+                  className="text-base"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="personal-password">Password</Label>
+                <Input
+                  id="personal-password"
+                  type="password"
+                  placeholder="Your personal password"
+                  value={personalPassword}
+                  onChange={(e) => setPersonalPassword(e.target.value)}
+                  data-testid="input-personal-password"
+                  className="text-base"
+                />
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={isLoading || !personalEmail || !personalPassword}
+                data-testid="button-submit-personal"
+              >
+                {isLoading ? "Signing in..." : "Sign In"}
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full text-muted-foreground"
+                onClick={() => { setShowPersonalLogin(false); setError(""); setPersonalEmail(""); setPersonalPassword(""); }}
+                data-testid="button-back-from-personal"
+              >
+                Back
+              </Button>
+            </form>
+          )}
+
+          {!showPersonalLogin && showSsoPrimary && (
             <div className="space-y-4">
               <Button
                 size="lg"
@@ -207,10 +307,30 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
                   <span>{error}</span>
                 </div>
               )}
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">or</span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => { setShowPersonalLogin(true); setError(""); }}
+                data-testid="button-personal-login"
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Sign in with Email & Password
+              </Button>
             </div>
           )}
 
-          {!showSsoPrimary && passwordEnabled && (
+          {!showPersonalLogin && !showSsoPrimary && passwordEnabled && (
             <form onSubmit={handlePasswordSubmit} className="space-y-6">
               {showAdminLogin && ssoEnabled && (
                 <p className="text-sm text-center text-muted-foreground">Admin / manual login</p>
@@ -249,6 +369,26 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
                 {isLoading ? "Verifying..." : "Continue"}
               </Button>
 
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">or</span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => { setShowPersonalLogin(true); setError(""); setPassword(""); }}
+                data-testid="button-personal-login"
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Sign in with Email & Password
+              </Button>
+
               {showAdminLogin && ssoEnabled && (
                 <Button
                   type="button"
@@ -264,7 +404,7 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
             </form>
           )}
 
-          {!showSsoPrimary && !passwordEnabled && (
+          {!showPersonalLogin && !showSsoPrimary && !passwordEnabled && (
             <div className="space-y-4">
               {showAdminLogin && ssoEnabled && (
                 <p className="text-sm text-center text-muted-foreground">Admin / manual login</p>
@@ -303,6 +443,26 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
                 </div>
               )}
 
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">or</span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => { setShowPersonalLogin(true); setError(""); }}
+                data-testid="button-personal-login"
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Sign in with Email & Password
+              </Button>
+
               {showAdminLogin && ssoEnabled && (
                 <Button
                   type="button"
@@ -320,7 +480,7 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
         </CardContent>
       </Card>
 
-      {ssoEnabled && !showAdminLogin && (
+      {ssoEnabled && !showAdminLogin && !showPersonalLogin && (
         <button
           className="mt-8 text-xs text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors select-none"
           onClick={() => setShowAdminLogin(true)}
@@ -330,6 +490,7 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
           Admin Login
         </button>
       )}
+      </div>
     </div>
   );
 }

@@ -26,6 +26,7 @@ import { compareNames, generateQuarterPeriods, CHART_COLORS } from "@/lib/utils"
 
 interface AdminProps {
   staff: StaffWithDetails;
+  isAdmin: boolean;
 }
 
 // ── SPU / Staff CSV Import Dialog ────────────────────────────────────────────
@@ -954,7 +955,7 @@ function AnalyticsBuilderTab() {
   );
 }
 
-export default function Admin({ staff }: AdminProps) {
+export default function Admin({ staff, isAdmin }: AdminProps) {
   const { toast } = useToast();
   
   const [spuDialogOpen, setSpuDialogOpen] = useState(false);
@@ -987,6 +988,10 @@ export default function Admin({ staff }: AdminProps) {
   const [staffNameFilter, setStaffNameFilter] = useState("");
   const [deleteStaffDialogOpen, setDeleteStaffDialogOpen] = useState(false);
   const [staffToDelete, setStaffToDelete] = useState<Staff | null>(null);
+  const [inviteLinkDialogOpen, setInviteLinkDialogOpen] = useState(false);
+  const [inviteLinkStaff, setInviteLinkStaff] = useState<Staff | null>(null);
+  const [inviteLinkUrl, setInviteLinkUrl] = useState("");
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   
   const [spuAssignmentsDialogOpen, setSpuAssignmentsDialogOpen] = useState(false);
   const [spuAssignmentsStaff, setSpuAssignmentsStaff] = useState<Staff | null>(null);
@@ -1506,6 +1511,24 @@ export default function Admin({ staff }: AdminProps) {
         title: "Merge Failed", 
         description: error?.message || "Failed to merge staff accounts.",
         variant: "destructive"
+      });
+    },
+  });
+
+  const generateInviteLinkMutation = useMutation({
+    mutationFn: async (staffId: string) => {
+      const res = await apiRequest("POST", `/api/admin/staff/${staffId}/invite-token`, {});
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      setInviteLinkUrl(data.url || "");
+      setInviteLinkCopied(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to Generate Link",
+        description: error?.message || "Could not generate invite link.",
+        variant: "destructive",
       });
     },
   });
@@ -2069,6 +2092,23 @@ export default function Admin({ staff }: AdminProps) {
                                   <Settings className="h-4 w-4 text-blue-600" />
                                 </Button>
                               )}
+                              {isAdmin && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setInviteLinkStaff(member);
+                                    setInviteLinkUrl("");
+                                    setInviteLinkCopied(false);
+                                    setInviteLinkDialogOpen(true);
+                                    generateInviteLinkMutation.mutate(member.id);
+                                  }}
+                                  title="Send Login Link"
+                                  data-testid={`button-invite-link-${member.id}`}
+                                >
+                                  <Lock className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -2235,6 +2275,73 @@ export default function Admin({ staff }: AdminProps) {
                   data-testid="button-confirm-delete-staff"
                 >
                   {deleteStaffMutation.isPending ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={inviteLinkDialogOpen} onOpenChange={(open) => {
+            setInviteLinkDialogOpen(open);
+            if (!open) {
+              setInviteLinkStaff(null);
+              setInviteLinkUrl("");
+              setInviteLinkCopied(false);
+            }
+          }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Send Login Link</DialogTitle>
+                <DialogDescription>
+                  {inviteLinkStaff ? (
+                    <>Generate a secure, single-use link for <strong>{inviteLinkStaff.name}</strong> to set their personal password.</>
+                  ) : (
+                    "Generate a secure, single-use login link for this staff member."
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-4">
+                {generateInviteLinkMutation.isPending && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating link...
+                  </div>
+                )}
+                {inviteLinkUrl && (
+                  <div className="space-y-3">
+                    <div className="rounded-md border bg-muted/50 p-3 text-xs font-mono break-all" data-testid="text-invite-link">
+                      {inviteLinkUrl}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This link expires in 48 hours and can only be used once. Copy it and send it to the staff member manually.
+                    </p>
+                    <Button
+                      className="w-full"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteLinkUrl).then(() => {
+                          setInviteLinkCopied(true);
+                          setTimeout(() => setInviteLinkCopied(false), 3000);
+                        });
+                      }}
+                      data-testid="button-copy-invite-link"
+                    >
+                      {inviteLinkCopied ? (
+                        <>
+                          <Check className="h-4 w-4 mr-2" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <ArrowRight className="h-4 w-4 mr-2" />
+                          Copy Link
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setInviteLinkDialogOpen(false)}>
+                  Close
                 </Button>
               </DialogFooter>
             </DialogContent>

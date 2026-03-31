@@ -34,6 +34,7 @@ import {
   type InsertEditLog,
   type UnmatchedScore,
   type InsertUnmatchedScore,
+  type InviteToken,
   type StaffWithDetails,
   type StaffSpuAssignmentWithDetails,
   type OkrWithDetails,
@@ -58,10 +59,16 @@ import {
   analyticsWidgets,
   editLogs,
   unmatchedScores,
+  inviteTokens,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, inArray, ne, isNull } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, ne, isNull, gt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+
+function safeStaff<T extends { hashedPassword?: string | null }>(s: T): Omit<T, "hashedPassword"> {
+  const { hashedPassword: _h, ...rest } = s;
+  return rest as Omit<T, "hashedPassword">;
+}
 
 export interface IStorage {
   verifyPassword(password: string): Promise<{ isValid: boolean; isAdmin: boolean }>;
@@ -203,6 +210,17 @@ export interface IStorage {
   convertSpuToSubUnit(sourceSpuId: string, targetSpuId: string): Promise<{ staffMoved: number; okrsMoved: number; subUnitsMoved: number }>;
   promoteSubUnitToSpu(subUnitId: string, subUnitIdsToMove: string[]): Promise<{ newSpuId: string; staffMoved: number; okrsMoved: number; subUnitsMoved: number }>;
   moveSubUnit(subUnitId: string, targetSpuId: string): Promise<{ staffMoved: number; okrsMoved: number; assignmentsMoved: number }>;
+
+  // Invite tokens
+  createInviteToken(staffId: string, token: string, expiresAt: Date): Promise<InviteToken>;
+  getInviteToken(token: string): Promise<InviteToken | undefined>;
+  consumeInviteToken(token: string): Promise<InviteToken | undefined>;
+  markInviteTokenUsed(id: string): Promise<void>;
+  setPasswordViaToken(token: string, email: string, hashedPassword: string): Promise<{ success: true } | { error: string; status: number }>;
+
+  // Staff credentials
+  setStaffPassword(staffId: string, hashedPassword: string): Promise<void>;
+  getStaffByEmailWithPassword(email: string): Promise<Staff | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -534,10 +552,20 @@ export class DatabaseStorage implements IStorage {
 
     return result.map((row) => ({
       ...row.okr,
-      staff: {
-        ...row.staff!,
+      staff: row.staff ? {
+        ...safeStaff(row.staff),
         spu: row.staffSpu!,
         subUnit: row.staffSubUnit || null,
+      } : {
+        id: row.okr.staffId || "deleted",
+        name: row.okr.submitterName || "Unknown",
+        email: "",
+        spuId: row.okr.spuId,
+        subUnitId: null,
+        isAdmin: false,
+        role: "basic" as const,
+        spu: row.staffSpu || row.okrSpu!,
+        subUnit: null,
       },
       spu: row.okrSpu || null,
       subUnit: row.okrSubUnit || null,
@@ -592,7 +620,7 @@ export class DatabaseStorage implements IStorage {
     return result.map((row) => ({
       ...row.okr,
       staff: row.staff ? {
-        ...row.staff,
+        ...safeStaff(row.staff),
         spu: row.staffSpu!,
         subUnit: row.staffSubUnit || null,
       } : {
@@ -785,10 +813,20 @@ export class DatabaseStorage implements IStorage {
       return {
         okr: {
           ...row.okrs,
-          staff: {
-            ...row.staff!,
+          staff: row.staff ? {
+            ...safeStaff(row.staff),
             spu: row.staff_spu!,
             subUnit: row.staff_sub_unit,
+          } : {
+            id: row.okrs.staffId || "deleted",
+            name: row.okrs.submitterName || "Unknown",
+            email: "",
+            spuId: row.okrs.spuId,
+            subUnitId: null,
+            isAdmin: false,
+            role: "basic" as const,
+            spu: row.spus!,
+            subUnit: null,
           },
           spu: row.spus,
           subUnit: row.sub_units,
@@ -800,10 +838,20 @@ export class DatabaseStorage implements IStorage {
           okrId: r.okrId,
           staffId: r.staffId,
           role: r.role,
-          staff: {
-            ...r.staff!,
+          staff: r.staff ? {
+            ...safeStaff(r.staff),
             spu: r.spu!,
             subUnit: r.subUnit,
+          } : {
+            id: r.staffId || "deleted",
+            name: "Unknown",
+            email: "",
+            spuId: "",
+            subUnitId: null,
+            isAdmin: false,
+            role: "basic" as const,
+            spu: r.spu!,
+            subUnit: null,
           },
         })),
         quarterlyUpdates: updates,
@@ -1447,6 +1495,123 @@ export class DatabaseStorage implements IStorage {
         assignmentsMoved: movedAssignments.length,
       };
     });
+  }
+
+  async createInviteToken(staffId: string, token: string, expiresAt: Date): Promise<InviteToken> {
+    return await db.transaction(async (tx) => {
+      // Invalidate any prior unused tokens for this staff member
+      await tx
+        .update(inviteTokens)
+        .set({ usedAt: new Date() })
+        .where(and(eq(inviteTokens.staffId, staffId), isNull(inviteTokens.usedAt)));
+
+      const [created] = await tx
+        .insert(inviteTokens)
+        .values({ staffId, token, expiresAt })
+        .returning();
+      return created;
+    });
+  }
+
+  async getInviteToken(token: string): Promise<InviteToken | undefined> {
+    const [result] = await db
+      .select()
+      .from(inviteTokens)
+      .where(eq(inviteTokens.token, token));
+    return result || undefined;
+  }
+
+  async consumeInviteToken(token: string): Promise<InviteToken | undefined> {
+    const now = new Date();
+    const [consumed] = await db
+      .update(inviteTokens)
+      .set({ usedAt: now })
+      .where(
+        and(
+          eq(inviteTokens.token, token),
+          isNull(inviteTokens.usedAt),
+          gt(inviteTokens.expiresAt, now)
+        )
+      )
+      .returning();
+    return consumed || undefined;
+  }
+
+  async markInviteTokenUsed(id: string): Promise<void> {
+    await db
+      .update(inviteTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(inviteTokens.id, id));
+  }
+
+  async setPasswordViaToken(token: string, email: string, hashedPassword: string): Promise<{ success: true } | { error: string; status: number }> {
+    try {
+      return await db.transaction(async (tx) => {
+        const now = new Date();
+
+        // 1. Read-only validation: check token state before consuming
+        const [existing] = await tx
+          .select()
+          .from(inviteTokens)
+          .where(eq(inviteTokens.token, token));
+        if (!existing) return { error: "Invalid token", status: 404 };
+        if (existing.usedAt) return { error: "Token has already been used", status: 410 };
+        if (existing.expiresAt <= now) return { error: "Token has expired", status: 410 };
+
+        // 2. Check email uniqueness before consuming (recoverable validation)
+        const normalizedEmail = email.toLowerCase().trim();
+        const [emailConflict] = await tx
+          .select({ id: staff.id })
+          .from(staff)
+          .where(and(eq(staff.email, normalizedEmail), ne(staff.id, existing.staffId)))
+          .limit(1);
+        if (emailConflict) {
+          return { error: "Email address is already in use by another account", status: 409 };
+        }
+
+        // 3. Atomically consume the token (concurrent-safe: WHERE isNull(usedAt))
+        const [consumed] = await tx
+          .update(inviteTokens)
+          .set({ usedAt: now })
+          .where(
+            and(
+              eq(inviteTokens.token, token),
+              isNull(inviteTokens.usedAt),
+              gt(inviteTokens.expiresAt, now)
+            )
+          )
+          .returning();
+
+        if (!consumed) {
+          return { error: "Token has already been used", status: 410 };
+        }
+
+        // 4. All checks passed — update email + password
+        await tx
+          .update(staff)
+          .set({ email: normalizedEmail, hashedPassword })
+          .where(eq(staff.id, consumed.staffId));
+
+        return { success: true } as const;
+      });
+    } catch {
+      return { error: "Failed to set password", status: 500 };
+    }
+  }
+
+  async setStaffPassword(staffId: string, hashedPassword: string): Promise<void> {
+    await db
+      .update(staff)
+      .set({ hashedPassword })
+      .where(eq(staff.id, staffId));
+  }
+
+  async getStaffByEmailWithPassword(email: string): Promise<Staff | undefined> {
+    const [result] = await db
+      .select()
+      .from(staff)
+      .where(eq(staff.email, email.toLowerCase().trim()));
+    return result || undefined;
   }
 }
 

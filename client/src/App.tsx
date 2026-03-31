@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient, apiRequest } from "./lib/queryClient";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -18,13 +18,23 @@ import MyOkrs from "@/pages/my-okrs";
 import Dashboard from "@/pages/dashboard";
 import EmployeeProgress from "@/pages/employee-progress";
 import TrendsPage from "@/pages/trends";
+import PublicHome from "@/pages/public-home";
+import SetPassword from "@/pages/set-password";
 import AppHeader from "@/components/app-header";
 import type { StaffWithDetails } from "@shared/schema";
 
-function Router({ staff, isAdmin }: { staff: StaffWithDetails; isAdmin: boolean }) {
+function LoginRedirect() {
+  useEffect(() => {
+    window.location.replace("/");
+  }, []);
+  return null;
+}
+
+function AuthenticatedRouter({ staff, isAdmin }: { staff: StaffWithDetails; isAdmin: boolean }) {
   return (
     <Switch>
       <Route path="/" component={() => <Home staff={staff} isAdmin={isAdmin} />} />
+      <Route path="/login" component={() => <Home staff={staff} isAdmin={isAdmin} />} />
       <Route path="/submit-okr" component={() => <SubmitOkr staff={staff} />} />
       <Route path="/quarterly-update" component={() => <QuarterlyUpdate staff={staff} />} />
       <Route path="/university-achievement" component={UniversityAchievement} />
@@ -34,7 +44,7 @@ function Router({ staff, isAdmin }: { staff: StaffWithDetails; isAdmin: boolean 
       <Route path="/trends" component={TrendsPage} />
       <Route path="/data" component={Data} />
       {(isAdmin || staff.role === "leader" || staff.role === "super_admin") && (
-        <Route path="/admin" component={() => <Admin staff={staff} />} />
+        <Route path="/admin" component={() => <Admin staff={staff} isAdmin={isAdmin} />} />
       )}
       <Route path="/export" component={Export} />
       <Route component={() => <Home staff={staff} isAdmin={isAdmin} />} />
@@ -48,6 +58,7 @@ function AppContent() {
   const [selectedStaff, setSelectedStaff] = useState<StaffWithDetails | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
+  const [location] = useLocation();
 
   const { data: session, isLoading: sessionLoading } = useQuery<{
     authenticated: boolean;
@@ -139,8 +150,47 @@ function AppContent() {
     );
   }
 
+  // Public routes — always accessible regardless of auth state
+  if (location === "/set-password" || location.startsWith("/set-password?")) {
+    return (
+      <>
+        <Switch>
+          <Route path="/set-password" component={SetPassword} />
+        </Switch>
+        <Toaster />
+      </>
+    );
+  }
+
+  // Login page — show PasswordGate if not authenticated, redirect to app if already authenticated
+  if (location === "/login" || location.startsWith("/login?")) {
+    if (isAuthenticated) {
+      // Already logged in — useEffect to navigate so render stays pure
+      return <LoginRedirect />;
+    }
+    return (
+      <>
+        <PasswordGate onAuthenticated={handleAuthenticated} />
+        <Toaster />
+      </>
+    );
+  }
+
+  // Public home page — show public view when not authenticated
+  if (!isAuthenticated) {
+    return (
+      <>
+        <Switch>
+          <Route path="/" component={PublicHome} />
+          <Route component={PublicHome} />
+        </Switch>
+        <Toaster />
+      </>
+    );
+  }
+
   // Still checking setup status
-  if (isAuthenticated && setupLoading && setupComplete === null) {
+  if (setupLoading && setupComplete === null) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
@@ -148,13 +198,18 @@ function AppContent() {
     );
   }
 
-  return (
-    <>
-      {!isAuthenticated ? (
-        <PasswordGate onAuthenticated={handleAuthenticated} />
-      ) : setupComplete === false ? (
+  if (setupComplete === false) {
+    return (
+      <>
         <SetupWizard onComplete={handleSetupComplete} />
-      ) : !selectedStaff ? (
+        <Toaster />
+      </>
+    );
+  }
+
+  if (!selectedStaff) {
+    return (
+      <>
         <StaffSelection
           onStaffSelected={handleStaffSelected}
           isAdmin={isAdmin}
@@ -173,14 +228,19 @@ function AppContent() {
             setSelectedStaff(adminStaff);
           }}
         />
-      ) : (
-        <div className="min-h-screen flex flex-col">
-          <AppHeader staff={selectedStaff} onLogout={handleLogout} isAdmin={isAdmin} />
-          <main className="flex-1 bg-background">
-            <Router staff={selectedStaff} isAdmin={isAdmin} />
-          </main>
-        </div>
-      )}
+        <Toaster />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="min-h-screen flex flex-col">
+        <AppHeader staff={selectedStaff} onLogout={handleLogout} isAdmin={isAdmin} />
+        <main className="flex-1 bg-background">
+          <AuthenticatedRouter staff={selectedStaff} isAdmin={isAdmin} />
+        </main>
+      </div>
       <Toaster />
     </>
   );

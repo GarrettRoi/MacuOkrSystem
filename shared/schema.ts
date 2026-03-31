@@ -29,7 +29,20 @@ export const staff = pgTable("staff", {
   subUnitId: varchar("sub_unit_id").references(() => subUnits.id),
   isAdmin: boolean("is_admin").notNull().default(false),
   role: text("role").notNull().default("basic"),
+  hashedPassword: text("hashed_password"),
 });
+
+export const inviteTokens = pgTable("invite_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+});
+
+export const insertInviteTokenSchema = createInsertSchema(inviteTokens).omit({ id: true });
+export type InsertInviteToken = z.infer<typeof insertInviteTokenSchema>;
+export type InviteToken = typeof inviteTokens.$inferSelect;
 
 export const staffSpuAssignments = pgTable("staff_spu_assignments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -437,7 +450,7 @@ export type InsertEditLog = z.infer<typeof insertEditLogSchema>;
 
 export type UserRole = typeof USER_ROLES[number];
 
-export type StaffWithDetails = Staff & {
+export type StaffWithDetails = Omit<Staff, "hashedPassword"> & {
   spu: Spu;
   subUnit?: SubUnit | null;
 };
