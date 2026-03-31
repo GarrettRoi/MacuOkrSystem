@@ -8,7 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, CheckSquare, Square, MessageSquare } from "lucide-react";
+import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, Square, MessageSquare } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
@@ -189,7 +189,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     });
   };
 
-  const selectAllObjectives = () => setSelectedObjectiveLabels(new Set(activeObjectives.map(o => o.label)));
   const clearObjectives = () => setSelectedObjectiveLabels(new Set());
 
   const uniFilteredOkrs = useMemo(() => {
@@ -541,10 +540,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Button variant="outline" size="sm" onClick={selectAllObjectives} className="h-8 text-xs" data-testid="button-select-all-objectives">
-                    <CheckSquare className="h-3 w-3 mr-1" />
-                    All
-                  </Button>
                   <Button variant="ghost" size="sm" onClick={clearObjectives} className="h-8 text-xs" data-testid="button-clear-objectives">
                     <Square className="h-3 w-3 mr-1" />
                     None
