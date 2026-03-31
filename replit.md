@@ -31,6 +31,7 @@ PostgreSQL is used as the database, accessed via Drizzle ORM and Neon Database's
     - **Submit OKR**: Form for creating OKRs with multi-select for university strategic objectives and key results (stored as JSON arrays in text columns), plus dynamic key results.
     - **Quarterly Update**: Interface for updating OKR progress with individual key result scoring and notes.
     - **Dashboard**: Analytical view with summary metrics, departmental performance, and status distribution.
+    - **University Achievement**: Multi-tab page with Dashboard (SPU progress cards — clicking an SPU card expands to show sub-units and individual OKRs in a drilldown table), Objective Results (university strategic objective selector with aligned OKR table, filterable by year/quarter/SPU), Analytics (year-over-year trends), and Strategic Advancement (multi-year line chart).
     - **Employee Progress**: Detailed, filterable spreadsheet-style view of OKR progress per employee, showing objective statements, strategic alignments, responsible parties, and progress percentages.
     - **Admin**: Management interface for staff, departments, and sub-departments.
     - **Export**: CSV data export functionality.
