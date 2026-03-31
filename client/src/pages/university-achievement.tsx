@@ -377,152 +377,167 @@ function DashboardTab() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredSpuProgress.map((spu) => {
-            const isSelected = selectedSpuId === spu.id;
-            return (
-              <Card
-                key={spu.name}
-                data-testid={`card-spu-${spu.name}`}
-                className={`cursor-pointer transition-colors hover-elevate ${isSelected ? "ring-2 ring-primary" : ""}`}
-                onClick={() => setSelectedSpuId(isSelected ? null : spu.id)}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="text-base">{spu.name}</CardTitle>
-                    {isSelected && <ChevronDown className="h-4 w-4 text-primary shrink-0" />}
-                  </div>
-                  <CardDescription>{spu.count} OKR{spu.count !== 1 ? "s" : ""} · click to view</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Progress</span>
-                      <span className="text-2xl font-bold" data-testid={`text-spu-progress-${spu.name}`}>{spu.progress}%</span>
-                    </div>
-                    <Progress value={spu.progress} className="h-2" />
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        {/* SPU Drilldown */}
-        {selectedSpuId && (() => {
-          const spuName = spuProgress.find(s => s.id === selectedSpuId)?.name || "";
+        {/* Cards chunked into rows so the drilldown can appear inline after its row */}
+        {(() => {
+          const COLS = 3;
+          const selectedIdx = selectedSpuId
+            ? filteredSpuProgress.findIndex(s => s.id === selectedSpuId)
+            : -1;
+          const selectedRow = selectedIdx >= 0 ? Math.floor(selectedIdx / COLS) : -1;
+          const rows: typeof filteredSpuProgress[] = [];
+          for (let i = 0; i < filteredSpuProgress.length; i += COLS) {
+            rows.push(filteredSpuProgress.slice(i, i + COLS));
+          }
+          const spuName = selectedSpuId ? spuProgress.find(s => s.id === selectedSpuId)?.name || "" : "";
           const totalSpuOkrs = selectedSpuOkrs.reduce((sum, s) => sum + s.okrs.length, 0);
-          return (
-            <div className="border rounded-lg overflow-hidden mt-2" data-testid={`section-spu-drill-${selectedSpuId}`}>
-              <div className="flex items-center gap-3 px-4 py-3 bg-muted/40 border-b">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="font-semibold text-base">{spuName}</span>
-                <Badge variant="secondary" className="text-xs">{totalSpuOkrs} OKR{totalSpuOkrs !== 1 ? "s" : ""}</Badge>
-                <button
-                  className="ml-auto text-muted-foreground hover:text-foreground"
-                  onClick={() => setSelectedSpuId(null)}
-                  data-testid="button-close-drill"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+
+          return rows.map((row, rowIndex) => (
+            <React.Fragment key={rowIndex}>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {row.map((spu) => {
+                  const isSelected = selectedSpuId === spu.id;
+                  return (
+                    <Card
+                      key={spu.name}
+                      data-testid={`card-spu-${spu.name}`}
+                      className={`cursor-pointer transition-colors hover-elevate ${isSelected ? "ring-2 ring-primary" : ""}`}
+                      onClick={() => setSelectedSpuId(isSelected ? null : spu.id)}
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <CardTitle className="text-base">{spu.name}</CardTitle>
+                          {isSelected && <ChevronDown className="h-4 w-4 text-primary shrink-0" />}
+                        </div>
+                        <CardDescription>{spu.count} OKR{spu.count !== 1 ? "s" : ""} · click to view</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Progress</span>
+                            <span className="text-2xl font-bold" data-testid={`text-spu-progress-${spu.name}`}>{spu.progress}%</span>
+                          </div>
+                          <Progress value={spu.progress} className="h-2" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
 
-              {selectedSpuOkrs.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">No OKRs match the current filters for this SPU.</div>
-              ) : (
-                selectedSpuOkrs.map((subUnit) => (
-                  <div key={subUnit.subUnitId || "__none__"} className="border-t first:border-t-0">
-                    {(selectedSpuOkrs.length > 1 || subUnit.subUnitId !== null) && (
-                      <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b">
-                        <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{subUnit.subUnitName}</span>
-                        <span className="text-xs text-muted-foreground">· {subUnit.okrs.length} OKR{subUnit.okrs.length !== 1 ? "s" : ""}</span>
-                      </div>
-                    )}
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse text-sm" data-testid={`table-drill-${subUnit.subUnitId || "none"}`}>
-                        <thead>
-                          <tr className="border-b bg-muted/10">
-                            <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">#</th>
-                            <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Objective</th>
-                            <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-36 hidden lg:table-cell">Owner</th>
-                            <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28 hidden md:table-cell">Period</th>
-                            <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">Score</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border bg-card">
-                          {subUnit.okrs.map((okr) => {
-                            const progress = getOkrProgress(okr.id);
-                            const hasScore = updates?.some(u => u.okrId === okr.id);
-                            const krs = getKeyResults(okr.keyResults || "[]");
-                            const isExpanded = expandedOkrIds.has(okr.id);
-                            return (
-                              <React.Fragment key={okr.id}>
-                                <tr
-                                  className={`cursor-pointer transition-colors ${isExpanded ? "bg-muted/30" : "hover:bg-muted/20"}`}
-                                  onClick={() => toggleOkrExpand(okr.id)}
-                                  data-testid={`row-drill-okr-${okr.id}`}
-                                >
-                                  <td className="px-4 py-3 align-top">
-                                    <div className="flex items-center gap-1">
-                                      {isExpanded
-                                        ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
-                                        : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
-                                      <span className="font-semibold text-xs">{okr.okrNumber}</span>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 align-top max-w-sm">
-                                    <p className="font-medium text-sm leading-snug">{okr.objectiveStatement}</p>
-                                    {krs.length > 0 && (
-                                      <span className="text-xs text-muted-foreground">{krs.length} key result{krs.length !== 1 ? "s" : ""}</span>
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-3 align-top hidden lg:table-cell">
-                                    <span className="text-sm">{okr.staff?.name || "—"}</span>
-                                  </td>
-                                  <td className="px-4 py-3 align-top hidden md:table-cell">
-                                    <span className="text-sm text-muted-foreground whitespace-nowrap">{okr.quarter} {okr.year}</span>
-                                  </td>
-                                  <td className="px-4 py-3 align-top text-right">
-                                    {hasScore ? (
-                                      <div className="flex flex-col items-end gap-1">
-                                        <span className="text-base font-bold tabular-nums">{progress}%</span>
-                                        <div className="w-14"><Progress value={progress} className="h-1" /></div>
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground italic">No score</span>
-                                    )}
-                                  </td>
-                                </tr>
-                                {isExpanded && (
-                                  <tr className="bg-muted/10" data-testid={`row-drill-detail-${okr.id}`}>
-                                    <td colSpan={5} className="px-6 py-4">
-                                      {krs.length > 0 ? (
-                                        <div className="space-y-1">
-                                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Key Results</p>
-                                          {krs.map((kr: any, i: number) => (
-                                            <p key={i} className="text-xs text-foreground leading-snug pl-2 border-l-2 border-muted">
-                                              KR {i + 1}: {typeof kr === "string" ? kr : kr.description}
-                                            </p>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <p className="text-sm text-muted-foreground italic">No key results.</p>
-                                      )}
-                                    </td>
-                                  </tr>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+              {/* Drilldown — only shown under the row containing the selected card */}
+              {selectedRow === rowIndex && selectedSpuId && (
+                <div className="border rounded-lg overflow-hidden" data-testid={`section-spu-drill-${selectedSpuId}`}>
+                  <div className="flex items-center gap-3 px-4 py-3 bg-muted/40 border-b">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-semibold text-base">{spuName}</span>
+                    <Badge variant="secondary" className="text-xs">{totalSpuOkrs} OKR{totalSpuOkrs !== 1 ? "s" : ""}</Badge>
+                    <button
+                      className="ml-auto text-muted-foreground hover:text-foreground"
+                      onClick={() => setSelectedSpuId(null)}
+                      data-testid="button-close-drill"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                ))
+
+                  {selectedSpuOkrs.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-muted-foreground">No OKRs match the current filters for this SPU.</div>
+                  ) : (
+                    selectedSpuOkrs.map((subUnit) => (
+                      <div key={subUnit.subUnitId || "__none__"} className="border-t first:border-t-0">
+                        {(selectedSpuOkrs.length > 1 || subUnit.subUnitId !== null) && (
+                          <div className="flex items-center gap-2 px-4 py-2 bg-muted/20 border-b">
+                            <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{subUnit.subUnitName}</span>
+                            <span className="text-xs text-muted-foreground">· {subUnit.okrs.length} OKR{subUnit.okrs.length !== 1 ? "s" : ""}</span>
+                          </div>
+                        )}
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-sm" data-testid={`table-drill-${subUnit.subUnitId || "none"}`}>
+                            <thead>
+                              <tr className="border-b bg-muted/10">
+                                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">#</th>
+                                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Objective</th>
+                                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-36 hidden lg:table-cell">Owner</th>
+                                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28 hidden md:table-cell">Period</th>
+                                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">Score</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border bg-card">
+                              {subUnit.okrs.map((okr) => {
+                                const progress = getOkrProgress(okr.id);
+                                const hasScore = updates?.some(u => u.okrId === okr.id);
+                                const krs = getKeyResults(okr.keyResults || "[]");
+                                const isExpanded = expandedOkrIds.has(okr.id);
+                                return (
+                                  <React.Fragment key={okr.id}>
+                                    <tr
+                                      className={`cursor-pointer transition-colors ${isExpanded ? "bg-muted/30" : "hover:bg-muted/20"}`}
+                                      onClick={() => toggleOkrExpand(okr.id)}
+                                      data-testid={`row-drill-okr-${okr.id}`}
+                                    >
+                                      <td className="px-4 py-3 align-top">
+                                        <div className="flex items-center gap-1">
+                                          {isExpanded
+                                            ? <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+                                            : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                                          <span className="font-semibold text-xs">{okr.okrNumber}</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3 align-top max-w-sm">
+                                        <p className="font-medium text-sm leading-snug">{okr.objectiveStatement}</p>
+                                        {krs.length > 0 && (
+                                          <span className="text-xs text-muted-foreground">{krs.length} key result{krs.length !== 1 ? "s" : ""}</span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-3 align-top hidden lg:table-cell">
+                                        <span className="text-sm">{okr.staff?.name || "—"}</span>
+                                      </td>
+                                      <td className="px-4 py-3 align-top hidden md:table-cell">
+                                        <span className="text-sm text-muted-foreground whitespace-nowrap">{okr.quarter} {okr.year}</span>
+                                      </td>
+                                      <td className="px-4 py-3 align-top text-right">
+                                        {hasScore ? (
+                                          <div className="flex flex-col items-end gap-1">
+                                            <span className="text-base font-bold tabular-nums">{progress}%</span>
+                                            <div className="w-14"><Progress value={progress} className="h-1" /></div>
+                                          </div>
+                                        ) : (
+                                          <span className="text-xs text-muted-foreground italic">No score</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                    {isExpanded && (
+                                      <tr className="bg-muted/10" data-testid={`row-drill-detail-${okr.id}`}>
+                                        <td colSpan={5} className="px-6 py-4">
+                                          {krs.length > 0 ? (
+                                            <div className="space-y-1">
+                                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Key Results</p>
+                                              {krs.map((kr: any, i: number) => (
+                                                <p key={i} className="text-xs text-foreground leading-snug pl-2 border-l-2 border-muted">
+                                                  KR {i + 1}: {typeof kr === "string" ? kr : kr.description}
+                                                </p>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <p className="text-sm text-muted-foreground italic">No key results.</p>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               )}
-            </div>
-          );
+            </React.Fragment>
+          ));
         })()}
       </div>
     </div>
