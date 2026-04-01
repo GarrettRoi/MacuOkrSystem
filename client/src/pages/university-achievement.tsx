@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,7 +14,6 @@ import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementDa
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS } from "@shared/schema";
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
-import { Link, useLocation } from "wouter";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 
@@ -949,8 +948,6 @@ function ObjectiveResultsTab() {
   const [uniYear, setUniYear] = useState<string>("");
   const [uniQuarter, setUniQuarter] = useState<string>("");
   const [uniSpu, setUniSpu] = useState<string>("");
-  const resultsRef = useRef<HTMLDivElement>(null);
-  const [, navigate] = useLocation();
 
   const { data: universityObjectives } = useQuery<UniversityObjectiveWithKeyResults[]>({
     queryKey: ["/api/university-objectives"],
@@ -974,13 +971,6 @@ function ObjectiveResultsTab() {
       return next;
     });
   };
-
-  // Scroll to the results table the first time an objective is selected
-  useEffect(() => {
-    if (selectedObjectiveLabels.size === 1 && resultsRef.current) {
-      resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [selectedObjectiveLabels.size]);
 
   const uniFilteredOkrs = useMemo(() => {
     if (!okrsWithUpdates || selectedObjectiveLabels.size === 0) return [];
@@ -1116,7 +1106,7 @@ function ObjectiveResultsTab() {
       </div>
 
       {/* OKR results */}
-      <div ref={resultsRef} className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4">
         {selectedObjectiveLabels.size === 0 ? (
           <Card>
             <CardContent className="p-16 text-center">
@@ -1158,17 +1148,10 @@ function ObjectiveResultsTab() {
                   const hasScore = score !== null && score !== undefined;
                   const objLabels = getOkrObjectiveLabels(okr);
                   const krs = getKeyResults(okr.keyResults || "[]");
-                  const okrUrl = `/quarterly-update?okrId=${okr.id}&quarter=${okr.quarter}&year=${okr.year}`;
                   return (
-                    <tr
-                      key={okr.id}
-                      className="hover:bg-muted/30 transition-colors cursor-pointer"
-                      onClick={() => navigate(okrUrl)}
-                      title="Open quarterly update"
-                      data-testid={`row-obj-okr-${okr.id}`}
-                    >
+                    <tr key={okr.id} className="hover:bg-muted/20 transition-colors" data-testid={`row-obj-okr-${okr.id}`}>
                       <td className="px-4 py-3 align-top">
-                        <span className="font-semibold text-xs text-primary underline underline-offset-2">{okr.okrNumber}</span>
+                        <span className="font-semibold text-xs">{okr.okrNumber}</span>
                       </td>
                       <td className="px-4 py-3 align-top max-w-md">
                         <p className="font-medium text-sm leading-snug">{okr.objectiveStatement}</p>
