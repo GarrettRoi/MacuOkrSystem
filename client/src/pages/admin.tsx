@@ -31,8 +31,9 @@ interface AdminProps {
 
 // ── SPU / Staff CSV Import Dialog ────────────────────────────────────────────
 
-interface SpuPreview { name: string; admin: string; subUnits: { name: string; memberCount: number; members: string[] }[]; directMemberCount: number; directMembers: string[]; }
-interface SpuStaffPreview { spus: SpuPreview[]; totals: { spus: number; subUnits: number; staff: number }; }
+interface SpuSubUnitPreview { name: string; memberCount: number; members: string[]; exists: boolean; }
+interface SpuPreview { name: string; admin: string; subUnits: SpuSubUnitPreview[]; directMemberCount: number; directMembers: string[]; exists: boolean; }
+interface SpuStaffPreview { spus: SpuPreview[]; totals: { spus: number; subUnits: number; staff: number; existingSpus: number; newSpus: number; existingSubUnits: number; newSubUnits: number }; }
 
 function SpuStaffImportDialog() {
   const { toast } = useToast();
@@ -48,12 +49,18 @@ function SpuStaffImportDialog() {
     onError: (err) => toast({ title: "Parse Error", description: err.message, variant: "destructive" }),
   });
 
-  const confirmMutation = useMutation<unknown, Error, string>({
+  const confirmMutation = useMutation<{ created: { spus: number; subUnits: number; staff: number }; kept: { spus: number; subUnits: number } }, Error, string>({
     mutationFn: async (csv) => { const r = await apiRequest("POST", "/api/setup/confirm/spu-staff", { csvData: csv }); return r.json(); },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
       queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
-      toast({ title: "Import Complete", description: "SPUs, sub-units, and staff have been imported." });
+      const parts: string[] = [];
+      if (data.created.spus > 0) parts.push(`${data.created.spus} new SPU${data.created.spus !== 1 ? "s" : ""} created`);
+      if (data.kept.spus > 0) parts.push(`${data.kept.spus} SPU${data.kept.spus !== 1 ? "s" : ""} already existed (kept)`);
+      if (data.created.subUnits > 0) parts.push(`${data.created.subUnits} new sub-unit${data.created.subUnits !== 1 ? "s" : ""} created`);
+      if (data.kept.subUnits > 0) parts.push(`${data.kept.subUnits} sub-unit${data.kept.subUnits !== 1 ? "s" : ""} already existed (kept)`);
+      if (data.created.staff > 0) parts.push(`${data.created.staff} staff added`);
+      toast({ title: "Import Complete", description: parts.length ? parts.join(", ") + "." : "Nothing to import — all records already exist." });
       setOpen(false);
       reset();
     },
@@ -86,7 +93,7 @@ function SpuStaffImportDialog() {
             Import SPUs & Sub-Units
           </DialogTitle>
           <DialogDescription>
-            Upload a TSV to bulk-add SPUs and sub-units. Existing records will not be removed.
+            Upload a TSV to add or update SPUs and sub-units. Records are matched by name — existing ones are kept with all their OKRs intact, and only missing ones are created.
           </DialogDescription>
         </DialogHeader>
 
@@ -120,17 +127,34 @@ function SpuStaffImportDialog() {
           {step === "preview" && preview && (
             <div className="space-y-4">
               <div className="flex gap-2 flex-wrap">
-                <Badge variant="secondary">{preview.totals.spus} SPUs</Badge>
-                <Badge variant="secondary">{preview.totals.subUnits} Sub-Units</Badge>
-                <Badge variant="secondary">{preview.totals.staff} Staff</Badge>
+                {preview.totals.newSpus > 0 && <Badge variant="default">{preview.totals.newSpus} new SPU{preview.totals.newSpus !== 1 ? "s" : ""}</Badge>}
+                {preview.totals.existingSpus > 0 && <Badge variant="secondary">{preview.totals.existingSpus} existing SPU{preview.totals.existingSpus !== 1 ? "s" : ""}</Badge>}
+                {preview.totals.newSubUnits > 0 && <Badge variant="default">{preview.totals.newSubUnits} new sub-unit{preview.totals.newSubUnits !== 1 ? "s" : ""}</Badge>}
+                {preview.totals.existingSubUnits > 0 && <Badge variant="secondary">{preview.totals.existingSubUnits} existing sub-unit{preview.totals.existingSubUnits !== 1 ? "s" : ""}</Badge>}
+                {preview.totals.staff > 0 && <Badge variant="outline">{preview.totals.staff} staff</Badge>}
               </div>
+              {preview.totals.existingSpus > 0 && (
+                <div className="rounded-md bg-muted/50 border px-3 py-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Existing SPUs are matched by name</span> — their OKR links are preserved. Only new SPUs and sub-units will be added.
+                </div>
+              )}
               <div className="rounded-md border divide-y max-h-72 overflow-y-auto">
                 {preview.spus.map((spu, i) => (
                   <div key={i} className="p-3 space-y-1">
-                    <p className="text-sm font-semibold">{spu.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold">{spu.name}</p>
+                      <Badge variant={spu.exists ? "secondary" : "default"} className="text-xs no-default-active-elevate">
+                        {spu.exists ? "existing" : "new"}
+                      </Badge>
+                    </div>
                     {spu.admin && <p className="text-xs text-muted-foreground">Admin: {spu.admin}</p>}
                     {spu.subUnits.map((su, j) => (
-                      <p key={j} className="text-xs text-muted-foreground pl-3">• {su.name} ({su.memberCount} member{su.memberCount !== 1 ? "s" : ""})</p>
+                      <div key={j} className="flex items-center gap-1.5 pl-3">
+                        <p className="text-xs text-muted-foreground">• {su.name} ({su.memberCount} member{su.memberCount !== 1 ? "s" : ""})</p>
+                        <Badge variant={su.exists ? "secondary" : "outline"} className="text-xs no-default-active-elevate">
+                          {su.exists ? "existing" : "new"}
+                        </Badge>
+                      </div>
                     ))}
                     {spu.directMemberCount > 0 && <p className="text-xs text-muted-foreground pl-3">• {spu.directMemberCount} direct member{spu.directMemberCount !== 1 ? "s" : ""}</p>}
                   </div>

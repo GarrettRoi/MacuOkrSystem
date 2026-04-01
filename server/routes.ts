@@ -3634,20 +3634,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Look up which SPUs/sub-units already exist so the preview can label them
+      const existingSpusAll = await storage.getAllSpus();
+      const existingSubUnitsAll = await storage.getAllSubUnits();
+      const existingSpuByName = new Map(existingSpusAll.map(s => [s.name.toLowerCase(), s]));
+
       const allStaffNames = new Set<string>();
+      let existingSpuCount = 0;
+      let newSpuCount = 0;
+      let existingSubUnitCount = 0;
+      let newSubUnitCount = 0;
+
       const spuList = Array.from(spuMap.values()).map(spu => {
         if (spu.admin) allStaffNames.add(spu.admin);
+        const existingSpu = existingSpuByName.get(spu.name.toLowerCase());
+        const spuExists = !!existingSpu;
+        if (spuExists) existingSpuCount++; else newSpuCount++;
+
+        // Build sub-unit existence map for this SPU
+        const existingSubUnitsForSpu = existingSpu
+          ? new Map(existingSubUnitsAll.filter(su => su.spuId === existingSpu.id).map(su => [su.name.toLowerCase(), su]))
+          : new Map();
+
         const subUnitList = Array.from(spu.subUnits.values()).map(su => {
           su.members.forEach((m: string) => allStaffNames.add(m));
-          return { name: su.name, memberCount: su.members.length, members: su.members };
+          const suExists = existingSubUnitsForSpu.has(su.name.toLowerCase());
+          if (suExists) existingSubUnitCount++; else newSubUnitCount++;
+          return { name: su.name, memberCount: su.members.length, members: su.members, exists: suExists };
         });
         spu.directMembers.forEach((m: string) => allStaffNames.add(m));
-        return { name: spu.name, admin: spu.admin, subUnits: subUnitList, directMemberCount: spu.directMembers.length, directMembers: spu.directMembers };
+        return { name: spu.name, admin: spu.admin, subUnits: subUnitList, directMemberCount: spu.directMembers.length, directMembers: spu.directMembers, exists: spuExists };
       });
 
       res.json({
         spus: spuList,
-        totals: { spus: spuMap.size, subUnits: spuList.reduce((n, s) => n + s.subUnits.length, 0), staff: allStaffNames.size },
+        totals: {
+          spus: spuMap.size,
+          subUnits: spuList.reduce((n, s) => n + s.subUnits.length, 0),
+          staff: allStaffNames.size,
+          existingSpus: existingSpuCount,
+          newSpus: newSpuCount,
+          existingSubUnits: existingSubUnitCount,
+          newSubUnits: newSubUnitCount,
+        },
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -3682,11 +3711,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const staffByName = new Map(existingStaff.map(s => [s.name.toLowerCase(), s]));
 
       const created = { spus: 0, subUnits: 0, staff: 0 };
+      const kept = { spus: 0, subUnits: 0, staff: 0 };
       const subUnitByKey = new Map<string, any>();
 
       const getOrCreateSpu = async (name: string) => {
         const key = name.toLowerCase();
-        if (spuByName.has(key)) return spuByName.get(key)!;
+        if (spuByName.has(key)) { kept.spus++; return spuByName.get(key)!; }
         const spu = await storage.createSpu({ name });
         spuByName.set(key, spu);
         created.spus++;
@@ -3695,10 +3725,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const getOrCreateSubUnit = async (name: string, spuId: string) => {
         const key = `${spuId}:${name.toLowerCase()}`;
-        if (subUnitByKey.has(key)) return subUnitByKey.get(key)!;
+        if (subUnitByKey.has(key)) { kept.subUnits++; return subUnitByKey.get(key)!; }
         const allSubUnitsForSpu = await db.select().from(subUnits).where(eq(subUnits.spuId, spuId));
         const existing = allSubUnitsForSpu.find(su => su.name.toLowerCase() === name.toLowerCase());
-        if (existing) { subUnitByKey.set(key, existing); return existing; }
+        if (existing) { subUnitByKey.set(key, existing); kept.subUnits++; return existing; }
         const su = await storage.createSubUnit({ name, spuId });
         subUnitByKey.set(key, su);
         created.subUnits++;
@@ -3738,7 +3768,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({ success: true, created });
+      res.json({ success: true, created, kept });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
