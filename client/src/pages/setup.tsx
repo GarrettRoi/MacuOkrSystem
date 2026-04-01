@@ -239,36 +239,36 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }) 
                 {spuSubStep === "upload" && (
                   <>
                     <div className="p-4 rounded-md border bg-muted/40 space-y-2">
-                      <p className="text-sm font-medium">Expected CSV format</p>
+                      <p className="text-sm font-medium">Expected TSV format (tab-separated)</p>
                       <div className="overflow-x-auto">
                         <table className="text-xs w-full">
                           <thead>
                             <tr className="border-b">
-                              {["SPU Name", "Sub-Unit Name", "SPU Admin Name", "Sub-Unit Team Members"].map(h => (
+                              {["Primary SPU", "Sub-units"].map(h => (
                                 <th key={h} className="text-left py-1 pr-4 font-mono text-muted-foreground whitespace-nowrap">{h}</th>
                               ))}
                             </tr>
                           </thead>
                           <tbody className="text-muted-foreground">
                             <tr>
-                              <td className="py-1 pr-4">Academics</td>
                               <td className="py-1 pr-4">School of Business</td>
-                              <td className="py-1 pr-4">Dean Johnson</td>
-                              <td className="py-1 pr-4">Alice Smith;Bob Jones</td>
+                              <td className="py-1 pr-4">Sch. of Bus. - Accounting</td>
                             </tr>
                             <tr>
-                              <td className="py-1 pr-4">Academics</td>
-                              <td className="py-1 pr-4">School of Arts</td>
-                              <td className="py-1 pr-4">Dean Johnson</td>
-                              <td className="py-1 pr-4">Carol White</td>
+                              <td className="py-1 pr-4">School of Business</td>
+                              <td className="py-1 pr-4">Sch. of Bus. - Management</td>
+                            </tr>
+                            <tr>
+                              <td className="py-1 pr-4">Financial Aid</td>
+                              <td className="py-1 pr-4"></td>
                             </tr>
                           </tbody>
                         </table>
                       </div>
                       <ul className="text-xs text-muted-foreground space-y-0.5 mt-2">
-                        <li>• Multiple rows can share the same SPU Name — they'll be grouped into one SPU</li>
-                        <li>• Sub-Unit Name can be blank (staff will be linked directly to the SPU)</li>
-                        <li>• Separate team members with semicolons</li>
+                        <li>• Use one row per sub-unit. Repeat the SPU name for each sub-unit.</li>
+                        <li>• Leave Sub-units blank for SPUs with no sub-units.</li>
+                        <li>• Export from Excel or Google Sheets as a .tsv or tab-separated file.</li>
                       </ul>
                     </div>
                     <div className="flex gap-2 flex-wrap">
@@ -282,9 +282,9 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }) 
                         data-testid="button-upload-spu-csv"
                       >
                         {spuPreviewMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
-                        {spuPreviewMutation.isPending ? "Parsing…" : "Upload CSV"}
+                        {spuPreviewMutation.isPending ? "Parsing…" : "Upload TSV File"}
                       </Button>
-                      <input ref={spuFileRef} type="file" accept=".csv" className="hidden"
+                      <input ref={spuFileRef} type="file" accept=".tsv,.csv,text/tab-separated-values,text/csv" className="hidden"
                         onChange={e => handleFileRead(e, setSpuCsvData, csv => spuPreviewMutation.mutate(csv))} />
                     </div>
                   </>

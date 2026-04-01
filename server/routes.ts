@@ -1375,6 +1375,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/spus/bulk", requireAdmin, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!ids || !Array.isArray(ids) || ids.length === 0)
+        return res.status(400).json({ error: "No SPU IDs provided" });
+      let deleted = 0;
+      const errors: string[] = [];
+      for (const id of ids) {
+        try { await storage.deleteSpu(id); deleted++; }
+        catch (e: any) { errors.push(`${id}: ${e.message}`); }
+      }
+      res.json({ success: true, deleted, errors });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.delete("/api/spus/:id", requireAdmin, async (req, res) => {
     try {
       await storage.deleteSpu(req.params.id);
@@ -3527,8 +3544,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let filename = "";
     let content = "";
     if (type === "spu-staff") {
-      filename = "spu-staff-import-template.csv";
-      content = "SPU Name,Sub-Unit Name,SPU Admin Name,Sub-Unit Team Members\n";
+      filename = "spu-staff-import-template.tsv";
+      content = "Primary SPU\tSub-units\nExample SPU\tExample SPU - Sub-Unit A\nExample SPU\tExample SPU - Sub-Unit B\nAnother SPU\t\n";
+      res.setHeader("Content-Type", "text/tab-separated-values");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      return res.send(content);
     } else if (type === "objectives") {
       filename = "university-objectives-template.csv";
       content = "Objective Number,Objective Title,Key Result Number,Key Result Description,Applicable Years\n";
@@ -3540,26 +3560,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.send(content);
   });
 
-  // Preview SPU + Staff CSV
+  // Preview SPU + Staff CSV/TSV
   app.post("/api/setup/preview/spu-staff", requireAdmin, async (req, res) => {
     try {
-      const { csvData } = req.body;
-      if (!csvData) return res.status(400).json({ error: "CSV data is required" });
+      const rawData: string = req.body.csvData;
+      if (!rawData) return res.status(400).json({ error: "File data is required" });
 
-      const rows = parseCSV(csvData);
-      if (rows.length < 2) return res.status(400).json({ error: "CSV must have a header row and at least one data row" });
+      const firstLine = rawData.split('\n')[0] || '';
+      const rows = firstLine.includes('\t') ? parseTSV(rawData) : parseCSV(rawData);
+      if (rows.length < 2) return res.status(400).json({ error: "File must have a header row and at least one data row" });
 
       const headers = rows[0].map((h: string) => h.trim().toLowerCase());
-      const colSpuName = headers.indexOf("spu name");
-      const colSubUnit = headers.indexOf("sub-unit name");
-      const colAdmin = headers.indexOf("spu admin name");
-      const colMembers = headers.indexOf("sub-unit team members");
 
-      const missing: string[] = [];
-      if (colSpuName < 0) missing.push("SPU Name");
-      if (colAdmin < 0) missing.push("SPU Admin Name");
-      if (colMembers < 0) missing.push("Sub-Unit Team Members");
-      if (missing.length > 0) return res.status(400).json({ error: `Missing required columns: ${missing.join(", ")}` });
+      // Detect format: new TSV (Primary SPU / Sub-units) vs old CSV (SPU Name / SPU Admin Name / ...)
+      const colPrimarySpu = headers.findIndex(h => h === 'primary spu');
+      const isNewFormat = colPrimarySpu >= 0;
 
       interface SpuEntry {
         name: string; admin: string;
@@ -3568,25 +3583,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const spuMap = new Map<string, SpuEntry>();
 
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i] as string[];
-        const spuName = (row[colSpuName] || "").trim();
-        if (!spuName) continue;
-        const subUnitName = colSubUnit >= 0 ? (row[colSubUnit] || "").trim() : "";
-        const adminName = (row[colAdmin] || "").trim();
-        const memberStr = (row[colMembers] || "").trim();
-        const members = memberStr ? memberStr.split(";").map((m: string) => m.trim()).filter(Boolean) : [];
+      if (isNewFormat) {
+        const colSubUnits = headers.findIndex(h => h === 'sub-units' || h === 'sub-unit' || h.startsWith('sub'));
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i] as string[];
+          const spuName = (row[colPrimarySpu] || "").trim();
+          if (!spuName) continue;
+          const subUnitName = colSubUnits >= 0 ? (row[colSubUnits] || "").trim() : "";
+          if (!spuMap.has(spuName)) spuMap.set(spuName, { name: spuName, admin: "", subUnits: new Map(), directMembers: [] });
+          const spu = spuMap.get(spuName)!;
+          if (subUnitName && !isPlaceholderSubUnit(subUnitName)) {
+            if (!spu.subUnits.has(subUnitName)) spu.subUnits.set(subUnitName, { name: subUnitName, members: [] });
+          }
+        }
+      } else {
+        const colSpuName = headers.indexOf("spu name");
+        const colSubUnit = headers.indexOf("sub-unit name");
+        const colAdmin = headers.indexOf("spu admin name");
+        const colMembers = headers.indexOf("sub-unit team members");
+        const missing: string[] = [];
+        if (colSpuName < 0) missing.push("SPU Name");
+        if (colAdmin < 0) missing.push("SPU Admin Name");
+        if (colMembers < 0) missing.push("Sub-Unit Team Members");
+        if (missing.length > 0) return res.status(400).json({ error: `Missing required columns: ${missing.join(", ")}` });
 
-        if (!spuMap.has(spuName)) spuMap.set(spuName, { name: spuName, admin: "", subUnits: new Map(), directMembers: [] });
-        const spu = spuMap.get(spuName)!;
-        if (adminName && !spu.admin) spu.admin = adminName;
-
-        const isPlaceholder = isPlaceholderSubUnit(subUnitName);
-        if (!isPlaceholder && subUnitName) {
-          if (!spu.subUnits.has(subUnitName)) spu.subUnits.set(subUnitName, { name: subUnitName, members: [] });
-          spu.subUnits.get(subUnitName)!.members.push(...members);
-        } else {
-          spu.directMembers.push(...members);
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i] as string[];
+          const spuName = (row[colSpuName] || "").trim();
+          if (!spuName) continue;
+          const subUnitName = colSubUnit >= 0 ? (row[colSubUnit] || "").trim() : "";
+          const adminName = (row[colAdmin] || "").trim();
+          const memberStr = (row[colMembers] || "").trim();
+          const members = memberStr ? memberStr.split(";").map((m: string) => m.trim()).filter(Boolean) : [];
+          if (!spuMap.has(spuName)) spuMap.set(spuName, { name: spuName, admin: "", subUnits: new Map(), directMembers: [] });
+          const spu = spuMap.get(spuName)!;
+          if (adminName && !spu.admin) spu.admin = adminName;
+          const isPlaceholder = isPlaceholderSubUnit(subUnitName);
+          if (!isPlaceholder && subUnitName) {
+            if (!spu.subUnits.has(subUnitName)) spu.subUnits.set(subUnitName, { name: subUnitName, members: [] });
+            spu.subUnits.get(subUnitName)!.members.push(...members);
+          } else {
+            spu.directMembers.push(...members);
+          }
         }
       }
 
@@ -3610,18 +3648,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Confirm SPU + Staff CSV — actually creates the records
+  // Confirm SPU + Staff CSV/TSV — actually creates the records
   app.post("/api/setup/confirm/spu-staff", requireAdmin, async (req, res) => {
     try {
-      const { csvData } = req.body;
-      if (!csvData) return res.status(400).json({ error: "CSV data is required" });
+      const rawData: string = req.body.csvData;
+      if (!rawData) return res.status(400).json({ error: "File data is required" });
 
-      const rows = parseCSV(csvData);
+      const firstLine = rawData.split('\n')[0] || '';
+      const rows = firstLine.includes('\t') ? parseTSV(rawData) : parseCSV(rawData);
       const headers = rows[0].map((h: string) => h.trim().toLowerCase());
-      const colSpuName = headers.indexOf("spu name");
-      const colSubUnit = headers.indexOf("sub-unit name");
-      const colAdmin = headers.indexOf("spu admin name");
-      const colMembers = headers.indexOf("sub-unit team members");
+
+      const colPrimarySpu = headers.findIndex(h => h === 'primary spu');
+      const isNewFormat = colPrimarySpu >= 0;
+
+      let colSpuName = colPrimarySpu >= 0 ? colPrimarySpu : headers.indexOf("spu name");
+      let colSubUnit = isNewFormat
+        ? headers.findIndex(h => h === 'sub-units' || h === 'sub-unit' || h.startsWith('sub'))
+        : headers.indexOf("sub-unit name");
+      const colAdmin = isNewFormat ? -1 : headers.indexOf("spu admin name");
+      const colMembers = isNewFormat ? -1 : headers.indexOf("sub-unit team members");
 
       // Load existing SPUs and staff to avoid duplicates
       const existingSpus = await storage.getAllSpus();

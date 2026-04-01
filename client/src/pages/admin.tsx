@@ -76,17 +76,17 @@ function SpuStaffImportDialog() {
       <DialogTrigger asChild>
         <Button variant="outline" data-testid="button-import-spu-csv">
           <Upload className="h-4 w-4 mr-2" />
-          Import CSV
+          Import TSV
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
-            Import SPUs, Sub-Units & Staff
+            Import SPUs & Sub-Units
           </DialogTitle>
           <DialogDescription>
-            Upload a CSV to bulk-add SPUs, sub-units, and staff. Existing records will not be removed.
+            Upload a TSV to bulk-add SPUs and sub-units. Existing records will not be removed.
           </DialogDescription>
         </DialogHeader>
 
@@ -94,9 +94,9 @@ function SpuStaffImportDialog() {
           {step === "upload" && (
             <div className="space-y-4">
               <div className="rounded-md border bg-muted/40 p-4 space-y-1 text-sm">
-                <p className="font-medium">Required columns:</p>
-                <code className="text-xs">SPU Name, Sub-Unit Name, SPU Admin Name, Sub-Unit Team Members</code>
-                <p className="text-muted-foreground text-xs mt-1">Multiple rows can share the same SPU Name — they'll be grouped. Leave Sub-Unit fields blank for direct SPU members.</p>
+                <p className="font-medium">Required columns (tab-separated):</p>
+                <code className="text-xs">Primary SPU &nbsp;&nbsp; Sub-units</code>
+                <p className="text-muted-foreground text-xs mt-1">Use one row per sub-unit. Repeat the SPU name for each sub-unit. Leave Sub-units blank for SPUs with no sub-units.</p>
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => window.open("/api/setup/example-csv/spu-staff", "_blank")} data-testid="button-download-spu-template">
@@ -110,9 +110,9 @@ function SpuStaffImportDialog() {
                   data-testid="button-upload-spu-file"
                 >
                   {previewMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
-                  {previewMutation.isPending ? "Parsing…" : "Choose CSV File"}
+                  {previewMutation.isPending ? "Parsing…" : "Choose TSV File"}
                 </Button>
-                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+                <input ref={fileRef} type="file" accept=".tsv,.csv,text/tab-separated-values,text/csv" className="hidden" onChange={handleFile} />
               </div>
             </div>
           )}
@@ -998,6 +998,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
   const [newAssignmentSpuId, setNewAssignmentSpuId] = useState("");
   const [newAssignmentSubUnitId, setNewAssignmentSubUnitId] = useState("");
 
+  const [selectedSpuIds, setSelectedSpuIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteSpuDialogOpen, setBulkDeleteSpuDialogOpen] = useState(false);
+
   const [mergeSpuDialogOpen, setMergeSpuDialogOpen] = useState(false);
   const [mergeSpuSourceId, setMergeSpuSourceId] = useState("");
   const [mergeSpuTargetId, setMergeSpuTargetId] = useState("");
@@ -1395,6 +1398,20 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
       toast({ title: "SPU Deleted", description: "The SPU has been removed." });
     },
+  });
+
+  const bulkDeleteSpusMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const r = await apiRequest("DELETE", "/api/spus/bulk", { ids });
+      return r.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      setSelectedSpuIds(new Set());
+      setBulkDeleteSpuDialogOpen(false);
+      toast({ title: "SPUs Deleted", description: `${data.deleted} SPU(s) have been removed.` });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const addSubUnitMutation = useMutation({
@@ -2476,6 +2493,16 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <SpuStaffImportDialog />
+                  {selectedSpuIds.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => setBulkDeleteSpuDialogOpen(true)}
+                      data-testid="button-bulk-delete-spus"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Selected ({selectedSpuIds.size})
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     onClick={() => setMergeSpuDialogOpen(true)}
@@ -2539,6 +2566,17 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         <div key={spu.id} data-testid={`row-spu-${spu.id}`}>
                           <div className="flex items-center justify-between gap-2 py-2 px-2 rounded-md hover-elevate">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <Checkbox
+                                checked={selectedSpuIds.has(spu.id)}
+                                onCheckedChange={(checked) => {
+                                  setSelectedSpuIds(prev => {
+                                    const next = new Set(prev);
+                                    if (checked) next.add(spu.id); else next.delete(spu.id);
+                                    return next;
+                                  });
+                                }}
+                                data-testid={`checkbox-spu-${spu.id}`}
+                              />
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -2817,6 +2855,35 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                   data-testid="button-save-edit-subunit"
                 >
                   {updateSubUnitMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={bulkDeleteSpuDialogOpen} onOpenChange={setBulkDeleteSpuDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete {selectedSpuIds.size} SPU{selectedSpuIds.size !== 1 ? "s" : ""}?</DialogTitle>
+                <DialogDescription>
+                  This will permanently remove the selected SPU{selectedSpuIds.size !== 1 ? "s" : ""} and all associated sub-units, OKRs, and staff assignments. This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-2 max-h-48 overflow-y-auto">
+                {Array.from(selectedSpuIds).map(id => {
+                  const spu = spus?.find(s => s.id === id);
+                  return spu ? <p key={id} className="text-sm text-muted-foreground py-0.5">• {spu.name}</p> : null;
+                })}
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setBulkDeleteSpuDialogOpen(false)}>Cancel</Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => bulkDeleteSpusMutation.mutate(Array.from(selectedSpuIds))}
+                  disabled={bulkDeleteSpusMutation.isPending}
+                  data-testid="button-confirm-bulk-delete-spus"
+                >
+                  {bulkDeleteSpusMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                  {bulkDeleteSpusMutation.isPending ? "Deleting…" : `Delete ${selectedSpuIds.size} SPU${selectedSpuIds.size !== 1 ? "s" : ""}`}
                 </Button>
               </DialogFooter>
             </DialogContent>
