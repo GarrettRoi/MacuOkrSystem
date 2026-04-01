@@ -16,6 +16,7 @@ import type { StaffWithDetails, Spu, SubUnit, Year, UniversityObjectiveWithKeyRe
 import { QUARTERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
+import { MultiSelectSpus } from "@/components/multi-select-spus";
 
 const keyResultSchema = z.object({
   description: z.string().min(10, "Key result description must be at least 10 characters"),
@@ -27,7 +28,7 @@ const formSchema = z.object({
   subUnitId: z.string().optional(),
   quarter: z.string().min(1, "Please select a quarter"),
   year: z.number(),
-  collaborationSpuId: z.string().optional(),
+  collaborationSpuIds: z.array(z.string()).optional(),
   universityObjectives: z.array(z.string()).min(1, "Please select at least one university objective"),
   universityKeyResults: z.array(z.string()).min(1, "Please select at least one university key result"),
   objectiveStatement: z.string().min(20, "Objective statement must be at least 20 characters"),
@@ -101,7 +102,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       subUnitId: staff.subUnitId || undefined,
       quarter: "",
       year: currentYear,
-      collaborationSpuId: undefined,
+      collaborationSpuIds: [],
       universityObjectives: [],
       universityKeyResults: [],
       objectiveStatement: "",
@@ -200,7 +201,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       subUnitId: staff.subUnitId || undefined,
       quarter: "",
       year: currentYear,
-      collaborationSpuId: undefined,
+      collaborationSpuIds: [],
       universityObjectives: [],
       universityKeyResults: [],
       objectiveStatement: "",
@@ -513,28 +514,24 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
 
               <FormField
                 control={form.control}
-                name="collaborationSpuId"
+                name="collaborationSpuIds"
                 render={({ field }) => {
                   const selectedSpuId = form.watch("spuId");
+                  const collaborationOptions = spus?.filter((s) => s.id !== selectedSpuId) || [];
                   return (
                     <FormItem>
-                      <FormLabel>Collaboration SPU (Optional)</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-collaboration-spu">
-                            <SelectValue placeholder="Not Applicable" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {spus?.filter((s) => s.id !== selectedSpuId).map((spu) => (
-                            <SelectItem key={spu.id} value={spu.id}>
-                              {spu.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Collaboration SPU(s) (Optional)</FormLabel>
+                      <FormControl>
+                        <MultiSelectSpus
+                          options={collaborationOptions}
+                          selectedIds={field.value || []}
+                          onChange={field.onChange}
+                          placeholder="Not Applicable"
+                          testIdPrefix="select-collaboration-spu"
+                        />
+                      </FormControl>
                       <FormDescription>
-                        If you are collaborating with another Primary SPU, please select them here
+                        If you are collaborating with one or more other Primary SPUs, please select them here
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

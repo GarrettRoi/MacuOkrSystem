@@ -35,7 +35,7 @@ import {
   analyticsDashboards,
   analyticsWidgets,
 } from "@shared/schema";
-import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole, AnalyticsData } from "@shared/schema";
+import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole, AnalyticsData, Spu } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear } from "@shared/schema";
 import { z } from "zod";
 
@@ -1756,7 +1756,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const okrNumber = `OKR ${existingCount + 1}`;
       
       console.log("[POST /api/okrs] Parsed data:", JSON.stringify(parsed.data, null, 2));
-      const okr = await storage.createOkr({ ...parsed.data, okrNumber, submitterName });
+      // Sync legacy collaborationSpuId from array when collaborationSpuIds is provided
+      const collaborationSpuIds: string[] = parsed.data.collaborationSpuIds || [];
+      const collaborationSpuId = parsed.data.collaborationSpuId !== undefined
+        ? parsed.data.collaborationSpuId
+        : (collaborationSpuIds.length > 0 ? collaborationSpuIds[0] : null);
+      const createData = { ...parsed.data, okrNumber, submitterName, collaborationSpuId, collaborationSpuIds };
+      const okr = await storage.createOkr(createData);
       console.log("[POST /api/okrs] Created OKR:", JSON.stringify(okr, null, 2));
       res.status(201).json(okr);
     } catch (error) {
@@ -1820,6 +1826,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });
+      }
+      
+      // Sync legacy collaborationSpuId from array when collaborationSpuIds is updated
+      if (updates.collaborationSpuIds !== undefined) {
+        const ids: string[] = updates.collaborationSpuIds || [];
+        updates.collaborationSpuId = ids.length > 0 ? ids[0] : null;
       }
       
       const updatedOkr = await storage.updateOkr(req.params.id, updates);
@@ -2165,7 +2177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `"${okr.staff.subUnit?.name || "N/A"}"`,
           `"${okr.spu?.name || "N/A"}"`,
           `"${okr.subUnit?.name || "N/A"}"`,
-          `"${okr.collaborationSpu?.name || "Not Applicable"}"`,
+          `"${(okr.collaborationSpus && okr.collaborationSpus.length > 0) ? okr.collaborationSpus.map((s: Spu) => s.name).join(", ") : (okr.collaborationSpu?.name || "Not Applicable")}"`,
           okr.quarter,
           okr.year,
           okr.okrNumber,
@@ -2736,19 +2748,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           let collabSpu = null;
+          const collabSpuIds: string[] = [];
           if (collaborationSpu && !/not applicable/i.test(collaborationSpu)) {
             // Collaboration SPU can be a comma-separated list; create/find each
             const collabNames = collaborationSpu.split(',').map((s: string) => s.trim()).filter(Boolean);
             for (const cName of collabNames) {
+              let foundSpu;
               if (spuCache.has(cName.toLowerCase())) {
-                collabSpu = spuCache.get(cName.toLowerCase());
+                foundSpu = spuCache.get(cName.toLowerCase());
               } else {
                 const existingBefore = await storage.getSpuByName(cName);
-                collabSpu = await storage.findOrCreateSpu(cName);
-                spuCache.set(cName.toLowerCase(), collabSpu);
+                foundSpu = await storage.findOrCreateSpu(cName);
+                spuCache.set(cName.toLowerCase(), foundSpu);
                 if (!existingBefore) results.spusCreated++;
               }
-              break; // only store the first collaboration SPU reference on the OKR
+              if (foundSpu) {
+                collabSpuIds.push(foundSpu.id);
+                if (!collabSpu) collabSpu = foundSpu; // keep first for legacy field
+              }
             }
           }
 
@@ -2807,6 +2824,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             quarter,
             year,
             collaborationSpuId: collabSpu?.id || null,
+            collaborationSpuIds: collabSpuIds,
             universityObjective: universityObjective || '',
             universityKeyResult: universityKeyResult || '',
             objectiveStatement: objectiveStatement || 'Imported OKR',

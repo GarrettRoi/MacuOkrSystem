@@ -131,6 +131,7 @@ export const okrs = pgTable("okrs", {
   quarter: text("quarter").notNull(),
   year: integer("year").notNull(),
   collaborationSpuId: varchar("collaboration_spu_id").references(() => spus.id),
+  collaborationSpuIds: text("collaboration_spu_ids").array().default([]),
   universityObjective: text("university_objective").notNull(),
   universityKeyResult: text("university_key_result").notNull(),
   objectiveStatement: text("objective_statement").notNull(),
@@ -302,6 +303,7 @@ export const updateOkrSchema = z.object({
   universityKeyResult: z.string().optional(),
   keyResults: z.string().optional(),
   collaborationSpuId: z.string().nullable().optional(),
+  collaborationSpuIds: z.array(z.string()).optional(),
   status: z.enum(["not_started", "in_progress", "completed"]).optional(),
 });
 
@@ -470,6 +472,7 @@ export type OkrWithDetails = Okr & {
   spu?: Spu | null;
   subUnit?: SubUnit | null;
   collaborationSpu?: Spu | null;
+  collaborationSpus?: Spu[];
 };
 
 export type QuarterUpdateWithDetails = QuarterlyUpdate & {

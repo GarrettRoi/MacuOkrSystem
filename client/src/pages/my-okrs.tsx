@@ -564,10 +564,23 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                       </div>
                     )}
 
-                    {okr.collaborationSpuId && okr.collaborationSpu && (
+                    {((okr.collaborationSpus && okr.collaborationSpus.length > 0) || okr.collaborationSpu) && (
                       <div className="border-t pt-4">
-                        <h4 className="text-sm font-medium text-muted-foreground mb-1">Collaborating SPU</h4>
-                        <Badge variant="outline">{okr.collaborationSpu.name}</Badge>
+                        {okr.collaborationSpus && okr.collaborationSpus.length > 0 ? (
+                          <>
+                            <h4 className="text-sm font-medium text-muted-foreground mb-1">Collaborating SPU{okr.collaborationSpus.length > 1 ? "s" : ""}</h4>
+                            <div className="flex flex-wrap gap-1">
+                              {okr.collaborationSpus.map((collabSpu) => (
+                                <Badge key={collabSpu.id} variant="outline">{collabSpu.name}</Badge>
+                              ))}
+                            </div>
+                          </>
+                        ) : okr.collaborationSpu ? (
+                          <>
+                            <h4 className="text-sm font-medium text-muted-foreground mb-1">Collaborating SPU</h4>
+                            <Badge variant="outline">{okr.collaborationSpu.name}</Badge>
+                          </>
+                        ) : null}
                       </div>
                     )}
 

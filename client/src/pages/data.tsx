@@ -19,6 +19,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog, UnmatchedScore } from "@shared/schema";
 import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
+import { MultiSelectSpus } from "@/components/multi-select-spus";
 
 interface AggregatedOkr extends OkrWithDetails {
   derivedProgress: number;
@@ -36,7 +37,7 @@ const editOkrSchema = z.object({
   universityObjective: z.string(),
   universityKeyResult: z.string(),
   keyResults: z.string(),
-  collaborationSpuId: z.string().nullable(),
+  collaborationSpuIds: z.array(z.string()),
 });
 
 const editQuarterlyUpdateSchema = z.object({
@@ -837,7 +838,12 @@ export default function Data() {
       universityObjective: okr.universityObjective,
       universityKeyResult: okr.universityKeyResult,
       keyResults: okr.keyResults,
-      collaborationSpuId: okr.collaborationSpuId || null,
+      collaborationSpuIds: (() => {
+        const arr = (okr.collaborationSpuIds as string[] | null) || [];
+        if (arr.length > 0) return arr;
+        // Legacy fallback: if array is empty but legacy FK exists, seed it
+        return okr.collaborationSpuId ? [okr.collaborationSpuId] : [];
+      })(),
     });
   };
 
@@ -2126,26 +2132,26 @@ export default function Data() {
                 />
                 <FormField
                   control={okrForm.control}
-                  name="collaborationSpuId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Collaboration SPU (Optional)</FormLabel>
-                      <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? null : val)}>
+                  name="collaborationSpuIds"
+                  render={({ field }) => {
+                    const primarySpuId = okrForm.watch("spuId");
+                    const collaborationOptions = (spus || []).filter((s) => s.id !== primarySpuId);
+                    return (
+                      <FormItem>
+                        <FormLabel>Collaboration SPU(s) (Optional)</FormLabel>
                         <FormControl>
-                          <SelectTrigger data-testid="select-edit-collab-spu">
-                            <SelectValue placeholder="None" />
-                          </SelectTrigger>
+                          <MultiSelectSpus
+                            options={collaborationOptions}
+                            selectedIds={field.value || []}
+                            onChange={field.onChange}
+                            placeholder="None"
+                            testIdPrefix="select-edit-collab-spu"
+                          />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          {spus?.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
               </div>
 

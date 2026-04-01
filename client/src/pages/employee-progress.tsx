@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, MessageSquare } from "lucide-react";
-import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
+import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, OkrResponsibilityWithDetails, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 interface SpuGroup {
@@ -360,8 +360,8 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                 {subUnit.okrs.map((record) => {
                                   const keyResults = getKeyResults(record.okr.keyResults || "[]");
                                   const latestScore = record.latestUpdate?.averageScore;
-                                  const owner = record.responsibilities.find((r: any) => r.role === 'owner')?.staff.name || record.okr.staff.name;
-                                  const collaborators = record.responsibilities.filter((r: any) => r.role === 'collaborator').map((r: any) => r.staff.name);
+                                  const owner = record.responsibilities.find((r: OkrResponsibilityWithDetails) => r.role === 'owner')?.staff.name || record.okr.staff.name;
+                                  const collaborators = record.responsibilities.filter((r: OkrResponsibilityWithDetails) => r.role === 'collaborator').map((r: OkrResponsibilityWithDetails) => r.staff.name);
                                   const strategicObjs = parseMultiSelectField(record.okr.universityObjective).map(o => o.split(":")[0]?.trim()).filter(Boolean);
                                   const hasScore = latestScore !== null && latestScore !== undefined;
                                   const isExpanded = expandedOkrIds.has(record.okr.id);
@@ -384,7 +384,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                             {record.okr.subUnit && (
                                               <span className="text-xs text-muted-foreground hidden sm:block pl-4">{record.okr.subUnit.name}</span>
                                             )}
-                                            {record.okr.collaborationSpu && (
+                                            {((record.okr.collaborationSpus && record.okr.collaborationSpus.length > 0) || record.okr.collaborationSpu) && (
                                               <Badge variant="outline" className="text-xs w-fit px-1 py-0 ml-4">Collab</Badge>
                                             )}
                                           </div>
@@ -398,9 +398,11 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                             {collaborators.length > 0 && (
                                               <span className="text-xs text-muted-foreground">Collaborators: {collaborators.join(", ")}</span>
                                             )}
-                                            {record.okr.collaborationSpu && (
+                                            {(record.okr.collaborationSpus && record.okr.collaborationSpus.length > 0) ? (
+                                              <span className="text-xs text-muted-foreground">Collab SPU: {record.okr.collaborationSpus.map((s: Spu) => s.name).join(", ")}</span>
+                                            ) : record.okr.collaborationSpu ? (
                                               <span className="text-xs text-muted-foreground">Collab SPU: {record.okr.collaborationSpu.name}</span>
-                                            )}
+                                            ) : null}
                                             {record.latestUpdate && (
                                               <span className="text-xs text-muted-foreground">
                                                 Updated {new Date(record.latestUpdate.submittedAt).toLocaleDateString()}
@@ -450,7 +452,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                                   <div>
                                                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Key Results</p>
                                                     <div className="space-y-2">
-                                                      {keyResults.map((kr: any, i: number) => {
+                                                      {(keyResults as Array<string | { description: string }>).map((kr, i: number) => {
                                                         const krText = typeof kr === "string" ? kr : kr.description;
                                                         const krScore = krScores.find(s => s.keyResultNumber === i + 1);
                                                         return (

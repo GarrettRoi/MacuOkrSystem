@@ -13,6 +13,8 @@ async function runStartupMigrations() {
     const migrations = [
       `ALTER TABLE staff ADD COLUMN IF NOT EXISTS hashed_password TEXT`,
       `ALTER TABLE invite_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP`,
+      `ALTER TABLE okrs ADD COLUMN IF NOT EXISTS collaboration_spu_ids text[] DEFAULT ARRAY[]::text[]`,
+      `UPDATE okrs SET collaboration_spu_ids = ARRAY[collaboration_spu_id]::text[] WHERE collaboration_spu_id IS NOT NULL AND (collaboration_spu_ids IS NULL OR collaboration_spu_ids = ARRAY[]::text[])`,
     ];
     for (const sql of migrations) {
       await client.query(sql);

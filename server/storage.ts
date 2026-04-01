@@ -62,7 +62,7 @@ import {
   inviteTokens,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, inArray, ne, isNull, gt } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, ne, isNull, gt, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 function safeStaff<T extends { hashedPassword?: string | null }>(s: T): Omit<T, "hashedPassword"> {
@@ -532,45 +532,55 @@ export class DatabaseStorage implements IStorage {
     const staffSubUnit = alias(subUnits, 'staffSubUnit');
     const collaborationSpu = alias(spus, 'collaborationSpu');
     
-    const result = await db
-      .select({
-        okr: okrs,
-        staff: staff,
-        okrSpu: okrSpu,
-        okrSubUnit: okrSubUnit,
-        staffSpu: staffSpu,
-        staffSubUnit: staffSubUnit,
-        collaborationSpu: collaborationSpu,
-      })
-      .from(okrs)
-      .leftJoin(staff, eq(okrs.staffId, staff.id))
-      .leftJoin(okrSpu, eq(okrs.spuId, okrSpu.id))
-      .leftJoin(okrSubUnit, eq(okrs.subUnitId, okrSubUnit.id))
-      .leftJoin(staffSpu, eq(staff.spuId, staffSpu.id))
-      .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
-      .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id));
+    const [result, allSpus] = await Promise.all([
+      db
+        .select({
+          okr: okrs,
+          staff: staff,
+          okrSpu: okrSpu,
+          okrSubUnit: okrSubUnit,
+          staffSpu: staffSpu,
+          staffSubUnit: staffSubUnit,
+          collaborationSpu: collaborationSpu,
+        })
+        .from(okrs)
+        .leftJoin(staff, eq(okrs.staffId, staff.id))
+        .leftJoin(okrSpu, eq(okrs.spuId, okrSpu.id))
+        .leftJoin(okrSubUnit, eq(okrs.subUnitId, okrSubUnit.id))
+        .leftJoin(staffSpu, eq(staff.spuId, staffSpu.id))
+        .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
+        .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id)),
+      db.select().from(spus),
+    ]);
 
-    return result.map((row) => ({
-      ...row.okr,
-      staff: row.staff ? {
-        ...safeStaff(row.staff),
-        spu: row.staffSpu!,
-        subUnit: row.staffSubUnit || null,
-      } : {
-        id: row.okr.staffId || "deleted",
-        name: row.okr.submitterName || "Unknown",
-        email: "",
-        spuId: row.okr.spuId,
-        subUnitId: null,
-        isAdmin: false,
-        role: "basic" as const,
-        spu: row.staffSpu || row.okrSpu!,
-        subUnit: null,
-      },
-      spu: row.okrSpu || null,
-      subUnit: row.okrSubUnit || null,
-      collaborationSpu: row.collaborationSpu || null,
-    }));
+    const spuMap = new Map(allSpus.map(s => [s.id, s]));
+
+    return result.map((row) => {
+      const collabIds: string[] = (row.okr.collaborationSpuIds as string[] | null) || [];
+      const collaborationSpus = collabIds.map(id => spuMap.get(id)).filter(Boolean) as typeof allSpus;
+      return {
+        ...row.okr,
+        staff: row.staff ? {
+          ...safeStaff(row.staff),
+          spu: row.staffSpu!,
+          subUnit: row.staffSubUnit || null,
+        } : {
+          id: row.okr.staffId || "deleted",
+          name: row.okr.submitterName || "Unknown",
+          email: "",
+          spuId: row.okr.spuId,
+          subUnitId: null,
+          isAdmin: false,
+          role: "basic" as const,
+          spu: row.staffSpu || row.okrSpu!,
+          subUnit: null,
+        },
+        spu: row.okrSpu || null,
+        subUnit: row.okrSubUnit || null,
+        collaborationSpu: row.collaborationSpu || null,
+        collaborationSpus,
+      };
+    });
   }
 
   async getOkr(id: string): Promise<Okr | undefined> {
@@ -598,46 +608,56 @@ export class DatabaseStorage implements IStorage {
     const staffSubUnit = alias(subUnits, 'staffSubUnit');
     const collaborationSpu = alias(spus, 'collaborationSpu');
     
-    const result = await db
-      .select({
-        okr: okrs,
-        staff: staff,
-        okrSpu: okrSpu,
-        okrSubUnit: okrSubUnit,
-        staffSpu: staffSpu,
-        staffSubUnit: staffSubUnit,
-        collaborationSpu: collaborationSpu,
-      })
-      .from(okrs)
-      .leftJoin(staff, eq(okrs.staffId, staff.id))
-      .leftJoin(okrSpu, eq(okrs.spuId, okrSpu.id))
-      .leftJoin(okrSubUnit, eq(okrs.subUnitId, okrSubUnit.id))
-      .leftJoin(staffSpu, eq(staff.spuId, staffSpu.id))
-      .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
-      .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id))
-      .where(eq(okrs.spuId, spuId));
+    const [result, allSpus] = await Promise.all([
+      db
+        .select({
+          okr: okrs,
+          staff: staff,
+          okrSpu: okrSpu,
+          okrSubUnit: okrSubUnit,
+          staffSpu: staffSpu,
+          staffSubUnit: staffSubUnit,
+          collaborationSpu: collaborationSpu,
+        })
+        .from(okrs)
+        .leftJoin(staff, eq(okrs.staffId, staff.id))
+        .leftJoin(okrSpu, eq(okrs.spuId, okrSpu.id))
+        .leftJoin(okrSubUnit, eq(okrs.subUnitId, okrSubUnit.id))
+        .leftJoin(staffSpu, eq(staff.spuId, staffSpu.id))
+        .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
+        .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id))
+        .where(eq(okrs.spuId, spuId)),
+      db.select().from(spus),
+    ]);
 
-    return result.map((row) => ({
-      ...row.okr,
-      staff: row.staff ? {
-        ...safeStaff(row.staff),
-        spu: row.staffSpu!,
-        subUnit: row.staffSubUnit || null,
-      } : {
-        id: row.okr.staffId || "deleted",
-        name: row.okr.submitterName || "Unknown",
-        email: "",
-        spuId: row.okr.spuId,
-        subUnitId: null,
-        isAdmin: false,
-        role: "basic" as const,
-        spu: row.okrSpu!,
-        subUnit: null,
-      },
-      spu: row.okrSpu || null,
-      subUnit: row.okrSubUnit || null,
-      collaborationSpu: row.collaborationSpu || null,
-    }));
+    const spuMap = new Map(allSpus.map(s => [s.id, s]));
+
+    return result.map((row) => {
+      const collabIds: string[] = (row.okr.collaborationSpuIds as string[] | null) || [];
+      const collaborationSpus = collabIds.map(id => spuMap.get(id)).filter(Boolean) as typeof allSpus;
+      return {
+        ...row.okr,
+        staff: row.staff ? {
+          ...safeStaff(row.staff),
+          spu: row.staffSpu!,
+          subUnit: row.staffSubUnit || null,
+        } : {
+          id: row.okr.staffId || "deleted",
+          name: row.okr.submitterName || "Unknown",
+          email: "",
+          spuId: row.okr.spuId,
+          subUnitId: null,
+          isAdmin: false,
+          role: "basic" as const,
+          spu: row.okrSpu!,
+          subUnit: null,
+        },
+        spu: row.okrSpu || null,
+        subUnit: row.okrSubUnit || null,
+        collaborationSpu: row.collaborationSpu || null,
+        collaborationSpus,
+      };
+    });
   }
 
   async createOkr(insertOkr: InsertOkr & { okrNumber: string }): Promise<Okr> {
@@ -756,12 +776,14 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id));
 
     // Apply filters if any
-    const okrResults = conditions.length > 0 
-      ? await query.where(and(...conditions))
-      : await query;
+    const [okrResults, allSpus] = await Promise.all([
+      conditions.length > 0 ? query.where(and(...conditions)) : query,
+      db.select().from(spus),
+    ]);
 
     if (okrResults.length === 0) return [];
 
+    const spuMap = new Map(allSpus.map(s => [s.id, s]));
     const okrIds = okrResults.map(row => row.okrs.id);
 
     const [allUpdates, allResponsibilities] = await Promise.all([
@@ -809,6 +831,8 @@ export class DatabaseStorage implements IStorage {
       const primaryUpdates = updates.filter(u => u.isPrimaryScore !== false);
       const latestUpdate = primaryUpdates.length > 0 ? primaryUpdates[0] : (updates.length > 0 ? updates[0] : null);
       const responsibilities = responsibilitiesMap.get(okrId) || [];
+      const collabIds: string[] = (row.okrs.collaborationSpuIds as string[] | null) || [];
+      const collaborationSpus = collabIds.map(id => spuMap.get(id)).filter(Boolean) as typeof allSpus;
 
       return {
         okr: {
@@ -831,6 +855,7 @@ export class DatabaseStorage implements IStorage {
           spu: row.spus,
           subUnit: row.sub_units,
           collaborationSpu: row.collaboration_spu,
+          collaborationSpus,
         },
         latestUpdate,
         responsibilities: responsibilities.map(r => ({
@@ -1381,6 +1406,7 @@ export class DatabaseStorage implements IStorage {
       const movedOkrsSpuId = await tx.select().from(okrs).where(eq(okrs.spuId, sourceId));
       await tx.update(okrs).set({ spuId: targetId }).where(eq(okrs.spuId, sourceId));
       await tx.update(okrs).set({ collaborationSpuId: targetId }).where(eq(okrs.collaborationSpuId, sourceId));
+      await tx.execute(sql`UPDATE okrs SET collaboration_spu_ids = array_replace(collaboration_spu_ids, ${sourceId}::text, ${targetId}::text) WHERE ${sourceId}::text = ANY(collaboration_spu_ids)`);
 
       const movedSubUnits = await tx.select().from(subUnits).where(eq(subUnits.spuId, sourceId));
       await tx.update(subUnits).set({ spuId: targetId }).where(eq(subUnits.spuId, sourceId));
@@ -1421,6 +1447,7 @@ export class DatabaseStorage implements IStorage {
       await tx.update(okrs).set({ spuId: targetSpuId })
         .where(eq(okrs.spuId, sourceSpuId));
       await tx.update(okrs).set({ collaborationSpuId: targetSpuId }).where(eq(okrs.collaborationSpuId, sourceSpuId));
+      await tx.execute(sql`UPDATE okrs SET collaboration_spu_ids = array_replace(collaboration_spu_ids, ${sourceSpuId}::text, ${targetSpuId}::text) WHERE ${sourceSpuId}::text = ANY(collaboration_spu_ids)`);
 
       await tx.update(staffSpuAssignments).set({ spuId: targetSpuId, subUnitId: newSubUnit.id })
         .where(and(eq(staffSpuAssignments.spuId, sourceSpuId), isNull(staffSpuAssignments.subUnitId)));
