@@ -284,7 +284,7 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }) 
                         {spuPreviewMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
                         {spuPreviewMutation.isPending ? "Parsing…" : "Upload TSV File"}
                       </Button>
-                      <input ref={spuFileRef} type="file" accept=".tsv,.csv,text/tab-separated-values,text/csv" className="hidden"
+                      <input ref={spuFileRef} type="file" accept=".tsv,.csv" className="hidden"
                         onChange={e => handleFileRead(e, setSpuCsvData, csv => spuPreviewMutation.mutate(csv))} />
                     </div>
                   </>
