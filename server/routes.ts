@@ -2359,9 +2359,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const colName         = getColIndex(['Your Name', 'Name']);
       const colQuarterYear  = getColIndex(['year and quarter', 'quarter']);
       const colOkrNumber    = getColIndex(['numbered OKR', 'OKR number', 'Which numbered']);
-      const colSpu          = getColIndex(['parent SPU', 'SPU']);
+      const colSpu          = getColIndex(['parent SPU', 'SPU (School']);
       const colSubUnit      = getColIndex(['sub-unit', 'sub unit', 'division']);
-      const colCollabSpu    = getColIndex(['collaborating', 'collaboration']);
+      // Collab SPU: new format has up to 5 separate columns ("SPU 1", "SPU 2", …); old format had one.
+      // Collect every column index that mentions "collaborat" (covers both formats).
+      const collabSpuColIndexes: number[] = headers.reduce((acc: number[], h, ci) => {
+        if (h.toLowerCase().includes('collaborat')) acc.push(ci);
+        return acc;
+      }, []);
       const colUniObjective = getColIndex(['Strategic Objective', 'University Level Strategic']);
       const colUniKeyResult = getColIndex(['University-Level Key Result', 'Key Result for your OKR']);
       const colObjectiveStmt= getColIndex(['Objective Statement', 'Write your Objective']);
@@ -2457,7 +2462,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const okrNumberText  = (row[colOkrNumber] || '').trim();
         const spuText        = (row[colSpu] || '').trim();
         const subUnitText    = colSubUnit !== -1 ? (row[colSubUnit] || '').trim() : '';
-        const collabSpuText  = colCollabSpu !== -1 ? (row[colCollabSpu] || '').trim() : '';
+        // Merge all collab SPU columns (new format: up to 5 separate columns; old: single column)
+        const collabSpuText  = collabSpuColIndexes
+          .map(ci => (row[ci] || '').trim())
+          .filter(v => v && !/not applicable/i.test(v))
+          .join(', ');
         const uniObjective   = colUniObjective !== -1 ? (row[colUniObjective] || '').trim() : '';
         const uniKeyResult   = colUniKeyResult !== -1 ? (row[colUniKeyResult] || '').trim() : '';
         const objectiveStmt  = colObjectiveStmt !== -1 ? (row[colObjectiveStmt] || '').trim() : '';
@@ -2489,9 +2498,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!objectiveStmt) rowErrors.push('Missing objective statement');
 
         const cleanSubUnit = isPlaceholderSubUnit(subUnitText) ? '' : subUnitText;
-
-        // Clean up collaboration SPU — "Not Applicable" variants → empty
-        const cleanCollab = /not applicable/i.test(collabSpuText) ? '' : collabSpuText;
 
         let isDuplicate = false;
         let duplicateType: string | null = null;
@@ -2556,7 +2562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           okrNumber,
           spuName: spuText,
           subUnitName: cleanSubUnit,
-          collaborationSpu: cleanCollab,
+          collaborationSpu: collabSpuText,
           universityObjective: uniObjective,
           universityKeyResult: uniKeyResult,
           objectiveStatement: objectiveStmt,
