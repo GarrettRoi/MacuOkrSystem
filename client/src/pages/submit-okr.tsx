@@ -478,7 +478,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                   name="subUnitId"
                   render={({ field }) => {
                     const selectedSpuId = form.watch("spuId");
-                    const filteredSubUnits = subUnits?.filter(su => su.spuId === selectedSpuId) || [];
+                    const availableSpuIds = availableSpus.map(s => s.id);
+                    const filteredSubUnits = subUnits?.filter(su => su.spuId === selectedSpuId && availableSpuIds.includes(su.spuId)) || [];
                     
                     return (
                       <FormItem>
@@ -517,7 +518,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                 name="collaborationSpuIds"
                 render={({ field }) => {
                   const selectedSpuId = form.watch("spuId");
-                  const collaborationOptions = spus?.filter((s) => s.id !== selectedSpuId) || [];
+                  const collaborationOptions = availableSpus.filter((s) => s.id !== selectedSpuId);
                   return (
                     <FormItem>
                       <FormLabel>Collaboration SPU(s) (Optional)</FormLabel>
