@@ -3,6 +3,27 @@ import session from "express-session";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedDatabase } from "./storage";
+import { pool } from "./db";
+
+async function runStartupMigrations() {
+  const client = await pool.connect();
+  try {
+    // Safely add columns that may be missing in older or external databases.
+    // Each statement uses IF NOT EXISTS so it is safe to run repeatedly.
+    const migrations = [
+      `ALTER TABLE staff ADD COLUMN IF NOT EXISTS hashed_password TEXT`,
+      `ALTER TABLE invite_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP`,
+    ];
+    for (const sql of migrations) {
+      await client.query(sql);
+    }
+    log("startup migrations: OK");
+  } catch (err: any) {
+    console.error("startup migration error:", err.message);
+  } finally {
+    client.release();
+  }
+}
 
 const app = express();
 
@@ -76,6 +97,10 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Run schema migrations before anything else so every environment
+  // (Replit, Railway, Render, etc.) stays in sync automatically.
+  await runStartupMigrations();
+
   const server = await registerRoutes(app);
 
   // Seed core super-admin accounts on every startup
