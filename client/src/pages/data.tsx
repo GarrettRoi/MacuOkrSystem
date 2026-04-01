@@ -2439,7 +2439,6 @@ export default function Data() {
               <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
                 <input
                   type="file"
-                  accept=".tsv,.txt"
                   onChange={handleFileSelect}
                   className="hidden"
                   id="csv-file-input"
@@ -2833,7 +2832,6 @@ export default function Data() {
               <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
                 <input
                   type="file"
-                  accept=".csv"
                   onChange={handleScoreFileSelect}
                   className="hidden"
                   id="score-csv-file-input"

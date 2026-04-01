@@ -284,7 +284,7 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }) 
                         {spuPreviewMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
                         {spuPreviewMutation.isPending ? "Parsing…" : "Upload TSV File"}
                       </Button>
-                      <input ref={spuFileRef} type="file" accept=".tsv,.csv" className="hidden"
+                      <input ref={spuFileRef} type="file" className="hidden"
                         onChange={e => handleFileRead(e, setSpuCsvData, csv => spuPreviewMutation.mutate(csv))} />
                     </div>
                   </>
@@ -405,7 +405,7 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }) 
                         {objPreviewMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
                         {objPreviewMutation.isPending ? "Parsing…" : "Upload CSV"}
                       </Button>
-                      <input ref={objFileRef} type="file" accept=".csv" className="hidden"
+                      <input ref={objFileRef} type="file" className="hidden"
                         onChange={e => handleFileRead(e, setObjCsvData, csv => objPreviewMutation.mutate(csv))} />
                     </div>
                   </>

@@ -119,7 +119,7 @@ function SpuStaffImportDialog() {
                   {previewMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
                   {previewMutation.isPending ? "Parsing…" : "Choose TSV File"}
                 </Button>
-                <input ref={fileRef} type="file" accept=".tsv,.csv" className="hidden" onChange={handleFile} />
+                <input ref={fileRef} type="file" className="hidden" onChange={handleFile} />
               </div>
             </div>
           )}
@@ -265,7 +265,7 @@ function ObjectivesImportDialog() {
                   {previewMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
                   {previewMutation.isPending ? "Parsing…" : "Choose CSV File"}
                 </Button>
-                <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
+                <input ref={fileRef} type="file" className="hidden" onChange={handleFile} />
               </div>
             </div>
           )}
