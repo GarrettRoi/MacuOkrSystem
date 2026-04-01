@@ -1396,7 +1396,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deleteSpu(req.params.id);
       res.status(204).send();
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === "23503") {
+        return res.status(409).json({ error: "This SPU still has staff members or OKRs assigned to it. Please reassign or remove them before deleting." });
+      }
       res.status(500).json({ error: "Failed to delete SPU" });
     }
   });
@@ -1546,7 +1549,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deleteSubUnit(req.params.id);
       res.status(204).send();
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === "23503") {
+        return res.status(409).json({ error: "This sub-unit still has staff members or OKRs assigned to it. Please reassign or remove them before deleting." });
+      }
       res.status(500).json({ error: "Failed to delete sub-unit" });
     }
   });

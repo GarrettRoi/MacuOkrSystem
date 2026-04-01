@@ -1392,12 +1392,17 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
 
   const deleteSpuMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest("DELETE", `/api/spus/${id}`, {});
+      const res = await fetch(`/api/spus/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to delete SPU");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
       toast({ title: "SPU Deleted", description: "The SPU has been removed." });
     },
+    onError: (err: any) => toast({ title: "Cannot Delete SPU", description: err.message, variant: "destructive" }),
   });
 
   const bulkDeleteSpusMutation = useMutation({
@@ -1429,12 +1434,17 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
 
   const deleteSubUnitMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest("DELETE", `/api/sub-units/${id}`, {});
+      const res = await fetch(`/api/sub-units/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to delete sub-unit");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
       toast({ title: "Sub-Unit Deleted", description: "The sub-unit has been removed." });
     },
+    onError: (err: any) => toast({ title: "Cannot Delete Sub-Unit", description: err.message, variant: "destructive" }),
   });
 
   const addYearMutation = useMutation({
