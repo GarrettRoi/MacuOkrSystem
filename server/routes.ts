@@ -46,6 +46,13 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (req.session.isAdmin === undefined) {
+    return res.status(401).json({ error: "Unauthorized: Login required" });
+  }
+  next();
+}
+
 function sanitizeStaff<T extends { hashedPassword?: string | null }>(s: T): Omit<T, "hashedPassword"> {
   const { hashedPassword: _h, ...safe } = s;
   return safe as Omit<T, "hashedPassword">;
@@ -1903,8 +1910,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Aggregated API: OKRs with their quarterly updates and derived progress (admin-only)
-  app.get("/api/okrs-with-updates", requireAdmin, async (_req, res) => {
+  // Aggregated API: OKRs with their quarterly updates and derived progress (all authenticated users)
+  app.get("/api/okrs-with-updates", requireAuth, async (_req, res) => {
     try {
       const okrs = await storage.getAllOkrsWithDetails();
       const allUpdates = await storage.getAllQuarterlyUpdates();
