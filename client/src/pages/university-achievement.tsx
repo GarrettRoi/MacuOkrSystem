@@ -963,11 +963,38 @@ function ObjectiveResultsTab() {
     [universityObjectives]
   );
 
+  // Normalizes any objective label/value to just the "Objective N" prefix before the first ":"
+  const normalizeObjPrefix = (s: string): string => (s.split(":")[0] ?? s).trim();
+
+  // Parse a universityObjective field into individual objective prefix strings.
+  // Handles JSON arrays, single strings, and comma-separated strings like
+  // "Objective 1: desc, Objective 2: desc" stored by the TSV import.
+  const parseObjPrefixes = (raw: string): string[] => {
+    const items = parseMultiSelectField(raw);
+    const prefixes: string[] = [];
+    for (const item of items) {
+      // If a single item contains ", Objective" it's likely a comma-joined TSV value
+      if (/,\s*Objective\s+\d/i.test(item)) {
+        // Split on boundaries where a comma is followed by "Objective N"
+        const parts = item.split(/,\s*(?=Objective\s+\d)/i);
+        for (const part of parts) {
+          const p = normalizeObjPrefix(part);
+          if (p) prefixes.push(p);
+        }
+      } else {
+        const p = normalizeObjPrefix(item);
+        if (p) prefixes.push(p);
+      }
+    }
+    return prefixes;
+  };
+
   const toggleObjective = (label: string) => {
+    const key = normalizeObjPrefix(label);
     setSelectedObjectiveLabels(prev => {
       const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -975,11 +1002,8 @@ function ObjectiveResultsTab() {
   const uniFilteredOkrs = useMemo(() => {
     if (!okrsWithUpdates || selectedObjectiveLabels.size === 0) return [];
     return okrsWithUpdates.filter(okr => {
-      const objValues = parseMultiSelectField(okr.universityObjective);
-      const matchesObjective = objValues.some(v => {
-        const label = v.split(":")[0]?.trim();
-        return label && selectedObjectiveLabels.has(label);
-      });
+      const prefixes = parseObjPrefixes(okr.universityObjective);
+      const matchesObjective = prefixes.some(p => selectedObjectiveLabels.has(p));
       if (!matchesObjective) return false;
       if (uniYear && uniYear !== "all" && String(okr.year) !== uniYear) return false;
       if (uniQuarter && uniQuarter !== "all" && okr.quarter !== uniQuarter) return false;
@@ -991,8 +1015,7 @@ function ObjectiveResultsTab() {
   const uniActiveFilters = [uniYear, uniQuarter, uniSpu].filter(v => v && v !== "all").length;
   const clearUniFilters = () => { setUniYear(""); setUniQuarter(""); setUniSpu(""); };
 
-  const getOkrObjectiveLabels = (okr: OkrWithUpdates): string[] =>
-    parseMultiSelectField(okr.universityObjective).map(v => v.split(":")[0]?.trim()).filter(Boolean) as string[];
+  const getOkrObjectiveLabels = (okr: OkrWithUpdates): string[] => parseObjPrefixes(okr.universityObjective);
 
   const getPrimaryUpdate = (okr: OkrWithUpdates) =>
     okr.quarterlyUpdates.find(u => u.isPrimaryScore !== false) ||
@@ -1025,9 +1048,10 @@ function ObjectiveResultsTab() {
           ) : (
             <div className="flex flex-wrap gap-2 pb-3">
               {activeObjectives.map(obj => {
-                const isSelected = selectedObjectiveLabels.has(obj.label);
+                const objKey = normalizeObjPrefix(obj.label);
+                const isSelected = selectedObjectiveLabels.has(objKey);
                 const alignedCount = okrsWithUpdates?.filter(okr =>
-                  parseMultiSelectField(okr.universityObjective).some(v => v.split(":")[0]?.trim() === obj.label)
+                  parseObjPrefixes(okr.universityObjective).includes(objKey)
                 ).length || 0;
                 return (
                   <button
