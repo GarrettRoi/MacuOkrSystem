@@ -2007,7 +2007,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="staff-spu">Primary SPU (School, Department, Unit) *</Label>
-                        <Select value={newStaffSpu} onValueChange={setNewStaffSpu}>
+                        <Select value={newStaffSpu} onValueChange={(v) => { setNewStaffSpu(v); setNewStaffSubUnit(""); }}>
                           <SelectTrigger data-testid="select-staff-spu">
                             <SelectValue placeholder="Select primary SPU" />
                           </SelectTrigger>
@@ -2022,11 +2022,12 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="staff-subunit">Sub-Unit or Division (Optional)</Label>
-                        <Select value={newStaffSubUnit} onValueChange={setNewStaffSubUnit}>
+                        <Select value={newStaffSubUnit || "none"} onValueChange={(v) => setNewStaffSubUnit(v === "none" ? "" : v)}>
                           <SelectTrigger data-testid="select-staff-subunit">
                             <SelectValue placeholder="None (Optional)" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
                             {subUnits?.filter((su) => su.spuId === newStaffSpu).map((subUnit) => (
                               <SelectItem key={subUnit.id} value={subUnit.id}>
                                 {subUnit.name}
@@ -2148,20 +2149,18 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
-                              {(member.role === "leader" || member.role === "super_admin") && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => {
-                                    setSpuAssignmentsStaff(member);
-                                    setSpuAssignmentsDialogOpen(true);
-                                  }}
-                                  title="Manage SPU Assignments"
-                                  data-testid={`button-spu-assignments-${member.id}`}
-                                >
-                                  <Settings className="h-4 w-4 text-blue-600" />
-                                </Button>
-                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setSpuAssignmentsStaff(member);
+                                  setSpuAssignmentsDialogOpen(true);
+                                }}
+                                title="Manage SPU Assignments"
+                                data-testid={`button-spu-assignments-${member.id}`}
+                              >
+                                <Settings className="h-4 w-4 text-blue-600" />
+                              </Button>
                               {isAdmin && (
                                 <Button
                                   variant="ghost"
@@ -2249,7 +2248,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                   <Label htmlFor="edit-staff-spu">Primary SPU (School, Department, Unit) *</Label>
                   <Select 
                     value={editingStaff?.spuId || ""} 
-                    onValueChange={(value) => setEditingStaff(editingStaff ? { ...editingStaff, spuId: value } : null)}
+                    onValueChange={(value) => setEditingStaff(editingStaff ? { ...editingStaff, spuId: value, subUnitId: null } : null)}
                   >
                     <SelectTrigger data-testid="select-edit-staff-spu">
                       <SelectValue placeholder="Select primary SPU" />
@@ -2266,13 +2265,14 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 <div className="space-y-2">
                   <Label htmlFor="edit-staff-subunit">Sub-Unit or Division (Optional)</Label>
                   <Select 
-                    value={editingStaff?.subUnitId || ""} 
-                    onValueChange={(value) => setEditingStaff(editingStaff ? { ...editingStaff, subUnitId: value || null } : null)}
+                    value={editingStaff?.subUnitId || "none"} 
+                    onValueChange={(value) => setEditingStaff(editingStaff ? { ...editingStaff, subUnitId: value === "none" ? null : value } : null)}
                   >
                     <SelectTrigger data-testid="select-edit-staff-subunit">
                       <SelectValue placeholder="None (Optional)" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
                       {subUnits?.filter((su) => su.spuId === editingStaff?.spuId).map((subUnit) => (
                         <SelectItem key={subUnit.id} value={subUnit.id}>
                           {subUnit.name}
@@ -2433,7 +2433,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
               <DialogHeader>
                 <DialogTitle>SPU Assignments for {spuAssignmentsStaff?.name}</DialogTitle>
                 <DialogDescription>
-                  Manage which SPUs/Sub-Units this leader can access and submit OKRs for
+                  Manage which additional SPUs/Sub-Units this staff member can access and submit OKRs for
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
