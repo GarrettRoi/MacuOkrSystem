@@ -9,6 +9,48 @@ async function runStartupMigrations() {
   const client = await pool.connect();
   // Run each migration independently so one failure never blocks the others.
   const migrations = [
+    // ── Table creation (safe on existing DBs due to IF NOT EXISTS) ──────────
+    `CREATE TABLE IF NOT EXISTS invite_tokens (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_id VARCHAR NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      token TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMP NOT NULL,
+      used_at TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS analytics_dashboards (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_published BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS analytics_widgets (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      dashboard_id VARCHAR NOT NULL REFERENCES analytics_dashboards(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      chart_type TEXT NOT NULL,
+      data_source TEXT NOT NULL,
+      config TEXT NOT NULL DEFAULT '{}',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      width TEXT NOT NULL DEFAULT 'full'
+    )`,
+    `CREATE TABLE IF NOT EXISTS university_key_result_progress (
+      key_result_id VARCHAR PRIMARY KEY REFERENCES university_key_results(id) ON DELETE CASCADE,
+      progress_percent INTEGER NOT NULL DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS university_objective_comments (
+      objective_id VARCHAR PRIMARY KEY REFERENCES university_objectives(id) ON DELETE CASCADE,
+      comment TEXT NOT NULL DEFAULT ''
+    )`,
+    `CREATE TABLE IF NOT EXISTS university_progress_datapoints (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      key_result_id VARCHAR NOT NULL REFERENCES university_key_results(id) ON DELETE CASCADE,
+      quarter TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      progress_percent INTEGER NOT NULL DEFAULT 0
+    )`,
+    // ── Column additions (IF NOT EXISTS guards against re-runs) ─────────────
     `ALTER TABLE staff ADD COLUMN IF NOT EXISTS hashed_password TEXT`,
     `ALTER TABLE invite_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP`,
     `ALTER TABLE okrs ADD COLUMN IF NOT EXISTS collaboration_spu_ids text[] DEFAULT ARRAY[]::text[]`,

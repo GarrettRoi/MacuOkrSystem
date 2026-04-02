@@ -89,3 +89,35 @@ PostgreSQL is used as the database, accessed via Drizzle ORM and Neon Database's
 
 ### Fonts
 - Google Fonts CDN (Inter, Roboto)
+
+## Production Deployment (Railway)
+
+The app is deployed on Railway via GitHub auto-deploy. Key details:
+
+- **Project ID**: `a1d40d61-f4b4-4eb7-880f-67ee21462fe0` (env var: `RAILWAY_PROJECT_ID`)
+- **Environment ID**: `601d064a-7b1d-49c3-8f38-055d46a574c4` (env var: `RAILWAY_PROD_ENV_ID`)
+- **Service ID** (app): `69f7017e-0109-47c2-a113-07393e1eab6a` (env var: `RAILWAY_PROD_SERVICE_ID`)
+- **DB Proxy**: `ballast.proxy.rlwy.net:16917` (env var: `RAILWAY_PROD_DB_PROXY`)
+- **Railway API Token**: Stored by user; ask user for `RAILWAY_API_TOKEN` if needed for debugging sessions
+
+### Schema Sync Strategy
+
+Railway does NOT run `db:push` — schema is managed entirely by `runStartupMigrations()` in `server/index.ts`. This function runs on every boot and:
+1. Creates any missing tables (`CREATE TABLE IF NOT EXISTS`)
+2. Adds any missing columns (`ALTER TABLE … ADD COLUMN IF NOT EXISTS`)
+3. Each statement runs independently so one failure never blocks the rest
+
+**When adding a new table or column to `shared/schema.ts`**, always add a corresponding entry to `runStartupMigrations()` in `server/index.ts` so it propagates to Railway automatically on the next deploy.
+
+### Debugging Production
+
+Use the Railway API token + proxy DB URL to connect directly:
+```javascript
+// In code_execution notebook:
+const resp = await fetch('https://backboard.railway.app/graphql/v2', {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${RAILWAY_TOKEN}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ query: `query { variables(projectId: "...", environmentId: "...", serviceId: "...") }` })
+});
+// Use DATABASE_URL from response with proxy host to connect via pg Client
+```

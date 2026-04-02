@@ -44,3 +44,11 @@ integrations = ["javascript_mem_db:1.0.0"]
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.development]
+RAILWAY_PROJECT_ID = "a1d40d61-f4b4-4eb7-880f-67ee21462fe0"
+RAILWAY_PROD_ENV_ID = "601d064a-7b1d-49c3-8f38-055d46a574c4"
+RAILWAY_PROD_SERVICE_ID = "69f7017e-0109-47c2-a113-07393e1eab6a"
+RAILWAY_PROD_DB_PROXY = "ballast.proxy.rlwy.net:16917"
