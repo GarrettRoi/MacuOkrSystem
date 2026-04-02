@@ -42,15 +42,17 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
     const params = new URLSearchParams(window.location.search);
     const ssoError = params.get("sso_error");
     const email = params.get("email");
+    const detail = params.get("detail");
     if (ssoError) {
       const messages: Record<string, string> = {
-        no_account: `No staff account found for ${email || "that email address"}. Contact your administrator.`,
-        no_email: "OneLogin did not provide an email address. Contact your administrator.",
-        invalid_state: "Login session expired. Please try again.",
-        callback_failed: "Sign-in failed. Please try again or use the admin login below.",
+        no_account: `No MACU account found for "${email || "your email"}". Make sure your OneLogin email matches your staff account, or contact your administrator.`,
+        no_email: "OneLogin did not share your email address with this app. In your OneLogin app configuration, add 'email' as a parameter in the Parameters tab.",
+        invalid_state: "Login session expired — please try again.",
+        callback_failed: "Sign-in failed (OIDC error). Check your OneLogin app's Redirect URI and client credentials.",
         session_error: "A session error occurred. Please try again.",
+        oauth_error: `OneLogin returned an error: "${detail || ssoError}". Check your OneLogin app configuration.`,
       };
-      setError(messages[ssoError] || "Sign-in failed. Please try again.");
+      setError(messages[ssoError] || `Sign-in failed (${ssoError}). Please try again.`);
       setShowAdminLogin(true);
       window.history.replaceState({}, "", "/login");
     }

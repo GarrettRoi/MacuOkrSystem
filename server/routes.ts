@@ -348,10 +348,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { error: oauthError, state } = req.query;
 
       if (oauthError) {
-        return res.redirect(`/login?sso_error=${encodeURIComponent(String(oauthError))}`);
+        console.error(`[SSO] OAuth error from provider: ${oauthError}`);
+        return res.redirect(`/login?sso_error=oauth_error&detail=${encodeURIComponent(String(oauthError))}`);
       }
 
       if (state !== req.session.ssoState) {
+        console.error(`[SSO] State mismatch. Expected: ${req.session.ssoState}, Got: ${state}`);
         return res.redirect("/login?sso_error=invalid_state");
       }
 
@@ -368,14 +370,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } as any);
 
       const claims = tokenResponse.claims();
-      const email = (claims?.email as string | undefined)?.toLowerCase().trim();
+      console.log(`[SSO] ID token claims:`, JSON.stringify(claims));
+
+      let email = (claims?.email as string | undefined)?.toLowerCase().trim();
+
+      // If email not in ID token, try the userinfo endpoint (some OIDC providers put it there)
+      if (!email) {
+        try {
+          const userInfo = await oidcClient.fetchUserInfo(
+            config,
+            tokenResponse.access_token!,
+            claims?.sub as string
+          );
+          console.log(`[SSO] Userinfo response:`, JSON.stringify(userInfo));
+          email = (userInfo?.email as string | undefined)?.toLowerCase().trim();
+        } catch (uiErr: any) {
+          console.error(`[SSO] Userinfo fetch failed:`, uiErr?.message);
+        }
+      }
 
       delete req.session.ssoState;
       delete req.session.ssoCodeVerifier;
 
       if (!email) {
+        console.error(`[SSO] No email found in ID token or userinfo. Claims:`, JSON.stringify(claims));
         return res.redirect("/login?sso_error=no_email");
       }
+
+      console.log(`[SSO] Email from provider: ${email}`);
 
       const staffMember = await storage.getStaffByEmail(email);
       if (!staffMember) {
