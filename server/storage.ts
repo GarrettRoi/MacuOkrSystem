@@ -62,7 +62,7 @@ import {
   inviteTokens,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, inArray, ne, isNull, gt, sql } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, ne, isNull, gt, sql, ilike } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 function safeStaff<T extends { hashedPassword?: string | null }>(s: T): Omit<T, "hashedPassword"> {
@@ -1176,7 +1176,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStaffByEmail(email: string): Promise<Staff | undefined> {
-    const [result] = await db.select().from(staff).where(eq(staff.email, email));
+    const [result] = await db.select().from(staff).where(ilike(staff.email, email));
     return result || undefined;
   }
 

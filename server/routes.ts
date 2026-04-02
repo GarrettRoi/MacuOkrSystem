@@ -382,14 +382,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.redirect(`/login?sso_error=no_account&email=${encodeURIComponent(email)}`);
       }
 
+      const isAdmin = staffMember.role === "super_admin";
+      console.log(`[SSO] Login success: ${email} (role=${staffMember.role}, isAdmin=${isAdmin})`);
       req.session.regenerate((err) => {
-        if (err) return res.redirect("/login?sso_error=session_error");
-        req.session.isAdmin = staffMember.isAdmin;
+        if (err) {
+          console.error("[SSO] session.regenerate error:", err);
+          return res.redirect("/login?sso_error=session_error");
+        }
+        req.session.isAdmin = isAdmin;
         req.session.selectedStaffId = staffMember.id;
         req.session.selectedStaffName = staffMember.name;
         req.session.sessionVersion = Date.now();
         req.session.save((err2) => {
-          if (err2) return res.redirect("/login?sso_error=session_error");
+          if (err2) {
+            console.error("[SSO] session.save error:", err2);
+            return res.redirect("/login?sso_error=session_error");
+          }
+          console.log(`[SSO] Session saved, redirecting to /`);
           res.redirect("/");
         });
       });
@@ -421,15 +430,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
+      const isAdmin = staffMember.role === "super_admin";
       req.session.regenerate((err) => {
         if (err) return res.status(500).json({ error: "Session error" });
-        req.session.isAdmin = staffMember.isAdmin;
+        req.session.isAdmin = isAdmin;
         req.session.selectedStaffId = staffMember.id;
         req.session.selectedStaffName = staffMember.name;
         req.session.sessionVersion = Date.now();
         req.session.save((err2) => {
           if (err2) return res.status(500).json({ error: "Session save error" });
-          res.json({ success: true, isAdmin: staffMember.isAdmin });
+          res.json({ success: true, isAdmin });
         });
       });
     } catch (error) {

@@ -1,15 +1,25 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedDatabase } from "./storage";
 import { pool } from "./db";
+
+const PgSession = connectPgSimple(session);
 
 async function runStartupMigrations() {
   const client = await pool.connect();
   // Run each migration independently so one failure never blocks the others.
   const migrations = [
     // ── Table creation (safe on existing DBs due to IF NOT EXISTS) ──────────
+    `CREATE TABLE IF NOT EXISTS "session" (
+      "sid" varchar NOT NULL COLLATE "default",
+      "sess" json NOT NULL,
+      "expire" timestamp(6) NOT NULL,
+      CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
+    )`,
+    `CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire")`,
     `CREATE TABLE IF NOT EXISTS invite_tokens (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       staff_id VARCHAR NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
@@ -96,13 +106,19 @@ declare module 'http' {
 }
 
 app.use(session({
+  store: new PgSession({
+    pool,
+    tableName: 'session',
+    createTableIfMissing: true,
+  }),
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    sameSite: 'lax',
   },
 }));
 
