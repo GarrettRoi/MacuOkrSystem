@@ -426,7 +426,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("SSO callback error:", error);
-      res.redirect(`/login?sso_error=callback_failed`);
+      const detail = encodeURIComponent(String(error?.message || error).slice(0, 200));
+      res.redirect(`/login?sso_error=callback_failed&detail=${detail}`);
     }
   });
 

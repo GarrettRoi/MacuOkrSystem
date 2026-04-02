@@ -48,7 +48,7 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
         no_account: `No MACU account found for "${email || "your email"}". Make sure your OneLogin email matches your staff account, or contact your administrator.`,
         no_email: "OneLogin did not share your email address with this app. In your OneLogin app configuration, add 'email' as a parameter in the Parameters tab.",
         invalid_state: "Login session expired — please try again.",
-        callback_failed: "Sign-in failed (OIDC error). Check your OneLogin app's Redirect URI and client credentials.",
+        callback_failed: `Sign-in failed (OIDC error)${detail ? `: ${detail}` : ". Check your OneLogin app's Redirect URI and client credentials."}`,
         session_error: "A session error occurred. Please try again.",
         oauth_error: `OneLogin returned an error: "${detail || ssoError}". Check your OneLogin app configuration.`,
       };
