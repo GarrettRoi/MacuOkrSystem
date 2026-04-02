@@ -7,23 +7,27 @@ import { pool } from "./db";
 
 async function runStartupMigrations() {
   const client = await pool.connect();
-  try {
-    // Safely add columns that may be missing in older or external databases.
-    // Each statement uses IF NOT EXISTS so it is safe to run repeatedly.
-    const migrations = [
-      `ALTER TABLE staff ADD COLUMN IF NOT EXISTS hashed_password TEXT`,
-      `ALTER TABLE invite_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP`,
-      `ALTER TABLE okrs ADD COLUMN IF NOT EXISTS collaboration_spu_ids text[] DEFAULT ARRAY[]::text[]`,
-      `UPDATE okrs SET collaboration_spu_ids = ARRAY[collaboration_spu_id]::text[] WHERE collaboration_spu_id IS NOT NULL AND (collaboration_spu_ids IS NULL OR collaboration_spu_ids = ARRAY[]::text[])`,
-    ];
-    for (const sql of migrations) {
+  // Run each migration independently so one failure never blocks the others.
+  const migrations = [
+    `ALTER TABLE staff ADD COLUMN IF NOT EXISTS hashed_password TEXT`,
+    `ALTER TABLE invite_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP`,
+    `ALTER TABLE okrs ADD COLUMN IF NOT EXISTS collaboration_spu_ids text[] DEFAULT ARRAY[]::text[]`,
+    `UPDATE okrs SET collaboration_spu_ids = ARRAY[collaboration_spu_id]::text[] WHERE collaboration_spu_id IS NOT NULL AND (collaboration_spu_ids IS NULL OR collaboration_spu_ids = ARRAY[]::text[])`,
+  ];
+  let failed = 0;
+  for (const sql of migrations) {
+    try {
       await client.query(sql);
+    } catch (err: any) {
+      failed++;
+      console.error("startup migration skipped:", err.message.split('\n')[0]);
     }
+  }
+  client.release();
+  if (failed === 0) {
     log("startup migrations: OK");
-  } catch (err: any) {
-    console.error("startup migration error:", err.message);
-  } finally {
-    client.release();
+  } else {
+    log(`startup migrations: OK (${failed} skipped — see above)`);
   }
 }
 
