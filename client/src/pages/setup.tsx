@@ -153,9 +153,7 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }) 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-          <FileSpreadsheet className="h-4 w-4 text-primary-foreground" />
-        </div>
+        <img src="/logo.png" alt="MACU Logo" className="h-8 w-auto" />
         <div>
           <h1 className="font-semibold text-sm">MACU OKR System</h1>
           <p className="text-xs text-muted-foreground">Initial Setup</p>

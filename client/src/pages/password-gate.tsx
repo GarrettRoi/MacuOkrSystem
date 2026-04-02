@@ -186,9 +186,7 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
           <div className="flex justify-center mb-4">
-            <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center">
-              <span className="text-xl font-bold text-primary-foreground">MACU</span>
-            </div>
+            <img src="/logo.png" alt="MACU Logo" className="h-16 w-auto" />
           </div>
           <CardTitle className="text-3xl font-bold">OKR Tracking System</CardTitle>
           <CardDescription className="text-base">

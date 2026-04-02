@@ -9,9 +9,7 @@ export default function PublicHome() {
       <header className="border-b bg-background sticky top-0 z-50">
         <div className="flex items-center justify-between px-6 py-3">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center shrink-0">
-              <span className="text-xs font-bold text-primary-foreground">MACU</span>
-            </div>
+            <img src="/logo.png" alt="MACU Logo" className="h-8 w-auto shrink-0" />
             <span className="font-semibold text-base">OKR Tracking System</span>
           </div>
           <Link href="/login">
