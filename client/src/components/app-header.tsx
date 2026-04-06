@@ -31,7 +31,7 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
         <div className="flex items-center gap-3 mr-6">
           <img src="/logo.png" alt="MACU Logo" className="h-10 w-auto" />
           <div className="hidden md:block">
-            <h1 className="text-lg font-semibold">OKR Tracking</h1>
+            <h1 className="text-lg font-semibold">OKR Genius</h1>
             <p className="text-xs text-muted-foreground">Mid-America Christian University</p>
           </div>
         </div>
