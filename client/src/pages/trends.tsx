@@ -3,16 +3,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { TrendingUp, Calendar, Target } from "lucide-react";
+import { TrendingUp, Calendar, Target, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
+import { usePersistedFilter } from "@/hooks/use-persisted-filter";
 import type { OkrWithDetails, Year } from "@shared/schema";
 import { getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
 export default function TrendsPage() {
   const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState(currentYear.toString());
-  const [comparisonYear, setComparisonYear] = useState((currentYear - 1).toString());
-  const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
+  const [selectedYear, setSelectedYear] = usePersistedFilter("trends:selectedYear", currentYear.toString());
+  const [comparisonYear, setComparisonYear] = usePersistedFilter("trends:comparisonYear", (currentYear - 1).toString());
+  const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("trends:planningYear", "All");
 
   const { data: okrs, isLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
@@ -203,6 +205,14 @@ export default function TrendsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {planningYearFilter !== "All" && (
+                <div className="flex items-end pb-0.5">
+                  <Button variant="ghost" size="sm" onClick={() => setPlanningYearFilter("All")} data-testid="button-clear-filters">
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 

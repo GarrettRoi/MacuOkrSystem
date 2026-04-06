@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
+import { usePersistedFilter } from "@/hooks/use-persisted-filter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Download, FileSpreadsheet } from "lucide-react";
+import { Download, FileSpreadsheet, X } from "lucide-react";
 import type { OkrWithDetails } from "@shared/schema";
 import { getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
@@ -13,9 +14,9 @@ const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 
 export default function Export() {
   const { toast } = useToast();
-  const [quarterFilter, setQuarterFilter] = useState<string>("All");
-  const [yearFilter, setYearFilter] = useState<string>("All");
-  const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
+  const [quarterFilter, setQuarterFilter] = usePersistedFilter("export:quarter", "All");
+  const [yearFilter, setYearFilter] = usePersistedFilter("export:year", "All");
+  const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("export:planningYear", "All");
   const [isExporting, setIsExporting] = useState(false);
 
   const { data: okrs } = useQuery<OkrWithDetails[]>({
@@ -37,6 +38,18 @@ export default function Export() {
       setYearFilter(String(availableYears[0]));
     }
   }, [availableYears.length]);
+
+  const activeFilterCount = [
+    quarterFilter !== "All",
+    yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
+    planningYearFilter !== "All",
+  ].filter(Boolean).length;
+
+  const clearAllFilters = () => {
+    setQuarterFilter("All");
+    setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
+    setPlanningYearFilter("All");
+  };
 
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
@@ -102,6 +115,14 @@ export default function Export() {
           <div className="bg-muted/50 p-6 rounded-md space-y-4">
             <h3 className="font-semibold text-base">Export Options</h3>
             
+            <div className="flex items-end gap-3 flex-wrap">
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearAllFilters} data-testid="button-clear-filters" className="mb-0.5">
+                  <X className="h-4 w-4 mr-1" />
+                  Clear all
+                </Button>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="export-quarter">Quarter</Label>

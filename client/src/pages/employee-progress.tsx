@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { usePersistedFilter } from "@/hooks/use-persisted-filter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -59,11 +60,11 @@ interface EmployeeProgressProps {
 
 export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   // ── All OKRs tab state ──────────────────────────────────────────────────
-  const [selectedYear, setSelectedYear] = useState<string>("");
-  const [selectedQuarter, setSelectedQuarter] = useState<string>("");
-  const [selectedPlanningYear, setSelectedPlanningYear] = useState<string>("");
-  const [selectedStaffId, setSelectedStaffId] = useState<string>("");
-  const [selectedSpuId, setSelectedSpuId] = useState<string>("");
+  const [selectedYear, setSelectedYear] = usePersistedFilter("emp-progress:year", "");
+  const [selectedQuarter, setSelectedQuarter] = usePersistedFilter("emp-progress:quarter", "");
+  const [selectedPlanningYear, setSelectedPlanningYear] = usePersistedFilter("emp-progress:planningYear", "");
+  const [selectedStaffId, setSelectedStaffId] = usePersistedFilter("emp-progress:staffId", "");
+  const [selectedSpuId, setSelectedSpuId] = usePersistedFilter("emp-progress:spuId", "");
 
   // ── University Dashboard tab state ──────────────────────────────────────
   const [selectedObjectiveLabels, setSelectedObjectiveLabels] = useState<Set<string>>(new Set());

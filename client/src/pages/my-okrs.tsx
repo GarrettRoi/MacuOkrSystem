@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { usePersistedFilter } from "@/hooks/use-persisted-filter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,10 +24,10 @@ interface MyOkrsProps {
 }
 export default function MyOkrs({ staff }: MyOkrsProps) {
   const { toast } = useToast();
-  const [yearFilter, setYearFilter] = useState<string>("All");
-  const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
-  const [quarterFilter, setQuarterFilter] = useState<string>("All");
-  const [spuFilter, setSpuFilter] = useState<string>("All");
+  const [yearFilter, setYearFilter] = usePersistedFilter("my-okrs:year", "All");
+  const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("my-okrs:planningYear", "All");
+  const [quarterFilter, setQuarterFilter] = usePersistedFilter("my-okrs:quarter", "All");
+  const [spuFilter, setSpuFilter] = usePersistedFilter("my-okrs:spu", "All");
 
   const [editingOkr, setEditingOkr] = useState<OkrWithDetails | null>(null);
   const [editObjectiveStatement, setEditObjectiveStatement] = useState("");
@@ -291,21 +292,13 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
 
         <Card>
           <CardHeader className="pb-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-lg">Filters</CardTitle>
                 {activeFilterCount > 0 && (
                   <Badge variant="secondary">{activeFilterCount} active</Badge>
                 )}
               </div>
-              {activeFilterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearFilters} data-testid="button-clear-filters">
-                  <X className="h-4 w-4 mr-1" />
-                  Clear all
-                </Button>
-              )}
-            </div>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
@@ -356,6 +349,12 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                 </SelectContent>
               </Select>
 
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearFilters} data-testid="button-clear-filters">
+                  <X className="h-4 w-4 mr-1" />
+                  Clear all
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

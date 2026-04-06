@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { usePersistedFilter } from "@/hooks/use-persisted-filter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,11 +19,11 @@ import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 
 function DashboardTab() {
-  const [quarterFilter, setQuarterFilter] = useState<string>("All");
-  const [yearFilter, setYearFilter] = useState<string>("All");
-  const [planningYearFilter, setPlanningYearFilter] = useState<string>("All");
-  const [spuFilter, setSpuFilter] = useState<string>("All");
-  const [keywordSearch, setKeywordSearch] = useState<string>("");
+  const [quarterFilter, setQuarterFilter] = usePersistedFilter("ua-dash:quarter", "All");
+  const [yearFilter, setYearFilter] = usePersistedFilter("ua-dash:year", "All");
+  const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("ua-dash:planningYear", "All");
+  const [spuFilter, setSpuFilter] = usePersistedFilter("ua-dash:spu", "All");
+  const [keywordSearch, setKeywordSearch] = usePersistedFilter("ua-dash:keyword", "");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [spuSearch, setSpuSearch] = useState<string>("");
   const [selectedSpuId, setSelectedSpuId] = useState<string | null>(null);
@@ -215,26 +216,24 @@ function DashboardTab() {
                 </Badge>
               )}
             </Button>
+            {activeFilterCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAllFilters}
+                data-testid="button-clear-filters"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Clear all
+              </Button>
+            )}
           </div>
         </div>
 
         {showAdvancedFilters && (
           <Card data-testid="card-advanced-filters">
             <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Advanced Filters</CardTitle>
-                {activeFilterCount > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearAllFilters}
-                    data-testid="button-clear-filters"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Clear All
-                  </Button>
-                )}
-              </div>
+              <CardTitle className="text-lg">Advanced Filters</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -945,9 +944,9 @@ interface OkrWithUpdates {
 
 function ObjectiveResultsTab() {
   const [selectedObjectiveLabels, setSelectedObjectiveLabels] = useState<Set<string>>(new Set());
-  const [uniYear, setUniYear] = useState<string>("");
-  const [uniQuarter, setUniQuarter] = useState<string>("");
-  const [uniSpu, setUniSpu] = useState<string>("");
+  const [uniYear, setUniYear] = usePersistedFilter("ua-obj:year", "");
+  const [uniQuarter, setUniQuarter] = usePersistedFilter("ua-obj:quarter", "");
+  const [uniSpu, setUniSpu] = usePersistedFilter("ua-obj:spu", "");
 
   const { data: universityObjectives } = useQuery<UniversityObjectiveWithKeyResults[]>({
     queryKey: ["/api/university-objectives"],
