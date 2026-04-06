@@ -3447,7 +3447,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                             {obj.keyResults.length === 0 ? (
                               <p className="text-sm text-muted-foreground py-2 pl-7">No key results yet. Use "Add Key Result" to add one under this objective.</p>
                             ) : (
-                              obj.keyResults.map((kr) => (
+                              [...obj.keyResults].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })).map((kr) => (
                                 <div
                                   key={kr.id}
                                   className="flex items-start gap-3 py-2 pl-7"
@@ -3642,7 +3642,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
 
                         {obj.keyResults.length > 0 && (
                           <div className="space-y-4 pl-4 border-l-2 border-muted">
-                            {obj.keyResults.map((kr) => {
+                            {[...obj.keyResults].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })).map((kr) => {
                               const pct = localProgress[kr.id] ?? 0;
                               return (
                                 <div key={kr.id} className="space-y-2" data-testid={`adv-kr-${kr.id}`}>
