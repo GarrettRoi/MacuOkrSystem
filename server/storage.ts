@@ -1111,8 +1111,8 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Get all staff in those SPUs (excluding the leader themselves)
-    const result = await db
+    // Get staff whose primary SPU is in the leader's SPU list (excluding the leader themselves)
+    const primaryMatches = await db
       .select({
         id: staff.id,
         name: staff.name,
@@ -1132,7 +1132,39 @@ export class DatabaseStorage implements IStorage {
         ne(staff.id, leaderId)
       ));
 
-    return result.map((row) => ({
+    // Get staff whose additional SPU assignments match the leader's SPU list
+    const additionalMatches = await db
+      .select({
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        isAdmin: staff.isAdmin,
+        role: staff.role,
+        spuId: staff.spuId,
+        subUnitId: staff.subUnitId,
+        spu: spus,
+        subUnit: subUnits,
+      })
+      .from(staff)
+      .innerJoin(staffSpuAssignments, eq(staffSpuAssignments.staffId, staff.id))
+      .leftJoin(spus, eq(staff.spuId, spus.id))
+      .leftJoin(subUnits, eq(staff.subUnitId, subUnits.id))
+      .where(and(
+        inArray(staffSpuAssignments.spuId, spuIds),
+        ne(staff.id, leaderId)
+      ));
+
+    // Merge and deduplicate by staff id
+    const seenIds = new Set<string>();
+    const merged: typeof primaryMatches = [];
+    for (const row of [...primaryMatches, ...additionalMatches]) {
+      if (!seenIds.has(row.id)) {
+        seenIds.add(row.id);
+        merged.push(row);
+      }
+    }
+
+    return merged.map((row) => ({
       id: row.id,
       name: row.name,
       email: row.email,
