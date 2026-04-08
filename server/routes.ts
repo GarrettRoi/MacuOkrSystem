@@ -336,7 +336,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       await new Promise<void>((resolve, reject) => req.session.save((err) => err ? reject(err) : resolve()));
-      res.json({ redirectUrl: authUrl.href });
+      res.redirect(authUrl.href);
     } catch (error: any) {
       console.error("SSO login error:", error);
       res.status(500).json({ error: "Failed to initiate SSO login" });

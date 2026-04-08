@@ -58,23 +58,10 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
     }
   }, []);
 
-  const handleSsoLogin = async () => {
+  const handleSsoLogin = () => {
     setError("");
     setIsLoading(true);
-    try {
-      const res = await fetch("/api/auth/sso/login");
-      if (res.ok) {
-        const data = await res.json();
-        window.location.href = data.redirectUrl;
-      } else {
-        const data = await res.json();
-        setError(data.error || "Failed to start sign-in. Please try again.");
-        setIsLoading(false);
-      }
-    } catch {
-      setError("An error occurred. Please try again.");
-      setIsLoading(false);
-    }
+    window.location.href = "/api/auth/sso/login";
   };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
