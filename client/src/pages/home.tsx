@@ -84,6 +84,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       bg: "bg-violet-50",
       adminOnly: false,
       leaderAccess: false,
+      hidden: true,
     },
     {
       title: "Data Management",
