@@ -1073,6 +1073,17 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     queryKey: ["/api/spu-assignments"],
   });
 
+  // Compute the set of SPU IDs this leader manages (primary + additional assignments)
+  const leaderManagedSpuIds: Set<string> = new Set([
+    staff.spuId,
+    ...(allSpuAssignments?.filter(a => a.staffId === staff.id).map((a: any) => a.spuId) || []),
+  ]);
+
+  // SPUs available when adding staff — leaders can only add to their managed SPUs
+  const addStaffSpus = staff.role === "super_admin"
+    ? (spus || [])
+    : (spus || []).filter(spu => leaderManagedSpuIds.has(spu.id));
+
   // Helper to get additional SPU names for a staff member
   const getAdditionalSpuNames = (memberId: string): string[] => {
     if (!allSpuAssignments || !spus) return [];
@@ -1999,7 +2010,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                           <SelectContent>
                             <SelectItem value="basic">Basic User</SelectItem>
                             <SelectItem value="leader">Leader User</SelectItem>
-                            <SelectItem value="super_admin">Super Admin</SelectItem>
+                            {staff.role === "super_admin" && (
+                              <SelectItem value="super_admin">Super Admin</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -2010,7 +2023,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                             <SelectValue placeholder="Select primary SPU" />
                           </SelectTrigger>
                           <SelectContent>
-                            {spus?.map((spu) => (
+                            {addStaffSpus.map((spu) => (
                               <SelectItem key={spu.id} value={spu.id}>
                                 {spu.name}
                               </SelectItem>

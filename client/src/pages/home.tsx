@@ -11,6 +11,8 @@ interface HomeProps {
 }
 
 export default function Home({ staff, isAdmin }: HomeProps) {
+  const isLeader = staff.role === "leader" || staff.role === "super_admin";
+
   const allActions = [
     {
       title: "Submit New OKR",
@@ -20,6 +22,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-blue-600",
       bg: "bg-blue-50",
       adminOnly: false,
+      leaderAccess: false,
     },
     {
       title: "Quarterly Update",
@@ -29,6 +32,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-green-600",
       bg: "bg-green-50",
       adminOnly: false,
+      leaderAccess: false,
     },
     {
       title: "My OKRs",
@@ -38,6 +42,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-amber-600",
       bg: "bg-amber-50",
       adminOnly: false,
+      leaderAccess: false,
     },
     {
       title: "OKR Dashboard",
@@ -47,6 +52,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-indigo-600",
       bg: "bg-indigo-50",
       adminOnly: false,
+      leaderAccess: false,
       hidden: true,
     },
     {
@@ -57,6 +63,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-rose-600",
       bg: "bg-rose-50",
       adminOnly: false,
+      leaderAccess: false,
     },
     {
       title: "University Achievement",
@@ -66,6 +73,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-purple-600",
       bg: "bg-purple-50",
       adminOnly: false,
+      leaderAccess: false,
     },
     {
       title: "Trends",
@@ -75,6 +83,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-violet-600",
       bg: "bg-violet-50",
       adminOnly: false,
+      leaderAccess: false,
     },
     {
       title: "Data Management",
@@ -84,15 +93,17 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-cyan-600",
       bg: "bg-cyan-50",
       adminOnly: true,
+      leaderAccess: false,
     },
     {
       title: "Admin Panel",
-      description: "Manage staff, SPUs, and system settings",
+      description: "Manage staff and SPU members for your team",
       icon: Settings,
       path: "/admin",
       color: "text-orange-600",
       bg: "bg-orange-50",
-      adminOnly: true,
+      adminOnly: false,
+      leaderAccess: true,
     },
     {
       title: "Export Data",
@@ -102,10 +113,16 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       color: "text-teal-600",
       bg: "bg-teal-50",
       adminOnly: false,
+      leaderAccess: false,
     },
   ];
 
-  const actions = allActions.filter((action) => !action.hidden && (!action.adminOnly || isAdmin));
+  const actions = allActions.filter((action) => {
+    if (action.hidden) return false;
+    if (action.adminOnly && !isAdmin) return false;
+    if (action.leaderAccess && !isLeader && !isAdmin) return false;
+    return true;
+  });
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
