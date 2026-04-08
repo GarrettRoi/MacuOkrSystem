@@ -326,7 +326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "SSO is not fully configured" });
       }
 
-      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined);
+      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined, clientSecret ? oidcClient.ClientSecretPost(clientSecret) : undefined);
       const redirectUri = getSsoRedirectUri(req);
       console.log(`[SSO] Login initiated. redirect_uri=${redirectUri}`);
 
@@ -371,7 +371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const redirectUri = getSsoRedirectUri(req);
       console.log(`[SSO] Callback received. redirect_uri=${redirectUri}, state=${state}, session.ssoState=${req.session.ssoState}`);
 
-      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined);
+      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined, clientSecret ? oidcClient.ClientSecretPost(clientSecret) : undefined);
 
       const proto = process.env.NODE_ENV === "production" ? "https" : req.protocol;
       const callbackUrl = new URL(req.url, `${proto}://${req.get("host")}`);
