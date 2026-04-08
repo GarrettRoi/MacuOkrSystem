@@ -317,16 +317,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/sso/login", async (req, res) => {
     try {
       const ssoEnabled = await storage.getSetting("sso_enabled");
-      if (ssoEnabled !== "true") {
+      const { issuerUrl, clientId, clientSecret } = await getSsoConfig();
+      // SSO is considered enabled if the DB toggle is on OR if env vars supply the credentials
+      const envDriven = !!(process.env.SSO_ISSUER_URL && process.env.SSO_CLIENT_ID);
+      if (ssoEnabled !== "true" && !envDriven) {
         return res.status(403).json({ error: "SSO is not enabled" });
       }
-
-      const { issuerUrl, clientId, clientSecret } = await getSsoConfig();
       if (!issuerUrl || !clientId) {
         return res.status(500).json({ error: "SSO is not fully configured" });
       }
 
+      console.log(`[SSO] Login: clientId="${clientId}", clientSecret present=${!!clientSecret}, secretLength=${clientSecret?.length ?? 0}, issuerUrl="${issuerUrl}"`);
       const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined, clientSecret ? oidcClient.ClientSecretPost(clientSecret) : undefined);
+      console.log(`[SSO] Discovery OK. token_endpoint=${(config as any).serverMetadata?.().token_endpoint}`);
       const redirectUri = getSsoRedirectUri(req);
       console.log(`[SSO] Login initiated. redirect_uri=${redirectUri}`);
 
