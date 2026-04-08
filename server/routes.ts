@@ -305,6 +305,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return { issuerUrl, clientId, clientSecret };
   }
 
+  // Helper: build the SSO redirect URI, preferring an explicit env var over dynamic construction
+  const getSsoRedirectUri = (req: Request) => {
+    if (process.env.SSO_REDIRECT_BASE_URL) {
+      return `${process.env.SSO_REDIRECT_BASE_URL.replace(/\/$/, "")}/api/auth/sso/callback`;
+    }
+    const proto = process.env.NODE_ENV === "production" ? "https" : req.protocol;
+    return `${proto}://${req.get("host")}/api/auth/sso/callback`;
+  };
+
   app.get("/api/auth/sso/login", async (req, res) => {
     try {
       const ssoEnabled = await storage.getSetting("sso_enabled");
@@ -318,7 +327,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined);
-      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/sso/callback`;
+      const redirectUri = getSsoRedirectUri(req);
+      console.log(`[SSO] Login initiated. redirect_uri=${redirectUri}`);
 
       const codeVerifier = oidcClient.randomPKCECodeVerifier();
       const codeChallenge = await oidcClient.calculatePKCECodeChallenge(codeVerifier);
@@ -358,11 +368,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { issuerUrl, clientId, clientSecret } = await getSsoConfig();
-      const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/sso/callback`;
+      const redirectUri = getSsoRedirectUri(req);
+      console.log(`[SSO] Callback received. redirect_uri=${redirectUri}, state=${state}, session.ssoState=${req.session.ssoState}`);
 
       const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined);
 
-      const callbackUrl = new URL(req.url, `${req.protocol}://${req.get("host")}`);
+      const proto = process.env.NODE_ENV === "production" ? "https" : req.protocol;
+      const callbackUrl = new URL(req.url, `${proto}://${req.get("host")}`);
+      console.log(`[SSO] callbackUrl=${callbackUrl.href}, pkceVerifier present=${!!req.session.ssoCodeVerifier}`);
       const tokenResponse = await oidcClient.authorizationCodeGrant(config, callbackUrl, {
         pkceCodeVerifier: req.session.ssoCodeVerifier,
         expectedState: req.session.ssoState,
@@ -425,8 +438,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       });
     } catch (error: any) {
-      console.error("SSO callback error:", error);
-      const detail = encodeURIComponent(String(error?.message || error).slice(0, 200));
+      console.error("[SSO] Callback error:", error?.message);
+      console.error("[SSO] Callback error cause:", error?.cause);
+      console.error("[SSO] Callback error body:", error?.body);
+      const cause = error?.cause ? JSON.stringify(error.cause) : "";
+      const body = error?.body ? JSON.stringify(error.body) : "";
+      const detail = encodeURIComponent((cause || body || error?.message || String(error)).slice(0, 300));
       res.redirect(`/login?sso_error=callback_failed&detail=${detail}`);
     }
   });
