@@ -297,11 +297,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SSO diagnostic endpoint — shows config source without exposing secrets
+  app.get("/api/auth/sso/debug", async (_req, res) => {
+    try {
+      const dbIssuer = await storage.getSetting("sso_issuer_url");
+      const dbClientId = await storage.getSetting("sso_client_id");
+      const dbSecret = await storage.getSetting("sso_client_secret");
+      const dbEnabled = await storage.getSetting("sso_enabled");
+
+      const { issuerUrl, clientId, clientSecret } = await getSsoConfig();
+      const envDriven = !!(process.env.SSO_ISSUER_URL && process.env.SSO_CLIENT_ID);
+
+      res.json({
+        active: {
+          issuerUrl,
+          clientId,
+          secretLength: clientSecret?.length ?? 0,
+          secretPresent: !!clientSecret,
+          secretFirst4: clientSecret ? clientSecret.slice(0, 4) + "…" : "(none)",
+          source: process.env.SSO_CLIENT_SECRET ? "env var" : "database",
+        },
+        envVars: {
+          SSO_ISSUER_URL: process.env.SSO_ISSUER_URL ? process.env.SSO_ISSUER_URL : "(not set)",
+          SSO_CLIENT_ID: process.env.SSO_CLIENT_ID ? process.env.SSO_CLIENT_ID : "(not set)",
+          SSO_CLIENT_SECRET: process.env.SSO_CLIENT_SECRET ? `set (${process.env.SSO_CLIENT_SECRET.length} chars)` : "(not set)",
+        },
+        database: {
+          sso_enabled: dbEnabled,
+          sso_issuer_url: dbIssuer || "(empty)",
+          sso_client_id: dbClientId || "(empty)",
+          sso_client_secret: dbSecret ? `set (${dbSecret.length} chars)` : "(empty)",
+        },
+        ssoEnabled: dbEnabled === "true" || envDriven,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message });
+    }
+  });
+
   // OIDC SSO Auth Routes
+  // Env vars take priority over DB settings so production deployments are never
+  // silently overridden by a stale / wrong value saved in the admin panel.
   async function getSsoConfig() {
-    const issuerUrl = (await storage.getSetting("sso_issuer_url")) || process.env.SSO_ISSUER_URL || "";
-    const clientId = (await storage.getSetting("sso_client_id")) || process.env.SSO_CLIENT_ID || "";
-    const clientSecret = (await storage.getSetting("sso_client_secret")) || process.env.SSO_CLIENT_SECRET || "";
+    const issuerUrl = process.env.SSO_ISSUER_URL || (await storage.getSetting("sso_issuer_url")) || "";
+    const clientId = process.env.SSO_CLIENT_ID || (await storage.getSetting("sso_client_id")) || "";
+    const clientSecret = process.env.SSO_CLIENT_SECRET || (await storage.getSetting("sso_client_secret")) || "";
     return { issuerUrl, clientId, clientSecret };
   }
 
