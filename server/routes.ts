@@ -430,7 +430,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`[SSO] Login: clientId="${clientId}", clientSecret present=${!!clientSecret}, secretLength=${clientSecret?.length ?? 0}, issuerUrl="${issuerUrl}"`);
-      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined, clientSecret ? oidcClient.ClientSecretPost(clientSecret) : undefined);
+      // client_secret_basic is the auth method OneLogin accepts for this app
+      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined, clientSecret ? oidcClient.ClientSecretBasic(clientSecret) : undefined);
       console.log(`[SSO] Discovery OK. token_endpoint=${(config as any).serverMetadata?.().token_endpoint}`);
       const redirectUri = getSsoRedirectUri(req);
       console.log(`[SSO] Login initiated. redirect_uri=${redirectUri}`);
@@ -476,7 +477,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const redirectUri = getSsoRedirectUri(req);
       console.log(`[SSO] Callback received. redirect_uri=${redirectUri}, state=${state}, session.ssoState=${req.session.ssoState}`);
 
-      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined, clientSecret ? oidcClient.ClientSecretPost(clientSecret) : undefined);
+      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined, clientSecret ? oidcClient.ClientSecretBasic(clientSecret) : undefined);
 
       const proto = process.env.NODE_ENV === "production" ? "https" : req.protocol;
       const callbackUrl = new URL(req.url, `${proto}://${req.get("host")}`);
