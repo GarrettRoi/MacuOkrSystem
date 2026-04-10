@@ -335,6 +335,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Credential probe: sends a token request with a fake code to distinguish
+  // invalid_client (wrong credentials) from invalid_grant (good credentials, bad code)
+  app.get("/api/auth/sso/test-credentials", async (req, res) => {
+    try {
+      const { issuerUrl, clientId, clientSecret } = await getSsoConfig();
+      if (!issuerUrl || !clientId) return res.status(400).json({ error: "SSO not configured" });
+
+      const tokenEndpoint = `${issuerUrl.replace(/\/$/, "")}/token`;
+      const redirectUri = getSsoRedirectUri(req);
+
+      // Try client_secret_post with a fake code
+      const bodyPost = new URLSearchParams({
+        grant_type: "authorization_code",
+        code: "FAKE_TEST_CODE_12345",
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
+      });
+      const postResp = await fetch(tokenEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: bodyPost.toString(),
+      });
+      const postBody = await postResp.json() as any;
+
+      // Try client_secret_basic with a fake code
+      const bodyBasic = new URLSearchParams({
+        grant_type: "authorization_code",
+        code: "FAKE_TEST_CODE_12345",
+        redirect_uri: redirectUri,
+      });
+      const basicCreds = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+      const basicResp = await fetch(tokenEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Authorization": `Basic ${basicCreds}`,
+        },
+        body: bodyBasic.toString(),
+      });
+      const basicBody = await basicResp.json() as any;
+
+      res.json({
+        tokenEndpoint,
+        redirectUri,
+        clientId,
+        secretLength: clientSecret?.length ?? 0,
+        secretFirst6: clientSecret ? clientSecret.slice(0, 6) + "…" : "(none)",
+        results: {
+          client_secret_post: { status: postResp.status, body: postBody },
+          client_secret_basic: { status: basicResp.status, body: basicBody },
+        },
+        interpretation: {
+          client_secret_post: postBody.error === "invalid_grant" ? "CREDENTIALS OK (bad code expected)" : postBody.error === "invalid_client" ? "CREDENTIALS REJECTED" : `Other: ${postBody.error}`,
+          client_secret_basic: basicBody.error === "invalid_grant" ? "CREDENTIALS OK (bad code expected)" : basicBody.error === "invalid_client" ? "CREDENTIALS REJECTED" : `Other: ${basicBody.error}`,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message });
+    }
+  });
+
   // OIDC SSO Auth Routes
   // Env vars take priority over DB settings so production deployments are never
   // silently overridden by a stale / wrong value saved in the admin panel.
