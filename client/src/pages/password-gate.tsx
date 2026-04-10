@@ -15,6 +15,7 @@ interface PasswordGateProps {
 export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [debugLink, setDebugLink] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
 
@@ -48,11 +49,14 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
         no_account: `No MACU account found for "${email || "your email"}". Make sure your OneLogin email matches your staff account, or contact your administrator.`,
         no_email: "OneLogin did not share your email address with this app. In your OneLogin app configuration, add 'email' as a parameter in the Parameters tab.",
         invalid_state: "Login session expired — please try again.",
-        callback_failed: `Sign-in failed (OIDC error)${detail ? `: ${detail}` : ". Check your OneLogin app's Redirect URI and client credentials."} — Visit /api/auth/sso/debug to verify which credentials are loaded.`,
+        callback_failed: `Sign-in failed (OIDC error)${detail ? `: ${detail}` : ". Check your OneLogin app's Redirect URI and client credentials."}`,
         session_error: "A session error occurred. Please try again.",
         oauth_error: `OneLogin returned an error: "${detail || ssoError}". Check your OneLogin app configuration.`,
       };
       setError(messages[ssoError] || `Sign-in failed (${ssoError}). Please try again.`);
+      if (ssoError === "callback_failed" || ssoError === "oauth_error") {
+        setDebugLink("/api/auth/sso/debug");
+      }
       setShowAdminLogin(true);
       window.history.replaceState({}, "", "/login");
     }
@@ -214,9 +218,9 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>{error}</span>
+                <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{error}{debugLink && <> — <a href={debugLink} target="_blank" rel="noreferrer" className="underline font-medium">View SSO debug info</a></>}</span>
                 </div>
               )}
 
@@ -291,7 +295,7 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
               {error && (
                 <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>{error}</span>
+                  <span>{error}{debugLink && <> — <a href={debugLink} target="_blank" rel="noreferrer" className="underline font-medium">View SSO debug info</a></>}</span>
                 </div>
               )}
 
@@ -340,9 +344,9 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>{error}</span>
+                <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{error}{debugLink && <> — <a href={debugLink} target="_blank" rel="noreferrer" className="underline font-medium">View SSO debug info</a></>}</span>
                 </div>
               )}
 
@@ -424,9 +428,9 @@ export default function PasswordGate({ onAuthenticated }: PasswordGateProps) {
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>{error}</span>
+                <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-error">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{error}{debugLink && <> — <a href={debugLink} target="_blank" rel="noreferrer" className="underline font-medium">View SSO debug info</a></>}</span>
                 </div>
               )}
 
