@@ -368,10 +368,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       console.log(`[SSO] Login: clientId="${clientId}", clientSecret present=${!!clientSecret}, secretLength=${clientSecret?.length ?? 0}, issuerUrl="${issuerUrl}"`);
-      // Pass secret as 3rd arg (string) — openid-client v5 defaults to client_secret_basic,
-      // which is the standard method most OneLogin apps expect.  No 4th arg override so the
-      // library auto-selects based on what the discovery document advertises.
-      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined);
+      // Use None() auth — PKCE provides the security here; sending a client_secret
+      // causes invalid_client when the OneLogin app is configured as a public/PKCE client.
+      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, undefined, oidcClient.None());
       console.log(`[SSO] Discovery OK. token_endpoint=${(config as any).serverMetadata?.().token_endpoint}`);
       const redirectUri = getSsoRedirectUri(req);
       console.log(`[SSO] Login initiated. redirect_uri=${redirectUri}`);
@@ -417,7 +416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const redirectUri = getSsoRedirectUri(req);
       console.log(`[SSO] Callback received. redirect_uri=${redirectUri}, state=${state}, session.ssoState=${req.session.ssoState}`);
 
-      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, clientSecret || undefined);
+      const config = await oidcClient.discovery(new URL(issuerUrl), clientId, undefined, oidcClient.None());
 
       const proto = process.env.NODE_ENV === "production" ? "https" : req.protocol;
       const callbackUrl = new URL(req.url, `${proto}://${req.get("host")}`);
