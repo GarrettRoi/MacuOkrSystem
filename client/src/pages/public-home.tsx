@@ -10,7 +10,7 @@ export default function PublicHome() {
         <div className="flex items-center justify-between px-6 py-3">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="MACU Logo" className="h-8 w-auto shrink-0" />
-            <span className="font-semibold text-base">OKR Tracking System</span>
+            <span className="font-semibold text-base">OKR Genius</span>
           </div>
           <Link href="/login">
             <Button variant="outline" size="default" data-testid="button-staff-login">
@@ -20,7 +20,6 @@ export default function PublicHome() {
           </Link>
         </div>
       </header>
-
       <main className="flex-1 p-6 space-y-6">
         <div>
           <h1 className="text-3xl font-bold" data-testid="text-page-title">University Achievement</h1>
