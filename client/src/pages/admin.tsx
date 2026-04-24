@@ -2343,7 +2343,10 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     <p className="text-sm text-muted-foreground">No additional SPU assignments</p>
                   )}
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 rounded-md border border-dashed p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Pick an SPU below — it will be added when you click <span className="font-medium">Save Changes</span>.
+                    </p>
                     <Select value={newAssignmentSpuId} onValueChange={(val) => {
                       setNewAssignmentSpuId(val);
                       setNewAssignmentSubUnitId("");
@@ -2372,23 +2375,14 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       </Select>
                     )}
 
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        if (editingStaff && newAssignmentSpuId) {
-                          addSpuAssignmentMutation.mutate({
-                            staffId: editingStaff.id,
-                            spuId: newAssignmentSpuId,
-                            subUnitId: newAssignmentSubUnitId && newAssignmentSubUnitId !== "none" ? newAssignmentSubUnitId : undefined,
-                          });
-                        }
-                      }}
-                      disabled={!newAssignmentSpuId || addSpuAssignmentMutation.isPending}
-                      className="w-full"
-                      data-testid="button-add-assignment"
-                    >
-                      {addSpuAssignmentMutation.isPending ? "Adding…" : "Add SPU Assignment"}
-                    </Button>
+                    {newAssignmentSpuId && (
+                      <p className="text-xs text-amber-700 dark:text-amber-300" data-testid="text-pending-spu">
+                        Pending: <span className="font-medium">{getSpuName(newAssignmentSpuId)}</span>
+                        {newAssignmentSubUnitId && newAssignmentSubUnitId !== "none" && (
+                          <> — <span className="font-medium">{getSubUnitName(newAssignmentSubUnitId)}</span></>
+                        )}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2398,28 +2392,37 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                   onClick={() => {
                     setEditStaffDialogOpen(false);
                     setEditingStaff(null);
+                    setNewAssignmentSpuId("");
+                    setNewAssignmentSubUnitId("");
                   }}
                   data-testid="button-cancel-edit-staff"
                 >
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => {
-                    if (editingStaff && editingStaff.name && editingStaff.email && editingStaff.spuId) {
-                      updateStaffMutation.mutate({
-                        id: editingStaff.id,
-                        name: editingStaff.name,
-                        email: editingStaff.email,
-                        role: editingStaff.role,
-                        spuId: editingStaff.spuId,
-                        subUnitId: editingStaff.subUnitId || undefined,
+                  onClick={async () => {
+                    if (!editingStaff || !editingStaff.name || !editingStaff.email || !editingStaff.spuId) return;
+                    // If the admin staged an SPU in the dropdown but didn't click Add, save it as part of Save Changes.
+                    if (newAssignmentSpuId) {
+                      await addSpuAssignmentMutation.mutateAsync({
+                        staffId: editingStaff.id,
+                        spuId: newAssignmentSpuId,
+                        subUnitId: newAssignmentSubUnitId && newAssignmentSubUnitId !== "none" ? newAssignmentSubUnitId : undefined,
                       });
                     }
+                    updateStaffMutation.mutate({
+                      id: editingStaff.id,
+                      name: editingStaff.name,
+                      email: editingStaff.email,
+                      role: editingStaff.role,
+                      spuId: editingStaff.spuId,
+                      subUnitId: editingStaff.subUnitId || undefined,
+                    });
                   }}
-                  disabled={!editingStaff?.name || !editingStaff?.email || !editingStaff?.spuId || updateStaffMutation.isPending}
+                  disabled={!editingStaff?.name || !editingStaff?.email || !editingStaff?.spuId || updateStaffMutation.isPending || addSpuAssignmentMutation.isPending}
                   data-testid="button-save-edit-staff"
                 >
-                  {updateStaffMutation.isPending ? "Saving..." : "Save Changes"}
+                  {(updateStaffMutation.isPending || addSpuAssignmentMutation.isPending) ? "Saving..." : "Save Changes"}
                 </Button>
               </DialogFooter>
             </DialogContent>
