@@ -2131,21 +2131,35 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                           <TableCell>{getSpuName(member.spuId)}</TableCell>
                           <TableCell>{getSubUnitName(member.subUnitId)}</TableCell>
                           <TableCell data-testid={`cell-additional-spus-${member.id}`}>
-                            {(member.role === "leader" || member.role === "super_admin") ? (
-                              <div className="flex flex-wrap gap-1">
-                                {getAdditionalSpuNames(member.id).length > 0 ? (
-                                  getAdditionalSpuNames(member.id).map((spuName, idx) => (
-                                    <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                            {(() => {
+                              const names = getAdditionalSpuNames(member.id);
+                              if (names.length === 0) {
+                                return <span className="text-muted-foreground text-sm">—</span>;
+                              }
+                              const isBasic = member.role !== "leader" && member.role !== "super_admin";
+                              return (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  {names.map((spuName, idx) => (
+                                    <span
+                                      key={idx}
+                                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                        isBasic
+                                          ? "bg-amber-50 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 line-through opacity-70"
+                                          : "bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+                                      }`}
+                                      title={isBasic ? "Inactive: change role to Leader or Super Admin to enable this assignment" : undefined}
+                                    >
                                       {spuName}
                                     </span>
-                                  ))
-                                ) : (
-                                  <span className="text-muted-foreground text-sm">—</span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">—</span>
-                            )}
+                                  ))}
+                                  {isBasic && (
+                                    <span className="text-xs text-amber-700 dark:text-amber-300" title="Additional SPUs only take effect for Leaders and Super Admins">
+                                      (inactive — upgrade role)
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
