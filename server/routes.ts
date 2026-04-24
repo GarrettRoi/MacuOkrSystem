@@ -2095,7 +2095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Aggregated API: OKRs with their quarterly updates and derived progress (all authenticated users)
-  app.get("/api/okrs-with-updates", requireAuth, async (_req, res) => {
+  app.get("/api/okrs-with-updates", async (_req, res) => {
     try {
       const okrs = await storage.getAllOkrsWithDetails();
       const allUpdates = await storage.getAllQuarterlyUpdates();
