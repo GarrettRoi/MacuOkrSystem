@@ -962,8 +962,13 @@ function ObjectiveResultsTab() {
     [universityObjectives]
   );
 
-  // Normalizes any objective label/value to just the "Objective N" prefix before the first ":"
-  const normalizeObjPrefix = (s: string): string => (s.split(":")[0] ?? s).trim();
+  // Normalizes any objective label/value to a canonical "Objective N" key.
+  // Accepts forms like "Objective 1: ...", "University Objective 1", "Objective 1", etc.
+  const normalizeObjPrefix = (s: string): string => {
+    const head = (s.split(":")[0] ?? s).trim();
+    const match = head.match(/objective\s*(\d+)/i);
+    return match ? `Objective ${match[1]}` : head;
+  };
 
   // Parse a universityObjective field into individual objective prefix strings.
   // Handles JSON arrays, single strings, and comma-separated strings like
