@@ -1774,17 +1774,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/staff/:staffId/spu-assignments", requireAdmin, async (req, res) => {
     try {
       const { spuId, subUnitId } = req.body;
+      const staffId = req.params.staffId;
+      console.log(`[SPU-ASSIGN] POST staffId=${staffId} spuId=${spuId} subUnitId=${subUnitId || "null"}`);
+
       if (!spuId) {
+        console.log(`[SPU-ASSIGN] REJECTED: missing spuId`);
         return res.status(400).json({ error: "SPU ID is required" });
       }
+
+      // Idempotent: if this exact assignment already exists, return it instead of creating a duplicate
+      const existing = await storage.getStaffSpuAssignments(staffId);
+      const normalizedSubUnit = subUnitId || null;
+      const dup = existing.find((a) => a.spuId === spuId && (a.subUnitId || null) === normalizedSubUnit);
+      if (dup) {
+        console.log(`[SPU-ASSIGN] DUPLICATE: returning existing id=${dup.id}`);
+        return res.status(200).json(dup);
+      }
+
       const assignment = await storage.createStaffSpuAssignment({
-        staffId: req.params.staffId,
+        staffId,
         spuId,
-        subUnitId: subUnitId || null,
+        subUnitId: normalizedSubUnit,
       });
+      console.log(`[SPU-ASSIGN] CREATED: id=${assignment.id}`);
       res.status(201).json(assignment);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to create SPU assignment" });
+    } catch (error: any) {
+      console.error(`[SPU-ASSIGN] ERROR:`, error?.message, error?.stack);
+      res.status(500).json({ error: "Failed to create SPU assignment", detail: error?.message });
     }
   });
 

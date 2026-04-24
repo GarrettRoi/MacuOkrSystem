@@ -65,6 +65,14 @@ async function runStartupMigrations() {
     `ALTER TABLE invite_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP`,
     `ALTER TABLE okrs ADD COLUMN IF NOT EXISTS collaboration_spu_ids text[] DEFAULT ARRAY[]::text[]`,
     `UPDATE okrs SET collaboration_spu_ids = ARRAY[collaboration_spu_id]::text[] WHERE collaboration_spu_id IS NOT NULL AND (collaboration_spu_ids IS NULL OR collaboration_spu_ids = ARRAY[]::text[])`,
+    // ── De-dupe staff_spu_assignments before adding unique index ─────────────
+    `DELETE FROM staff_spu_assignments a USING staff_spu_assignments b
+       WHERE a.ctid < b.ctid
+         AND a.staff_id = b.staff_id
+         AND a.spu_id = b.spu_id
+         AND COALESCE(a.sub_unit_id, '') = COALESCE(b.sub_unit_id, '')`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS staff_spu_assignments_unique_idx
+       ON staff_spu_assignments (staff_id, spu_id, COALESCE(sub_unit_id, ''))`,
   ];
   let failed = 0;
   for (const sql of migrations) {

@@ -1620,22 +1620,37 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
 
   const addSpuAssignmentMutation = useMutation({
     mutationFn: async (data: { staffId: string; spuId: string; subUnitId?: string }) => {
-      return await apiRequest("POST", `/api/staff/${data.staffId}/spu-assignments`, { 
-        spuId: data.spuId, 
-        subUnitId: data.subUnitId 
+      const res = await apiRequest("POST", `/api/staff/${data.staffId}/spu-assignments`, {
+        spuId: data.spuId,
+        subUnitId: data.subUnitId
       });
+      return { res, status: res.status };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] });
-      if (editingStaff) {
-        queryClient.invalidateQueries({ queryKey: ["/api/staff", editingStaff.id, "spu-assignments"] });
-      }
+    onSuccess: async (result) => {
+      // Wait for both refetches to complete BEFORE clearing state and showing toast,
+      // so the user sees the new SPU pill in the column the moment the dialog closes.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] }),
+        editingStaff
+          ? queryClient.invalidateQueries({ queryKey: ["/api/staff", editingStaff.id, "spu-assignments"] })
+          : Promise.resolve(),
+      ]);
       setNewAssignmentSpuId("");
       setNewAssignmentSubUnitId("");
-      toast({ title: "SPU Assignment Added", description: "The SPU assignment has been added." });
+      const wasDuplicate = result.status === 200;
+      toast({
+        title: wasDuplicate ? "Already Assigned" : "SPU Assignment Added",
+        description: wasDuplicate
+          ? "This SPU was already assigned to this staff member."
+          : "The SPU assignment has been added.",
+      });
     },
-    onError: () => {
-      toast({ title: "Failed", description: "Failed to add SPU assignment.", variant: "destructive" });
+    onError: (err: any) => {
+      toast({
+        title: "Failed",
+        description: err?.message || "Failed to add SPU assignment.",
+        variant: "destructive",
+      });
     },
   });
 
