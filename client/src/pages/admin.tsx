@@ -1089,10 +1089,14 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     ? (spus || [])
     : (spus || []).filter(spu => leaderManagedSpuIds.has(spu.id));
 
-  // Helper to get additional SPU names for a staff member
-  const getAdditionalSpuNames = (memberId: string): string[] => {
+  // Helper to get additional SPU names for a staff member.
+  // Excludes assignments to the staff member's primary SPU (those are surfaced
+  // separately as "Additional Sub-Units").
+  const getAdditionalSpuNames = (memberId: string, primarySpuId: string | null | undefined): string[] => {
     if (!allSpuAssignments || !spus) return [];
-    const assignments = allSpuAssignments.filter(a => a.staffId === memberId);
+    const assignments = allSpuAssignments.filter(
+      a => a.staffId === memberId && a.spuId !== primarySpuId,
+    );
     return assignments.map(a => {
       const spuName = a.spu?.name || getSpuName(a.spuId);
       const subUnitName = a.subUnit?.name || (a.subUnitId ? getSubUnitName(a.subUnitId) : null);
@@ -2364,6 +2368,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       <TableHead>Role</TableHead>
                       <TableHead>Primary SPU</TableHead>
                       <TableHead>Sub-Unit</TableHead>
+                      <TableHead>Additional Sub-Units</TableHead>
                       <TableHead>Additional SPUs</TableHead>
                       <TableHead className="w-20">Actions</TableHead>
                     </TableRow>
@@ -2399,9 +2404,30 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                           </TableCell>
                           <TableCell>{getSpuName(member.spuId)}</TableCell>
                           <TableCell>{getSubUnitName(member.subUnitId)}</TableCell>
+                          <TableCell data-testid={`cell-additional-subunits-${member.id}`}>
+                            {(() => {
+                              const subUnitNames = getAdditionalSubUnitNames(member.id, member.spuId);
+                              if (subUnitNames.length === 0) {
+                                return <span className="text-muted-foreground text-sm">—</span>;
+                              }
+                              return (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  {subUnitNames.map((name, idx) => (
+                                    <span
+                                      key={`${member.id}-extra-su-${idx}`}
+                                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
+                                      data-testid={`badge-additional-subunit-${member.id}-${idx}`}
+                                    >
+                                      {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
                           <TableCell data-testid={`cell-additional-spus-${member.id}`}>
                             {(() => {
-                              const names = getAdditionalSpuNames(member.id);
+                              const names = getAdditionalSpuNames(member.id, member.spuId);
                               if (names.length === 0) {
                                 return <span className="text-muted-foreground text-sm">—</span>;
                               }
