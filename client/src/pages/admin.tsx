@@ -1019,6 +1019,11 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
   
   const [newAssignmentSpuId, setNewAssignmentSpuId] = useState("");
   const [newAssignmentSubUnitId, setNewAssignmentSubUnitId] = useState("");
+  const [newAdditionalSubUnitId, setNewAdditionalSubUnitId] = useState("");
+
+  const [managingSubUnitsMember, setManagingSubUnitsMember] = useState<StaffWithDetails | null>(null);
+  const [manageSubUnitsDialogOpen, setManageSubUnitsDialogOpen] = useState(false);
+  const [newMemberSubUnitId, setNewMemberSubUnitId] = useState("");
 
   const [selectedSpuIds, setSelectedSpuIds] = useState<Set<string>>(new Set());
   const [bulkDeleteSpuDialogOpen, setBulkDeleteSpuDialogOpen] = useState(false);
@@ -1668,6 +1673,12 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     enabled: !!editingStaff?.id,
   });
 
+  // Query for member sub-unit assignments — tied to the manage sub-units dialog
+  const { data: memberSpuAssignments } = useQuery<any[]>({
+    queryKey: ["/api/staff", managingSubUnitsMember?.id, "spu-assignments"],
+    enabled: !!managingSubUnitsMember?.id,
+  });
+
   const addSpuAssignmentMutation = useMutation({
     mutationFn: async (data: { staffId: string; spuId: string; subUnitId?: string }) => {
       const res = await apiRequest("POST", `/api/staff/${data.staffId}/spu-assignments`, {
@@ -1717,6 +1728,44 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
     onError: () => {
       toast({ title: "Failed", description: "Failed to remove SPU assignment.", variant: "destructive" });
+    },
+  });
+
+  // Mutations for the "Manage Sub-Units" dialog in My Team
+  const addMemberSubUnitMutation = useMutation({
+    mutationFn: async (data: { memberId: string; spuId: string; subUnitId: string }) => {
+      const res = await apiRequest("POST", `/api/staff/${data.memberId}/spu-assignments`, {
+        spuId: data.spuId,
+        subUnitId: data.subUnitId,
+      });
+      return { res, status: res.status };
+    },
+    onSuccess: async (result, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/staff", variables.memberId, "spu-assignments"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] });
+      setNewMemberSubUnitId("");
+      const wasDuplicate = result.status === 200;
+      toast({
+        title: wasDuplicate ? "Already Assigned" : "Sub-Unit Added",
+        description: wasDuplicate ? "This sub-unit was already assigned." : "The sub-unit assignment has been added.",
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed", description: err?.message || "Failed to add sub-unit assignment.", variant: "destructive" });
+    },
+  });
+
+  const removeMemberSubUnitMutation = useMutation({
+    mutationFn: async (data: { assignmentId: string; memberId: string }) => {
+      return await apiRequest("DELETE", `/api/staff/spu-assignments/${data.assignmentId}`, {});
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/staff", variables.memberId, "spu-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/spu-assignments"] });
+      toast({ title: "Sub-Unit Removed", description: "The sub-unit assignment has been removed." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed", description: err?.message || "Failed to remove sub-unit assignment.", variant: "destructive" });
     },
   });
 
@@ -1930,6 +1979,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         <TableHead>Email</TableHead>
                         <TableHead>Primary SPU</TableHead>
                         <TableHead>Sub-Unit</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1945,6 +1995,21 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                               <Badge variant="outline">{member.subUnit.name}</Badge>
                             ) : "-"}
                           </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setManagingSubUnitsMember(member);
+                                setNewMemberSubUnitId("");
+                                setManageSubUnitsDialogOpen(true);
+                              }}
+                              data-testid={`button-manage-subunits-${member.id}`}
+                            >
+                              <Settings className="h-3 w-3 mr-1" />
+                              Sub-Units
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1952,6 +2017,116 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 )}
               </CardContent>
             </Card>
+
+            {/* Manage Sub-Units Dialog */}
+            <Dialog open={manageSubUnitsDialogOpen} onOpenChange={(open) => {
+              setManageSubUnitsDialogOpen(open);
+              if (!open) {
+                setManagingSubUnitsMember(null);
+                setNewMemberSubUnitId("");
+              }
+            }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Manage Sub-Units</DialogTitle>
+                  <DialogDescription>
+                    {managingSubUnitsMember
+                      ? `Add or remove additional sub-units for ${managingSubUnitsMember.name} within their primary SPU (${managingSubUnitsMember.spu?.name}).`
+                      : "Manage additional sub-unit assignments."}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  {(() => {
+                    // Leaders can only manage sub-units if they have the member's primary SPU in their assigned SPUs.
+                    // Super admins have full access with no SPU restriction.
+                    const canManage = staff.role === "super_admin" || leaderManagedSpuIds.has(managingSubUnitsMember?.spuId || "");
+                    return (
+                      <>
+                        {/* Current sub-unit assignments */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Current Additional Sub-Units</Label>
+                          {memberSpuAssignments && memberSpuAssignments.filter((a: any) => a.spuId === managingSubUnitsMember?.spuId && a.subUnitId).length > 0 ? (
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {memberSpuAssignments.filter((a: any) => a.spuId === managingSubUnitsMember?.spuId && a.subUnitId).map((assignment: any) => (
+                                <div key={assignment.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                                  <span className="text-sm font-medium">{assignment.subUnit?.name || getSubUnitName(assignment.subUnitId)}</span>
+                                  {canManage && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      disabled={removeMemberSubUnitMutation.isPending}
+                                      onClick={() => removeMemberSubUnitMutation.mutate({ assignmentId: assignment.id, memberId: managingSubUnitsMember!.id })}
+                                      data-testid={`button-remove-member-subunit-${assignment.id}`}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No additional sub-units assigned.</p>
+                          )}
+                        </div>
+
+                        {/* Add new sub-unit — only shown when caller has the required SPU */}
+                        {canManage ? (
+                          <div className="space-y-2 rounded-md border border-dashed p-3">
+                            <Label className="text-xs text-muted-foreground">Add a sub-unit from {managingSubUnitsMember?.spu?.name}</Label>
+                            <div className="flex gap-2">
+                              <Select value={newMemberSubUnitId || "none"} onValueChange={(val) => setNewMemberSubUnitId(val === "none" ? "" : val)}>
+                                <SelectTrigger data-testid="select-member-subunit" className="flex-1">
+                                  <SelectValue placeholder="Select sub-unit…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Select a sub-unit…</SelectItem>
+                                  {subUnits
+                                    ?.filter((su) =>
+                                      su.spuId === managingSubUnitsMember?.spuId &&
+                                      !(memberSpuAssignments?.some((a: any) => a.subUnitId === su.id))
+                                    )
+                                    .map((su) => (
+                                      <SelectItem key={su.id} value={su.id}>{su.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                disabled={!newMemberSubUnitId || addMemberSubUnitMutation.isPending}
+                                onClick={() => {
+                                  if (managingSubUnitsMember && newMemberSubUnitId) {
+                                    addMemberSubUnitMutation.mutate({
+                                      memberId: managingSubUnitsMember.id,
+                                      spuId: managingSubUnitsMember.spuId,
+                                      subUnitId: newMemberSubUnitId,
+                                    });
+                                  }
+                                }}
+                                data-testid="button-add-member-subunit"
+                              >
+                                {addMemberSubUnitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground" data-testid="text-no-subunit-permission">
+                            You are not assigned to this member's primary SPU ({managingSubUnitsMember?.spu?.name}) and cannot add or remove sub-units for them.
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => {
+                    setManageSubUnitsDialogOpen(false);
+                    setManagingSubUnitsMember(null);
+                    setNewMemberSubUnitId("");
+                  }} data-testid="button-close-manage-subunits">
+                    Done
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
         )}
 
@@ -2284,6 +2459,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
               setEditingStaff(null);
               setNewAssignmentSpuId("");
               setNewAssignmentSubUnitId("");
+              setNewAdditionalSubUnitId("");
             }
           }}>
             <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
@@ -2367,12 +2543,63 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                   </Select>
                 </div>
 
-                {/* Additional SPU Assignments */}
+                {/* Additional Sub-Units (under the staff member's primary SPU) */}
                 <div className="border-t pt-4 space-y-3">
-                  <Label className="text-sm font-medium">Additional SPU Assignments</Label>
-                  {staffSpuAssignments && staffSpuAssignments.length > 0 ? (
+                  <div>
+                    <Label className="text-sm font-medium">Additional Sub-Units</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Extra sub-units within this staff member's primary SPU</p>
+                  </div>
+                  {staffSpuAssignments && staffSpuAssignments.filter((a: any) => a.spuId === editingStaff?.spuId && a.subUnitId).length > 0 ? (
                     <div className="space-y-2 max-h-36 overflow-y-auto">
-                      {staffSpuAssignments.map((assignment: any) => (
+                      {staffSpuAssignments.filter((a: any) => a.spuId === editingStaff?.spuId && a.subUnitId).map((assignment: any) => (
+                        <div key={assignment.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <span className="text-sm font-medium">{getSubUnitName(assignment.subUnitId)}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteSpuAssignmentMutation.mutate(assignment.id)}
+                            data-testid={`button-remove-subunit-assignment-${assignment.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No additional sub-unit assignments</p>
+                  )}
+                  <div className="space-y-2 rounded-md border border-dashed p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Pick a sub-unit below — it will be added when you click <span className="font-medium">Save Changes</span>.
+                    </p>
+                    <Select value={newAdditionalSubUnitId || "none"} onValueChange={(val) => setNewAdditionalSubUnitId(val === "none" ? "" : val)}>
+                      <SelectTrigger data-testid="select-additional-subunit">
+                        <SelectValue placeholder="Add a sub-unit…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {subUnits?.filter((su) => su.spuId === editingStaff?.spuId && !(staffSpuAssignments?.some((a: any) => a.subUnitId === su.id))).map((su) => (
+                          <SelectItem key={su.id} value={su.id}>{su.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {newAdditionalSubUnitId && (
+                      <p className="text-xs text-amber-700 dark:text-amber-300" data-testid="text-pending-subunit">
+                        Pending: <span className="font-medium">{getSubUnitName(newAdditionalSubUnitId)}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Additional SPU Assignments (other SPUs) — admin only */}
+                <div className="border-t pt-4 space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium">Additional SPU Assignments</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Membership in other SPUs beyond the primary</p>
+                  </div>
+                  {staffSpuAssignments && staffSpuAssignments.filter((a: any) => a.spuId !== editingStaff?.spuId).length > 0 ? (
+                    <div className="space-y-2 max-h-36 overflow-y-auto">
+                      {staffSpuAssignments.filter((a: any) => a.spuId !== editingStaff?.spuId).map((assignment: any) => (
                         <div key={assignment.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
                           <span className="text-sm">
                             {getSpuName(assignment.spuId)}
@@ -2392,10 +2619,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                   ) : (
                     <p className="text-sm text-muted-foreground">No additional SPU assignments</p>
                   )}
-
                   <div className="space-y-2 rounded-md border border-dashed p-3">
                     <p className="text-xs text-muted-foreground">
-                      Pick an SPU below — it will be added when you click <span className="font-medium">Save Changes</span>.
+                      Pick a different SPU below — it will be added when you click <span className="font-medium">Save Changes</span>.
                     </p>
                     <Select value={newAssignmentSpuId} onValueChange={(val) => {
                       setNewAssignmentSpuId(val);
@@ -2405,12 +2631,11 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         <SelectValue placeholder="Add another SPU…" />
                       </SelectTrigger>
                       <SelectContent>
-                        {spus?.map((spu) => (
+                        {spus?.filter((spu) => spu.id !== editingStaff?.spuId).map((spu) => (
                           <SelectItem key={spu.id} value={spu.id}>{spu.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-
                     {newAssignmentSpuId && (
                       <Select value={newAssignmentSubUnitId || "none"} onValueChange={(val) => setNewAssignmentSubUnitId(val === "none" ? "" : val)}>
                         <SelectTrigger data-testid="select-assignment-subunit">
@@ -2424,7 +2649,6 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         </SelectContent>
                       </Select>
                     )}
-
                     {newAssignmentSpuId && (
                       <p className="text-xs text-amber-700 dark:text-amber-300" data-testid="text-pending-spu">
                         Pending: <span className="font-medium">{getSpuName(newAssignmentSpuId)}</span>
@@ -2444,6 +2668,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     setEditingStaff(null);
                     setNewAssignmentSpuId("");
                     setNewAssignmentSubUnitId("");
+                    setNewAdditionalSubUnitId("");
                   }}
                   data-testid="button-cancel-edit-staff"
                 >
@@ -2452,7 +2677,15 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 <Button
                   onClick={async () => {
                     if (!editingStaff || !editingStaff.name || !editingStaff.email || !editingStaff.spuId) return;
-                    // If the admin staged an SPU in the dropdown but didn't click Add, save it as part of Save Changes.
+                    // If the admin staged an additional sub-unit, save it as part of Save Changes.
+                    if (newAdditionalSubUnitId) {
+                      await addSpuAssignmentMutation.mutateAsync({
+                        staffId: editingStaff.id,
+                        spuId: editingStaff.spuId,
+                        subUnitId: newAdditionalSubUnitId,
+                      });
+                    }
+                    // If the admin staged a different SPU, save it (with optional sub-unit).
                     if (newAssignmentSpuId) {
                       await addSpuAssignmentMutation.mutateAsync({
                         staffId: editingStaff.id,

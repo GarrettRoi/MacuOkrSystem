@@ -1881,15 +1881,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/staff/:staffId/spu-assignments", requireAdmin, async (req, res) => {
+  app.post("/api/staff/:staffId/spu-assignments", async (req, res) => {
     try {
+      const isAdmin = req.session.isAdmin;
+      const sessionStaffId = req.session.selectedStaffId;
+
+      // Determine caller type.
+      // Full platform admins (isAdmin) and super_admins get the same unrestricted access.
+      // Only callers with role === "leader" get the narrower leader-only permissions.
+      let callerIsLeaderOnly = false;
+      let callerStaff: any = null;
+      if (!isAdmin) {
+        if (!sessionStaffId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        callerStaff = await storage.getStaff(sessionStaffId);
+        if (!callerStaff) {
+          return res.status(401).json({ error: "Invalid session" });
+        }
+        if (callerStaff.role === "leader") {
+          callerIsLeaderOnly = true;
+        } else if (callerStaff.role !== "super_admin") {
+          return res.status(403).json({ error: "Forbidden: Admin, super admin, or leader access required" });
+        }
+      }
+
       const { spuId, subUnitId } = req.body;
       const staffId = req.params.staffId;
-      console.log(`[SPU-ASSIGN] POST staffId=${staffId} spuId=${spuId} subUnitId=${subUnitId || "null"}`);
+      console.log(`[SPU-ASSIGN] POST staffId=${staffId} spuId=${spuId} subUnitId=${subUnitId || "null"} callerIsLeaderOnly=${callerIsLeaderOnly}`);
 
       if (!spuId) {
         console.log(`[SPU-ASSIGN] REJECTED: missing spuId`);
         return res.status(400).json({ error: "SPU ID is required" });
+      }
+
+      // Get target staff's primary SPU
+      const targetStaff = await storage.getStaff(staffId);
+      if (!targetStaff) {
+        return res.status(404).json({ error: "Staff member not found" });
+      }
+
+      if (subUnitId) {
+        const subUnit = await storage.getSubUnit(subUnitId);
+        // All callers: the sub-unit must belong to the SPU specified in the request (basic consistency)
+        if (!subUnit || subUnit.spuId !== spuId) {
+          return res.status(400).json({ error: "Sub-unit does not belong to the specified SPU" });
+        }
+        // Leaders: additionally enforce that the sub-unit is under the target's primary SPU
+        if (callerIsLeaderOnly && spuId !== targetStaff.spuId) {
+          return res.status(400).json({ error: "Leaders can only add sub-unit assignments under the staff member's primary SPU" });
+        }
+      } else {
+        // No sub-unit (whole-SPU assignment): leaders cannot create whole-SPU assignments
+        if (callerIsLeaderOnly) {
+          return res.status(403).json({ error: "Leaders can only add sub-unit assignments, not whole-SPU assignments" });
+        }
+      }
+
+      // Leader-specific: must have target's primary SPU in their own assignments
+      if (callerIsLeaderOnly) {
+        const leaderAssignments = await storage.getStaffSpuAssignments(sessionStaffId!);
+        const leaderSpuIds = new Set([callerStaff.spuId, ...leaderAssignments.map((a: any) => a.spuId)]);
+        if (!leaderSpuIds.has(targetStaff.spuId)) {
+          return res.status(403).json({ error: "Leaders can only manage sub-units for staff members in their assigned SPUs" });
+        }
       }
 
       // Idempotent: if this exact assignment already exists, return it instead of creating a duplicate
@@ -1914,9 +1969,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/staff/spu-assignments/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/staff/spu-assignments/:id", async (req, res) => {
     try {
-      await storage.deleteStaffSpuAssignment(req.params.id);
+      const isAdmin = req.session.isAdmin;
+      const sessionStaffId = req.session.selectedStaffId;
+
+      // Same caller-type resolution: platform admins and super_admins get full access;
+      // only role === "leader" gets the narrower leader-only permissions.
+      let callerIsLeaderOnly = false;
+      let callerStaff: any = null;
+      if (!isAdmin) {
+        if (!sessionStaffId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        callerStaff = await storage.getStaff(sessionStaffId);
+        if (!callerStaff) {
+          return res.status(401).json({ error: "Invalid session" });
+        }
+        if (callerStaff.role === "leader") {
+          callerIsLeaderOnly = true;
+        } else if (callerStaff.role !== "super_admin") {
+          return res.status(403).json({ error: "Forbidden: Admin, super admin, or leader access required" });
+        }
+      }
+
+      const assignmentId = req.params.id;
+
+      // For leaders, enforce permission checks before deleting
+      if (callerIsLeaderOnly) {
+        const allAssignments = await storage.getAllStaffSpuAssignments();
+        const assignment = allAssignments.find((a: any) => a.id === assignmentId);
+        if (!assignment) {
+          return res.status(404).json({ error: "Assignment not found" });
+        }
+
+        // Leaders can only remove sub-unit assignments (not whole-SPU assignments)
+        if (!assignment.subUnitId) {
+          return res.status(403).json({ error: "Leaders can only remove sub-unit assignments" });
+        }
+
+        // Get target staff and verify the assignment is under their primary SPU
+        const targetStaff = await storage.getStaff(assignment.staffId);
+        if (!targetStaff) {
+          return res.status(404).json({ error: "Staff member not found" });
+        }
+
+        // The assignment must be under the target's primary SPU
+        if (assignment.spuId !== targetStaff.spuId) {
+          return res.status(403).json({ error: "Leaders can only remove sub-unit assignments under the staff member's primary SPU" });
+        }
+
+        // Leader must have target's primary SPU in their own assignments
+        const leaderAssignments = await storage.getStaffSpuAssignments(sessionStaffId!);
+        const leaderSpuIds = new Set([callerStaff.spuId, ...leaderAssignments.map((a: any) => a.spuId)]);
+        if (!leaderSpuIds.has(targetStaff.spuId)) {
+          return res.status(403).json({ error: "Leaders can only remove sub-unit assignments for staff members in their assigned SPUs" });
+        }
+      }
+
+      await storage.deleteStaffSpuAssignment(assignmentId);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete SPU assignment" });
