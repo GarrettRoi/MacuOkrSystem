@@ -1100,6 +1100,14 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     });
   };
 
+  // Helper to get additional sub-unit names for a member within their primary SPU
+  const getAdditionalSubUnitNames = (memberId: string, primarySpuId: string | null | undefined): string[] => {
+    if (!allSpuAssignments || !primarySpuId) return [];
+    return allSpuAssignments
+      .filter(a => a.staffId === memberId && a.spuId === primarySpuId && a.subUnitId)
+      .map(a => a.subUnit?.name || getSubUnitName(a.subUnitId));
+  };
+
   // Fetch basic users for leaders
   const { data: myTeam, isLoading: myTeamLoading } = useQuery<StaffWithDetails[]>({
     queryKey: ["/api/staff", staff.id, "basic-users"],
@@ -1979,11 +1987,14 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         <TableHead>Email</TableHead>
                         <TableHead>Primary SPU</TableHead>
                         <TableHead>Sub-Unit</TableHead>
+                        <TableHead>Additional Sub-Units</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {myTeam.sort((a, b) => compareNames(a.name, b.name)).map((member) => (
+                      {myTeam.sort((a, b) => compareNames(a.name, b.name)).map((member) => {
+                        const additionalSubUnitNames = getAdditionalSubUnitNames(member.id, member.spuId);
+                        return (
                         <TableRow key={member.id} data-testid={`row-team-${member.id}`}>
                           <TableCell className="font-medium">{member.name}</TableCell>
                           <TableCell>{member.email}</TableCell>
@@ -1994,6 +2005,23 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                             {member.subUnit?.name ? (
                               <Badge variant="outline">{member.subUnit.name}</Badge>
                             ) : "-"}
+                          </TableCell>
+                          <TableCell data-testid={`cell-team-additional-subunits-${member.id}`}>
+                            {additionalSubUnitNames.length === 0 ? (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1 items-center">
+                                {additionalSubUnitNames.map((name, idx) => (
+                                  <Badge
+                                    key={`${member.id}-extra-su-${idx}`}
+                                    variant="outline"
+                                    data-testid={`badge-team-additional-subunit-${member.id}-${idx}`}
+                                  >
+                                    {name}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Button
@@ -2011,7 +2039,8 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 )}
