@@ -877,10 +877,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/strategic-advancement/update-date", requireAdmin, async (req, res) => {
     try {
-      const now = new Date().toISOString();
-      await storage.setSetting("strategic_advancement_updated_at", now);
-      res.json({ success: true, updatedAt: now });
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      const quarter = month <= 3 ? "Q1" : month <= 6 ? "Q2" : month <= 9 ? "Q3" : "Q4";
+
+      // Snapshot every active KR's current slider value into the time-series chart
+      // for the current calendar quarter. This way the slider values become
+      // visible on the achievement page chart immediately.
+      const snapshot = await storage.getStrategicAdvancementData();
+      const items: Array<{ keyResultId: string; quarter: string; year: number; progressPercent: number | null }> = [];
+      for (const obj of snapshot.objectives) {
+        for (const kr of obj.keyResults) {
+          items.push({ keyResultId: kr.id, quarter, year, progressPercent: kr.progressPercent });
+        }
+      }
+      if (items.length > 0) {
+        await storage.bulkUpsertChartDatapoints(items);
+      }
+
+      // Make sure the chart range covers the current quarter so the snapshot
+      // actually shows up. If no range is set, default to the most recent
+      // 4 quarters ending this quarter. If a range exists but the current
+      // quarter is past its end, extend the end.
+      const quarterIndex = (q: string) => ["Q1", "Q2", "Q3", "Q4"].indexOf(q);
+      const periodNum = (q: string, y: number) => y * 4 + quarterIndex(q);
+      const subtractQuarters = (q: string, y: number, n: number) => {
+        let total = periodNum(q, y) - n;
+        return { quarter: ["Q1", "Q2", "Q3", "Q4"][((total % 4) + 4) % 4], year: Math.floor(total / 4) };
+      };
+
+      const rangeRowValue = await storage.getSetting("strategic_chart_range");
+      let range: { startQuarter: string; startYear: number; endQuarter: string; endYear: number } | null = null;
+      if (rangeRowValue) {
+        try { range = JSON.parse(rangeRowValue); } catch {}
+      }
+      if (!range) {
+        const start = subtractQuarters(quarter, year, 3);
+        range = { startQuarter: start.quarter, startYear: start.year, endQuarter: quarter, endYear: year };
+        await storage.setChartRange(range);
+      } else {
+        const cur = periodNum(quarter, year);
+        const end = periodNum(range.endQuarter, range.endYear);
+        const start = periodNum(range.startQuarter, range.startYear);
+        let changed = false;
+        if (cur > end) { range.endQuarter = quarter; range.endYear = year; changed = true; }
+        if (cur < start) { range.startQuarter = quarter; range.startYear = year; changed = true; }
+        if (changed) await storage.setChartRange(range);
+      }
+
+      const nowIso = now.toISOString();
+      await storage.setSetting("strategic_advancement_updated_at", nowIso);
+      res.json({ success: true, updatedAt: nowIso, snapshotQuarter: quarter, snapshotYear: year, snapshotCount: items.length });
     } catch (error) {
+      console.error("Failed to update strategic advancement date:", error);
       res.status(500).json({ error: "Failed to update date" });
     }
   });

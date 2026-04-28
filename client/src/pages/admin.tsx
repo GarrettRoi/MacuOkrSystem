@@ -1261,11 +1261,21 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
 
   const updateAdvancementDateMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/strategic-advancement/update-date", {});
+      const res = await apiRequest("POST", "/api/strategic-advancement/update-date", {});
+      return (await res.json()) as { snapshotQuarter?: string; snapshotYear?: number; snapshotCount?: number };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/strategic-advancement"] });
-      toast({ title: "Date Updated", description: "The last updated date has been refreshed." });
+      queryClient.invalidateQueries({ queryKey: ["/api/strategic-advancement/chart"] });
+      const q = data?.snapshotQuarter;
+      const y = data?.snapshotYear;
+      const n = data?.snapshotCount ?? 0;
+      toast({
+        title: "Snapshot Saved",
+        description: q && y && n > 0
+          ? `Recorded current progress for ${n} key result${n === 1 ? "" : "s"} into ${q} ${y}. The chart on the achievement page is now up to date.`
+          : "The last updated date has been refreshed.",
+      });
     },
     onError: () => toast({ title: "Error", description: "Failed to update date.", variant: "destructive" }),
   });

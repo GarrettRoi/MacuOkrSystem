@@ -1258,6 +1258,9 @@ function StrategicAdvancementTab() {
   const { data, isLoading } = useQuery<StrategicChartData>({
     queryKey: ["/api/strategic-advancement/chart"],
   });
+  const { data: snapshotData } = useQuery<StrategicAdvancementData>({
+    queryKey: ["/api/strategic-advancement"],
+  });
 
   const allObjectiveIds = useMemo(() => (data?.objectives ?? []).map(o => `obj-${o.id}`), [data]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -1342,12 +1345,74 @@ function StrategicAdvancementTab() {
 
   const hasChartData = range && periods.length > 0 && objectives.length > 0;
 
+  const snapshotObjectives = snapshotData?.objectives ?? [];
+  const hasSnapshot = snapshotObjectives.some(o => o.keyResults.some(kr => (kr.progressPercent ?? 0) > 0));
+
   return (
     <div className="space-y-6">
       {lastUpdated && (
         <p className="text-center text-sm text-muted-foreground" data-testid="text-strategic-last-updated">
           Last Updated: {lastUpdated}
         </p>
+      )}
+
+      {hasSnapshot && (
+        <Card data-testid="card-strategic-snapshot">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Target className="h-4 w-4" />
+              Current Progress Snapshot
+            </CardTitle>
+            <CardDescription className="text-xs">
+              The latest progress reported by leadership for each strategic objective and key result.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {snapshotObjectives.map(obj => {
+              const krs = obj.keyResults ?? [];
+              const avg = krs.length > 0
+                ? Math.round(krs.reduce((s, kr) => s + (kr.progressPercent ?? 0), 0) / krs.length)
+                : 0;
+              return (
+                <div key={obj.id} className="space-y-3" data-testid={`snapshot-objective-${obj.id}`}>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex items-start gap-2 flex-1 min-w-0">
+                      <Badge variant="outline" className="font-mono text-xs shrink-0 mt-0.5">{obj.label}</Badge>
+                      <span className="text-sm font-semibold">{obj.description}</span>
+                    </div>
+                    <Badge variant="secondary" className="font-mono shrink-0" data-testid={`snapshot-objective-avg-${obj.id}`}>
+                      {avg}%
+                    </Badge>
+                  </div>
+                  {krs.length > 0 && (
+                    <div className="space-y-2 pl-4 border-l-2 border-muted">
+                      {[...krs].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" })).map(kr => {
+                        const pct = kr.progressPercent ?? 0;
+                        return (
+                          <div key={kr.id} className="space-y-1" data-testid={`snapshot-kr-${kr.id}`}>
+                            <div className="flex items-start justify-between gap-2 text-xs">
+                              <span className="flex-1 min-w-0">
+                                <span className="font-mono text-muted-foreground mr-1">{kr.label}</span>
+                                {kr.description}
+                              </span>
+                              <span className="font-mono shrink-0 tabular-nums" data-testid={`snapshot-kr-pct-${kr.id}`}>{pct}%</span>
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full bg-primary transition-all"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
       )}
 
       {objectives.length === 0 ? (
