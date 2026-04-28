@@ -25,7 +25,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       leaderAccess: false,
     },
     {
-      title: "Quarterly Update",
+      title: "Submit Quarterly Score",
       description: "Update progress on your existing OKRs",
       icon: TrendingUp,
       path: "/quarterly-update",
