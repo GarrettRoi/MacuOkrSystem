@@ -1481,12 +1481,17 @@ function StrategicAdvancementTab() {
 }
 
 export function UniversityAchievementContent({ hideAnalytics = false }: { hideAnalytics?: boolean } = {}) {
+  const { data: hideAnalyticsSetting } = useQuery<{ hideAnalytics: boolean }>({
+    queryKey: ["/api/settings/hide-analytics"],
+  });
+  const analyticsHidden = hideAnalytics || (hideAnalyticsSetting?.hideAnalytics ?? false);
+
   return (
     <Tabs defaultValue="dashboard" className="space-y-6">
       <TabsList data-testid="tabs-achievement">
         <TabsTrigger value="dashboard" data-testid="tab-dashboard">Dashboard</TabsTrigger>
         <TabsTrigger value="objective-results" data-testid="tab-objective-results">Objective Results</TabsTrigger>
-        {!hideAnalytics && (
+        {!analyticsHidden && (
           <TabsTrigger value="trends" data-testid="tab-trends">Analytics</TabsTrigger>
         )}
         <TabsTrigger value="strategic-advancement" data-testid="tab-strategic-advancement">Strategic Advancement</TabsTrigger>
@@ -1500,7 +1505,7 @@ export function UniversityAchievementContent({ hideAnalytics = false }: { hideAn
         <ObjectiveResultsTab />
       </TabsContent>
 
-      {!hideAnalytics && (
+      {!analyticsHidden && (
         <TabsContent value="trends">
           <AnalyticsTab />
         </TabsContent>

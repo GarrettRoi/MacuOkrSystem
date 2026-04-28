@@ -1411,6 +1411,26 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
   });
 
+  const { data: hideAnalyticsData } = useQuery<{ hideAnalytics: boolean }>({
+    queryKey: ["/api/settings/hide-analytics"],
+  });
+  const hideAnalytics = hideAnalyticsData?.hideAnalytics ?? false;
+
+  const updateHideAnalyticsMutation = useMutation({
+    mutationFn: async (next: boolean) => {
+      return await apiRequest("PUT", "/api/settings/hide-analytics", { hideAnalytics: next });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/hide-analytics"] });
+      toast({
+        title: variables ? "Analytics Tab Hidden" : "Analytics Tab Visible",
+        description: variables
+          ? "The Analytics tab is now hidden from the University Achievement page for everyone."
+          : "The Analytics tab is now visible on the University Achievement page.",
+      });
+    },
+  });
+
   const addSpuMutation = useMutation({
     mutationFn: async (name: string) => {
       return await apiRequest("POST", "/api/spus", { name });
@@ -4023,6 +4043,26 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     </p>
                   </div>
                 </div>
+
+                {staff.role === "super_admin" && (
+                  <div className="p-4 border rounded-md space-y-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-base font-medium" htmlFor="switch-hide-analytics">Hide Analytics Tab</Label>
+                        <p className="text-sm text-muted-foreground">
+                          When on, the <span className="font-medium">Analytics</span> tab on the University Achievement page is hidden for everyone (logged-in users and the public landing page).
+                        </p>
+                      </div>
+                      <Switch
+                        id="switch-hide-analytics"
+                        checked={hideAnalytics}
+                        onCheckedChange={(val) => updateHideAnalyticsMutation.mutate(val)}
+                        disabled={updateHideAnalyticsMutation.isPending}
+                        data-testid="switch-hide-analytics"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="p-4 border rounded-md space-y-3">
                   <div className="space-y-1">
