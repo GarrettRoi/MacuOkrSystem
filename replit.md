@@ -32,6 +32,7 @@ PostgreSQL serves as the primary database, accessed via Drizzle ORM and Neon Dat
 -   **Strategic Planning Year Tracking**: Configurable planning year settings to align calendar quarters with strategic planning cycles.
 -   **Initial Setup Wizard**: A guided setup process for new deployments to import organizational structure and university objectives.
 -   **System Reset**: A super admin feature to clear organizational data and reset the system to its initial setup state.
+-   **Genius Animation**: A brief one-time-per-session overlay flashes the word "Genius" in big red letters on the home page right after login. Toggleable by super admins under Admin → Settings (`show_genius_animation`, defaults ON). Backed by `GET/PUT /api/settings/show-genius-animation` and gated client-side via `sessionStorage` flag plus `isSuccess` of the setting query so disabled accounts never flash the overlay.
 
 ## External Dependencies
 

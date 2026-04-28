@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, TrendingUp, BarChart3, Settings, Download, Database, ClipboardList, LayoutDashboard, Users, LineChart } from "lucide-react";
@@ -10,8 +12,50 @@ interface HomeProps {
   isAdmin: boolean;
 }
 
+const GENIUS_SHOWN_KEY = "geniusAnimationShown";
+
+function GeniusAnimation({ onDone }: { onDone: () => void }) {
+  const [phase, setPhase] = useState<"in" | "out">("in");
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase("out"), 1800);
+    const t2 = setTimeout(() => onDone(), 2600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [onDone]);
+  return (
+    <div
+      className={`fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm cursor-pointer transition-opacity duration-700 ${phase === "out" ? "opacity-0" : "opacity-100"}`}
+      onClick={onDone}
+      data-testid="overlay-genius-animation"
+    >
+      <span
+        className={`select-none font-extrabold tracking-tight text-[20vw] leading-none text-[#c51232] drop-shadow-[0_8px_24px_rgba(197,18,50,0.35)] ${phase === "in" ? "animate-genius-in" : "animate-genius-out"}`}
+        data-testid="text-genius-animation"
+      >
+        Genius
+      </span>
+    </div>
+  );
+}
+
 export default function Home({ staff, isAdmin }: HomeProps) {
   const isLeader = staff.role === "leader" || staff.role === "super_admin";
+
+  const { data: geniusSetting, isSuccess: geniusSettingLoaded } = useQuery<{ showGeniusAnimation: boolean }>({
+    queryKey: ["/api/settings/show-genius-animation"],
+  });
+
+  const [showGenius, setShowGenius] = useState(false);
+  useEffect(() => {
+    if (!geniusSettingLoaded) return;
+    if (geniusSetting?.showGeniusAnimation !== true) return;
+    if (typeof window === "undefined") return;
+    if (sessionStorage.getItem(GENIUS_SHOWN_KEY) === "1") return;
+    sessionStorage.setItem(GENIUS_SHOWN_KEY, "1");
+    setShowGenius(true);
+  }, [geniusSettingLoaded, geniusSetting]);
 
   const allActions = [
     {
@@ -127,6 +171,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
+      {showGenius && <GeniusAnimation onDone={() => setShowGenius(false)} />}
       <div className="text-center space-y-2">
         <h1 className="text-4xl font-bold">Welcome, {staff.name.toLowerCase() === "phil greenwald" ? "PG5" : getSortableName(staff.name).split(" ")[0]}!</h1>
         <p className="text-muted-foreground text-lg">

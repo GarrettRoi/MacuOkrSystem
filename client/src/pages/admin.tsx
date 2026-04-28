@@ -1478,6 +1478,26 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
   });
 
+  const { data: showGeniusAnimationData } = useQuery<{ showGeniusAnimation: boolean }>({
+    queryKey: ["/api/settings/show-genius-animation"],
+  });
+  const showGeniusAnimation = showGeniusAnimationData?.showGeniusAnimation ?? true;
+
+  const updateShowGeniusAnimationMutation = useMutation({
+    mutationFn: async (next: boolean) => {
+      return await apiRequest("PUT", "/api/settings/show-genius-animation", { showGeniusAnimation: next });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/show-genius-animation"] });
+      toast({
+        title: variables ? "Genius Animation Enabled" : "Genius Animation Disabled",
+        description: variables
+          ? "Users will see the Genius animation on the home page after they log in."
+          : "The Genius animation on the home page is now turned off for everyone.",
+      });
+    },
+  });
+
   const addSpuMutation = useMutation({
     mutationFn: async (name: string) => {
       return await apiRequest("POST", "/api/spus", { name });
@@ -4414,6 +4434,26 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         onCheckedChange={(val) => updateHideStrategicChartMutation.mutate(val)}
                         disabled={updateHideStrategicChartMutation.isPending}
                         data-testid="switch-hide-strategic-chart"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {staff.role === "super_admin" && (
+                  <div className="p-4 border rounded-md space-y-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-base font-medium" htmlFor="switch-show-genius-animation">Show "Genius" Animation on Login</Label>
+                        <p className="text-sm text-muted-foreground">
+                          When on, users see a brief animation that flashes the word <span className="font-medium">Genius</span> in big red letters on the home page the first time they land there each session.
+                        </p>
+                      </div>
+                      <Switch
+                        id="switch-show-genius-animation"
+                        checked={showGeniusAnimation}
+                        onCheckedChange={(val) => updateShowGeniusAnimationMutation.mutate(val)}
+                        disabled={updateShowGeniusAnimationMutation.isPending}
+                        data-testid="switch-show-genius-animation"
                       />
                     </div>
                   </div>
