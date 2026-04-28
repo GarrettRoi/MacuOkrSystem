@@ -737,6 +737,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/settings/hide-strategic-chart", async (_req, res) => {
+    try {
+      const value = await storage.getSetting("hide_strategic_chart");
+      res.json({ hideStrategicChart: value === "true" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch setting" });
+    }
+  });
+
+  app.put("/api/settings/hide-strategic-chart", async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const staffMember = await storage.getStaff(req.session.selectedStaffId);
+      if (!staffMember || staffMember.role !== "super_admin") {
+        return res.status(403).json({ error: "Only super admins can change this setting" });
+      }
+      const schema = z.object({ hideStrategicChart: z.boolean() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      await storage.setSetting("hide_strategic_chart", parsed.data.hideStrategicChart ? "true" : "false");
+      res.json({ success: true, hideStrategicChart: parsed.data.hideStrategicChart });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update setting" });
+    }
+  });
+
   // University Strategic Planning routes
   app.get("/api/university-objectives", async (_req, res) => {
     try {

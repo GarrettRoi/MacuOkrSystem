@@ -1261,6 +1261,10 @@ function StrategicAdvancementTab() {
   const { data: snapshotData } = useQuery<StrategicAdvancementData>({
     queryKey: ["/api/strategic-advancement"],
   });
+  const { data: hideChartSetting } = useQuery<{ hideStrategicChart: boolean }>({
+    queryKey: ["/api/settings/hide-strategic-chart"],
+  });
+  const hideStrategicChart = hideChartSetting?.hideStrategicChart ?? false;
 
   const allObjectiveIds = useMemo(() => (data?.objectives ?? []).map(o => `obj-${o.id}`), [data]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -1421,7 +1425,7 @@ function StrategicAdvancementTab() {
           <p className="text-lg font-medium">No strategic objectives configured yet.</p>
           <p className="text-sm mt-1">An administrator can add objectives in the Strategic Planning section.</p>
         </div>
-      ) : !hasChartData ? (
+      ) : !hideStrategicChart && !hasChartData ? (
         <div className="flex flex-col items-center justify-center py-24 text-center text-muted-foreground">
           <TrendingUp className="h-10 w-10 mb-3 opacity-40" />
           <p className="text-lg font-medium">No chart data configured yet.</p>
@@ -1429,6 +1433,8 @@ function StrategicAdvancementTab() {
         </div>
       ) : (
         <>
+          {!hideStrategicChart && hasChartData && (
+            <>
           {/* Item selector */}
           <Card>
             <CardHeader className="pb-3">
@@ -1514,6 +1520,8 @@ function StrategicAdvancementTab() {
               )}
             </CardContent>
           </Card>
+            </>
+          )}
 
           {/* Comments per objective */}
           {objectives.some(o => o.comment) && (

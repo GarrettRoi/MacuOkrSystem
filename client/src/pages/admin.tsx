@@ -1441,6 +1441,26 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
   });
 
+  const { data: hideStrategicChartData } = useQuery<{ hideStrategicChart: boolean }>({
+    queryKey: ["/api/settings/hide-strategic-chart"],
+  });
+  const hideStrategicChart = hideStrategicChartData?.hideStrategicChart ?? false;
+
+  const updateHideStrategicChartMutation = useMutation({
+    mutationFn: async (next: boolean) => {
+      return await apiRequest("PUT", "/api/settings/hide-strategic-chart", { hideStrategicChart: next });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/hide-strategic-chart"] });
+      toast({
+        title: variables ? "Time-Series Chart Hidden" : "Time-Series Chart Visible",
+        description: variables
+          ? "The Strategic Progress Over Time chart is now hidden on the achievement page for everyone."
+          : "The Strategic Progress Over Time chart is now visible on the achievement page.",
+      });
+    },
+  });
+
   const addSpuMutation = useMutation({
     mutationFn: async (name: string) => {
       return await apiRequest("POST", "/api/spus", { name });
@@ -4069,6 +4089,26 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         onCheckedChange={(val) => updateHideAnalyticsMutation.mutate(val)}
                         disabled={updateHideAnalyticsMutation.isPending}
                         data-testid="switch-hide-analytics"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {staff.role === "super_admin" && (
+                  <div className="p-4 border rounded-md space-y-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-base font-medium" htmlFor="switch-hide-strategic-chart">Hide Strategic Progress Over Time Chart</Label>
+                        <p className="text-sm text-muted-foreground">
+                          When on, the <span className="font-medium">Strategic Progress Over Time</span> chart and its item selector are hidden on the Strategic Advancement tab for everyone (logged-in users and the public landing page). The Current Progress Snapshot and Leadership Commentary remain visible.
+                        </p>
+                      </div>
+                      <Switch
+                        id="switch-hide-strategic-chart"
+                        checked={hideStrategicChart}
+                        onCheckedChange={(val) => updateHideStrategicChartMutation.mutate(val)}
+                        disabled={updateHideStrategicChartMutation.isPending}
+                        data-testid="switch-hide-strategic-chart"
                       />
                     </div>
                   </div>
