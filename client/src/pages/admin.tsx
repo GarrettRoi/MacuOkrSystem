@@ -2486,6 +2486,23 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                   Are you sure you want to delete {staffToDelete?.name}? This action cannot be undone.
                 </DialogDescription>
               </DialogHeader>
+              <div className="space-y-2 text-sm">
+                <p className="font-medium">What happens to their existing data:</p>
+                <ul className="space-y-1 text-muted-foreground list-none">
+                  <li className="flex items-start gap-2">
+                    <span className="text-green-600 dark:text-green-400 mt-0.5 shrink-0">&#10003;</span>
+                    <span>OKRs they submitted are <span className="font-medium text-foreground">kept</span> — their name is preserved on each record.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-green-600 dark:text-green-400 mt-0.5 shrink-0">&#10003;</span>
+                    <span>Quarterly scores they entered are <span className="font-medium text-foreground">kept</span> — their name is preserved on each record.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-destructive mt-0.5 shrink-0">&#10007;</span>
+                    <span>Their <span className="font-medium text-foreground">responsible party</span> assignments on OKRs will be removed.</span>
+                  </li>
+                </ul>
+              </div>
               <DialogFooter>
                 <Button
                   variant="outline"
