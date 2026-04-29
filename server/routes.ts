@@ -1649,6 +1649,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (sessionStaff?.role === "leader" && role !== "basic") {
         return res.status(403).json({ error: "Leaders can only create basic users" });
       }
+
+      // Leaders can only create users in their primary or assigned SPUs.
+      if (sessionStaff?.role === "leader") {
+        const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+        const allowedSpuIds = new Set<string>([
+          sessionStaff.spuId,
+          ...assignments.map((a: any) => a.spuId),
+        ]);
+        if (!spuId || !allowedSpuIds.has(spuId)) {
+          return res.status(403).json({ error: "Leaders can only add team members to SPUs they manage." });
+        }
+      }
+
+      // If a sub-unit is supplied, it must belong to the chosen SPU.
+      if (subUnitId) {
+        const targetSubUnit = await storage.getSubUnit(subUnitId);
+        if (!targetSubUnit || targetSubUnit.spuId !== spuId) {
+          return res.status(400).json({ error: "Selected sub-unit does not belong to the chosen SPU." });
+        }
+      }
       
       const existingByEmail = await storage.getStaffByEmail(email);
       if (existingByEmail) {
@@ -2214,7 +2234,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("[POST /api/okrs] Validation error:", JSON.stringify(parsed.error, null, 2));
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
-      
+
+      // Defense-in-depth: require an authenticated session (admin or selected staff).
+      const sessionStaffId = req.session.selectedStaffId;
+      if (!req.session.isAdmin && !sessionStaffId) {
+        return res.status(401).json({ error: "Unauthorized: Login required to submit OKRs." });
+      }
+      // Validate SPU exists; any role.
+      const targetSpu = await storage.getSpu(parsed.data.spuId);
+      if (!targetSpu) {
+        return res.status(400).json({ error: "Invalid SPU." });
+      }
+      // Validate sub-unit belongs to the chosen SPU.
+      if (parsed.data.subUnitId) {
+        const targetSubUnit = await storage.getSubUnit(parsed.data.subUnitId);
+        if (!targetSubUnit || targetSubUnit.spuId !== parsed.data.spuId) {
+          return res.status(400).json({ error: "Selected sub-unit does not belong to the chosen SPU." });
+        }
+      }
+      // Role-scoped authorization for selected-staff sessions:
+      //  - basic: spuId must be primary SPU. If user has a sub-unit, OKR's sub-unit must match.
+      //  - leader: spuId must be their primary or one of their assigned SPUs.
+      //  - super_admin: unrestricted (also, isAdmin session bypasses this block).
+      if (sessionStaffId && !req.session.isAdmin) {
+        const sessionStaff = await storage.getStaff(sessionStaffId);
+        if (sessionStaff?.role === "basic") {
+          if (parsed.data.spuId !== sessionStaff.spuId) {
+            return res.status(403).json({ error: "Forbidden: You can only submit OKRs for your assigned SPU." });
+          }
+          if (sessionStaff.subUnitId && parsed.data.subUnitId !== sessionStaff.subUnitId) {
+            return res.status(403).json({ error: "Forbidden: You can only submit OKRs for your assigned sub-unit." });
+          }
+        } else if (sessionStaff?.role === "leader") {
+          const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+          const allowedSpuIds = new Set<string>([
+            sessionStaff.spuId,
+            ...assignments.map((a: any) => a.spuId),
+          ]);
+          if (!allowedSpuIds.has(parsed.data.spuId)) {
+            return res.status(403).json({ error: "Forbidden: You can only submit OKRs for SPUs you manage." });
+          }
+        }
+      }
+
       // Get staff name to store as submitterName (persists even if staff is deleted)
       let submitterName: string | undefined;
       if (parsed.data.staffId) {
@@ -2453,7 +2515,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
-      
+
+      // Defense-in-depth authorization based on the OKR being scored:
+      //  - basic users (no sub-unit): can score any OKR in their primary SPU
+      //  - basic users WITH a sub-unit: can only score OKRs for that sub-unit
+      //  - leaders: can score any OKR in their primary or assigned SPUs
+      //  - super_admins / isAdmin sessions: unrestricted
+      const sessionStaffId = req.session.selectedStaffId;
+      if (!req.session.isAdmin && !sessionStaffId) {
+        return res.status(401).json({ error: "Unauthorized: Login required to submit a quarterly update." });
+      }
+      if (sessionStaffId && !req.session.isAdmin) {
+        const sessionStaff = await storage.getStaff(sessionStaffId);
+        const okr = await storage.getOkr(parsed.data.okrId);
+        if (!okr) {
+          return res.status(404).json({ error: "OKR not found" });
+        }
+        if (sessionStaff?.role === "basic") {
+          if (okr.spuId !== sessionStaff.spuId) {
+            return res.status(403).json({ error: "Forbidden: You can only score OKRs in your assigned SPU." });
+          }
+          if (sessionStaff.subUnitId && okr.subUnitId !== sessionStaff.subUnitId) {
+            return res.status(403).json({ error: "Forbidden: You can only score OKRs in your assigned sub-unit." });
+          }
+        } else if (sessionStaff?.role === "leader") {
+          const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+          const allowedSpuIds = new Set<string>([
+            sessionStaff.spuId,
+            ...assignments.map((a: any) => a.spuId),
+          ]);
+          if (!allowedSpuIds.has(okr.spuId)) {
+            return res.status(403).json({ error: "Forbidden: You can only score OKRs in SPUs you manage." });
+          }
+        }
+      }
+
       // Get staff name to store as scorerName (persists even if staff is deleted)
       let scorerName: string | undefined;
       if (parsed.data.staffId) {

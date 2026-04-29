@@ -79,10 +79,16 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     queryKey: ["/api/years"],
   });
   
-  // Filter OKRs by selected quarter and year
+  // Basic users with a sub-unit only see OKRs for that sub-unit.
+  // Leaders and super_admins see all OKRs in their SPU.
+  const restrictToSubUnit = staff.role === "basic" && !!staff.subUnitId;
+
+  // Filter OKRs by selected quarter and year, plus optional sub-unit restriction
   const filteredOkrs = (spuOkrs || []).filter((okr) => {
     if (!selectedQuarter || !selectedYear) return false;
-    return okr.quarter === selectedQuarter && okr.year === selectedYear;
+    if (okr.quarter !== selectedQuarter || okr.year !== selectedYear) return false;
+    if (restrictToSubUnit && okr.subUnitId !== staff.subUnitId) return false;
+    return true;
   });
 
   const form = useForm<FormValues>({
@@ -155,6 +161,10 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     // Find the target OKR across all loaded OKRs (not just filtered)
     const target = spuOkrs.find((o) => o.id === deepOkrId);
     if (!target) return;
+
+    // Honor sub-unit restriction for basic users — do not auto-select an OKR
+    // outside their assigned sub-unit even if they were given the deep link.
+    if (restrictToSubUnit && target.subUnitId !== staff.subUnitId) return;
 
     // Set quarter/year so filteredOkrs includes this OKR, then select it
     setSelectedQuarter(target.quarter);

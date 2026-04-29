@@ -94,6 +94,9 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
 
   const availableSpus = getAvailableSpus();
 
+  // Basic users with a sub-unit are locked to their SPU and sub-unit
+  const lockedToSubUnit = staff.role === "basic" && !!staff.subUnitId;
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -445,9 +448,12 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         <Select 
                           onValueChange={(value) => {
                             field.onChange(value);
-                            form.setValue("subUnitId", undefined);
+                            if (!lockedToSubUnit) {
+                              form.setValue("subUnitId", undefined);
+                            }
                           }} 
                           value={field.value}
+                          disabled={lockedToSubUnit}
                         >
                           <FormControl>
                             <SelectTrigger data-testid="select-spu">
@@ -464,9 +470,11 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                           </SelectContent>
                         </Select>
                         <FormDescription className="text-xs">
-                          {staff.role === "leader" || staff.role === "super_admin" 
-                            ? "Choose the department this OKR targets. You can submit for your assigned SPUs."
-                            : "Choose the department this OKR targets"}
+                          {lockedToSubUnit
+                            ? "You can only submit OKRs for your assigned SPU and sub-unit."
+                            : staff.role === "leader" || staff.role === "super_admin" 
+                              ? "Choose the department this OKR targets. You can submit for your assigned SPUs."
+                              : "Choose the department this OKR targets"}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -487,7 +495,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         <Select 
                           onValueChange={field.onChange} 
                           value={field.value}
-                          disabled={!selectedSpuId || filteredSubUnits.length === 0}
+                          disabled={lockedToSubUnit || !selectedSpuId || filteredSubUnits.length === 0}
                         >
                           <FormControl>
                             <SelectTrigger data-testid="select-sub-unit">
@@ -503,7 +511,9 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          Select a specific sub-unit if applicable
+                          {lockedToSubUnit
+                            ? "Locked to your assigned sub-unit."
+                            : "Select a specific sub-unit if applicable"}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

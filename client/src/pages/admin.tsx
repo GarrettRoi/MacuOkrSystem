@@ -1024,6 +1024,11 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
   const [managingSubUnitsMember, setManagingSubUnitsMember] = useState<StaffWithDetails | null>(null);
   const [manageSubUnitsDialogOpen, setManageSubUnitsDialogOpen] = useState(false);
   const [newMemberSubUnitId, setNewMemberSubUnitId] = useState("");
+  const [addTeamMemberOpen, setAddTeamMemberOpen] = useState(false);
+  const [addTeamMemberName, setAddTeamMemberName] = useState("");
+  const [addTeamMemberEmail, setAddTeamMemberEmail] = useState("");
+  const [addTeamMemberSpuId, setAddTeamMemberSpuId] = useState("");
+  const [addTeamMemberSubUnitId, setAddTeamMemberSubUnitId] = useState("");
 
   const [selectedSpuIds, setSelectedSpuIds] = useState<Set<string>>(new Set());
   const [bulkDeleteSpuDialogOpen, setBulkDeleteSpuDialogOpen] = useState(false);
@@ -1861,6 +1866,39 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
   });
 
+  const createTeamMemberMutation = useMutation({
+    mutationFn: async (data: { name: string; email: string; spuId: string; subUnitId: string | null }) => {
+      const res = await apiRequest("POST", "/api/users/create", {
+        name: data.name,
+        email: data.email,
+        spuId: data.spuId,
+        subUnitId: data.subUnitId,
+        role: "basic",
+      });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/staff", staff.id, "basic-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leader-basic-assignments"] });
+      setAddTeamMemberOpen(false);
+      setAddTeamMemberName("");
+      setAddTeamMemberEmail("");
+      setAddTeamMemberSpuId("");
+      setAddTeamMemberSubUnitId("");
+      toast({ title: "Team Member Added", description: "The new team member has been created and added to your team." });
+    },
+    onError: async (err: any) => {
+      let description = err?.message || "Failed to add team member.";
+      try {
+        const parsed = JSON.parse(description.replace(/^\d+:\s*/, ""));
+        if (parsed?.message) description = parsed.message;
+        else if (parsed?.error) description = parsed.error;
+      } catch {}
+      toast({ title: "Failed", description, variant: "destructive" });
+    },
+  });
+
   const updateSpuMutation = useMutation({
     mutationFn: async (data: { id: string; name: string }) => {
       const { id, ...updates } = data;
@@ -2005,7 +2043,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
         </div>
       </div>
 
-      <Tabs defaultValue="staff" className="space-y-6">
+      <Tabs defaultValue={staff.role === "super_admin" ? "staff" : "myteam"} className="space-y-6">
         <TabsList>
           {(staff.role === "leader" || staff.role === "super_admin") && (
             <TabsTrigger value="myteam" data-testid="tab-myteam">
@@ -2013,7 +2051,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
               My Team
             </TabsTrigger>
           )}
-          <TabsTrigger value="staff" data-testid="tab-staff">Staff Management</TabsTrigger>
+          {staff.role === "super_admin" && (
+            <TabsTrigger value="staff" data-testid="tab-staff">Staff Management</TabsTrigger>
+          )}
           <TabsTrigger value="spus" data-testid="tab-spus">SPUs & Sub-Units</TabsTrigger>
           <TabsTrigger value="years" data-testid="tab-years">Years</TabsTrigger>
           {staff.role === "super_admin" && (
@@ -2040,7 +2080,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
           <TabsContent value="myteam">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Users className="h-5 w-5" />
@@ -2048,6 +2088,22 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     </CardTitle>
                     <CardDescription>All staff members in your SPUs (regardless of sub-unit)</CardDescription>
                   </div>
+                  <Button
+                    onClick={() => {
+                      setAddTeamMemberName("");
+                      setAddTeamMemberEmail("");
+                      const defaultSpu = staff.role === "leader"
+                        ? (staff.spuId || "")
+                        : (addStaffSpus[0]?.id || "");
+                      setAddTeamMemberSpuId(defaultSpu);
+                      setAddTeamMemberSubUnitId("");
+                      setAddTeamMemberOpen(true);
+                    }}
+                    data-testid="button-add-team-member"
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Add Team Member
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -2240,9 +2296,122 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+            {/* Add Team Member Dialog */}
+            <Dialog open={addTeamMemberOpen} onOpenChange={setAddTeamMemberOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Team Member</DialogTitle>
+                  <DialogDescription>
+                    Create a new team member by name and email. They'll be added to your SPU and can optionally be assigned to a sub-unit.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="add-team-member-name">Name</Label>
+                    <Input
+                      id="add-team-member-name"
+                      value={addTeamMemberName}
+                      onChange={(e) => setAddTeamMemberName(e.target.value)}
+                      placeholder="Full name"
+                      data-testid="input-team-member-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-team-member-email">Email</Label>
+                    <Input
+                      id="add-team-member-email"
+                      type="email"
+                      value={addTeamMemberEmail}
+                      onChange={(e) => setAddTeamMemberEmail(e.target.value)}
+                      placeholder="name@macu.edu"
+                      data-testid="input-team-member-email"
+                    />
+                  </div>
+                  {staff.role === "super_admin" && (
+                    <div className="space-y-2">
+                      <Label>SPU</Label>
+                      <Select
+                        value={addTeamMemberSpuId}
+                        onValueChange={(val) => {
+                          setAddTeamMemberSpuId(val);
+                          setAddTeamMemberSubUnitId("");
+                        }}
+                      >
+                        <SelectTrigger data-testid="select-team-member-spu">
+                          <SelectValue placeholder="Select SPU" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(spus || []).map((spu) => (
+                            <SelectItem key={spu.id} value={spu.id}>{spu.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label>Sub-Unit (optional)</Label>
+                    <Select
+                      value={addTeamMemberSubUnitId || "none"}
+                      onValueChange={(val) => setAddTeamMemberSubUnitId(val === "none" ? "" : val)}
+                      disabled={!addTeamMemberSpuId}
+                    >
+                      <SelectTrigger data-testid="select-team-member-subunit">
+                        <SelectValue placeholder="No sub-unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No sub-unit</SelectItem>
+                        {(subUnits || [])
+                          .filter((su) => su.spuId === addTeamMemberSpuId)
+                          .map((su) => (
+                            <SelectItem key={su.id} value={su.id}>{su.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Basic users with a sub-unit will only see and update OKRs for that sub-unit.
+                    </p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setAddTeamMemberOpen(false)}
+                    data-testid="button-cancel-add-team-member"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    disabled={
+                      !addTeamMemberName.trim() ||
+                      !addTeamMemberEmail.trim() ||
+                      !addTeamMemberSpuId ||
+                      createTeamMemberMutation.isPending
+                    }
+                    onClick={() => {
+                      createTeamMemberMutation.mutate({
+                        name: addTeamMemberName.trim(),
+                        email: addTeamMemberEmail.trim(),
+                        spuId: addTeamMemberSpuId,
+                        subUnitId: addTeamMemberSubUnitId || null,
+                      });
+                    }}
+                    data-testid="button-confirm-add-team-member"
+                  >
+                    {createTeamMemberMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <UserPlus className="h-4 w-4 mr-2" />
+                    )}
+                    Add Team Member
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
         )}
 
+        {staff.role === "super_admin" && (
         <TabsContent value="staff">
           <Card>
             <CardHeader>
@@ -2970,6 +3139,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
           </Dialog>
 
         </TabsContent>
+        )}
 
         <TabsContent value="spus">
           <Card>
