@@ -450,21 +450,38 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                           value={field.value}
                         >
                           <FormControl>
-                            <SelectTrigger data-testid="select-okr">
-                              <SelectValue placeholder="Choose an OKR to score" />
+                            <SelectTrigger data-testid="select-okr" className="h-auto min-h-10 [&>span]:line-clamp-1 [&>span]:text-left">
+                              <SelectValue placeholder="Choose an OKR to score">
+                                {field.value
+                                  ? (() => {
+                                      const okr = filteredOkrs.find((o) => o.id === field.value);
+                                      if (!okr) return null;
+                                      return `${okr.okrNumber} - ${okr.objectiveStatement}`;
+                                    })()
+                                  : null}
+                              </SelectValue>
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
+                          <SelectContent className="max-w-[--radix-select-trigger-width]">
                             {filteredOkrs.length === 0 ? (
                               <div className="p-2 text-sm text-muted-foreground">
                                 No OKRs found for {selectedQuarter} {selectedYear}
                               </div>
                             ) : (
                               filteredOkrs.map((okr) => (
-                                <SelectItem key={okr.id} value={okr.id} data-testid={`option-okr-${okr.id}`}>
-                                  <div className="flex flex-col">
-                                    <span>{okr.okrNumber} - {okr.objectiveStatement.substring(0, 50)}{okr.objectiveStatement.length > 50 ? '...' : ''}</span>
-                                    <span className="text-xs text-muted-foreground">Submitted by: {okr.staff?.name || "Unknown"}</span>
+                                <SelectItem
+                                  key={okr.id}
+                                  value={okr.id}
+                                  data-testid={`option-okr-${okr.id}`}
+                                  className="py-2 [&>span:last-child]:w-full"
+                                >
+                                  <div className="flex flex-col gap-0.5 w-full">
+                                    <span className="font-medium whitespace-normal break-words leading-snug">
+                                      {okr.okrNumber} - {okr.objectiveStatement}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Submitted by: {okr.staff?.name || "Unknown"}
+                                    </span>
                                   </div>
                                 </SelectItem>
                               ))
@@ -474,6 +491,21 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                         <FormDescription>
                           Select which OKR from your SPU you want to score for this quarter
                         </FormDescription>
+                        {selectedOkr && (
+                          <Card className="bg-muted/30 mt-2" data-testid="card-selected-okr">
+                            <CardContent className="pt-4 space-y-1">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Selected OKR ({selectedOkr.okrNumber})
+                              </div>
+                              <p className="text-sm leading-relaxed" data-testid="text-selected-okr-objective">
+                                {selectedOkr.objectiveStatement}
+                              </p>
+                              <div className="text-xs text-muted-foreground pt-1">
+                                Submitted by: {selectedOkr.staff?.name || "Unknown"}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
