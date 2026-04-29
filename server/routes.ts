@@ -799,15 +799,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Quarterly score submission due dates (Q1-Q4)
-  app.get("/api/settings/quarterly-due-dates", async (req, res) => {
+  // GET is public so the dashboard countdown is visible to all users.
+  // PUT remains restricted to super admins below.
+  app.get("/api/settings/quarterly-due-dates", async (_req, res) => {
     try {
-      if (!req.session.selectedStaffId) {
-        return res.status(401).json({ error: "Not authenticated" });
-      }
-      const staffMember = await storage.getStaff(req.session.selectedStaffId);
-      if (!staffMember || staffMember.role !== "super_admin") {
-        return res.status(403).json({ error: "Only super admins can view this setting" });
-      }
       const [q1, q2, q3, q4] = await Promise.all([
         storage.getSetting("quarterly_due_date_q1"),
         storage.getSetting("quarterly_due_date_q2"),

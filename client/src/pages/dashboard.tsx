@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter } from "lucide-react";
+import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter, CalendarClock } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
 
@@ -37,6 +37,30 @@ export default function Dashboard() {
   const { data: spus, isLoading: spusLoading } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
   });
+
+  const { data: quarterlyDueDates } = useQuery<{ q1: string | null; q2: string | null; q3: string | null; q4: string | null }>({
+    queryKey: ["/api/settings/quarterly-due-dates"],
+  });
+
+  const nextSubmission = (() => {
+    if (!quarterlyDueDates) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const candidates: { quarter: string; date: Date; days: number }[] = [];
+    (["q1", "q2", "q3", "q4"] as const).forEach((q) => {
+      const raw = quarterlyDueDates[q];
+      if (!raw) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return;
+      const d = new Date(raw + "T00:00:00");
+      const days = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (days > 0) {
+        candidates.push({ quarter: q.toUpperCase(), date: d, days });
+      }
+    });
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a.days - b.days);
+    return candidates[0];
+  })();
 
   const { data: planStartYearData } = useQuery<{ startYear: number }>({
     queryKey: ["/api/settings/strategic-plan-start-year"],
@@ -132,6 +156,39 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      {nextSubmission && (
+        <Card data-testid="card-submission-countdown" className="border-primary/30 bg-primary/5">
+          <CardContent className="py-4 flex flex-wrap items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
+              <CalendarClock className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Next OKR Submission Due
+              </div>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span
+                  className="text-2xl font-bold tabular-nums"
+                  data-testid="text-submission-countdown-days"
+                >
+                  {nextSubmission.days}
+                </span>
+                <span className="text-base">
+                  {nextSubmission.days === 1 ? "day" : "days"} until {nextSubmission.quarter} submissions are due
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5" data-testid="text-submission-countdown-date">
+                Due {nextSubmission.date.toLocaleDateString(undefined, {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <div className="flex flex-col gap-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
