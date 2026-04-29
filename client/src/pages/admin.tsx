@@ -1498,6 +1498,66 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
   });
 
+  type QuarterKey = "q1" | "q2" | "q3" | "q4";
+  const { data: quarterlyDueDatesData } = useQuery<Record<QuarterKey, string | null>>({
+    queryKey: ["/api/settings/quarterly-due-dates"],
+    enabled: staff.role === "super_admin",
+  });
+  const [editingDueDates, setEditingDueDates] = useState<Record<QuarterKey, string>>({
+    q1: "",
+    q2: "",
+    q3: "",
+    q4: "",
+  });
+  useEffect(() => {
+    if (quarterlyDueDatesData) {
+      setEditingDueDates({
+        q1: quarterlyDueDatesData.q1 || "",
+        q2: quarterlyDueDatesData.q2 || "",
+        q3: quarterlyDueDatesData.q3 || "",
+        q4: quarterlyDueDatesData.q4 || "",
+      });
+    }
+  }, [quarterlyDueDatesData]);
+
+  const updateQuarterlyDueDateMutation = useMutation({
+    mutationFn: async ({ quarter, dueDate }: { quarter: QuarterKey; dueDate: string | null }) => {
+      return await apiRequest("PUT", "/api/settings/quarterly-due-dates", { quarter, dueDate });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/quarterly-due-dates"] });
+      toast({
+        title: "Due Date Saved",
+        description: variables.dueDate
+          ? `${variables.quarter.toUpperCase()} due date set to ${variables.dueDate}.`
+          : `${variables.quarter.toUpperCase()} due date cleared.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to save due date",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDueDateBlur = (quarter: QuarterKey) => {
+    const next = editingDueDates[quarter] || "";
+    const current = quarterlyDueDatesData?.[quarter] || "";
+    if (next === current) return;
+    if (next && !/^\d{4}-\d{2}-\d{2}$/.test(next)) return;
+    updateQuarterlyDueDateMutation.mutate({ quarter, dueDate: next || null });
+  };
+
+  const isDateInPast = (dateStr: string) => {
+    if (!dateStr) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const d = new Date(dateStr + "T00:00:00");
+    return d.getTime() < today.getTime();
+  };
+
   const addSpuMutation = useMutation({
     mutationFn: async (name: string) => {
       return await apiRequest("POST", "/api/spus", { name });
@@ -4455,6 +4515,44 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         disabled={updateShowGeniusAnimationMutation.isPending}
                         data-testid="switch-show-genius-animation"
                       />
+                    </div>
+                  </div>
+                )}
+
+                {staff.role === "super_admin" && (
+                  <div className="p-4 border rounded-md space-y-3">
+                    <div className="space-y-1">
+                      <Label className="text-base font-medium">Quarterly Score Submission Due Dates</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Set the deadline for staff to submit their quarterly scores for each quarter. Past dates appear greyed out but remain editable. Changes save automatically when you click out of a field.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      {(["q1", "q2", "q3", "q4"] as const).map((quarter) => {
+                        const value = editingDueDates[quarter];
+                        const past = isDateInPast(value);
+                        return (
+                          <div key={quarter} className="space-y-1">
+                            <Label htmlFor={`input-due-date-${quarter}`} className="text-sm">
+                              {quarter.toUpperCase()} Due Date
+                              {past && (
+                                <span className="ml-2 text-xs font-normal text-muted-foreground">(in the past)</span>
+                              )}
+                            </Label>
+                            <Input
+                              id={`input-due-date-${quarter}`}
+                              type="date"
+                              value={value}
+                              onChange={(e) =>
+                                setEditingDueDates((prev) => ({ ...prev, [quarter]: e.target.value }))
+                              }
+                              onBlur={() => handleDueDateBlur(quarter)}
+                              className={past ? "text-muted-foreground opacity-60" : ""}
+                              data-testid={`input-due-date-${quarter}`}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

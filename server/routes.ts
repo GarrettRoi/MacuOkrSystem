@@ -798,6 +798,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Quarterly score submission due dates (Q1-Q4)
+  app.get("/api/settings/quarterly-due-dates", async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const staffMember = await storage.getStaff(req.session.selectedStaffId);
+      if (!staffMember || staffMember.role !== "super_admin") {
+        return res.status(403).json({ error: "Only super admins can view this setting" });
+      }
+      const [q1, q2, q3, q4] = await Promise.all([
+        storage.getSetting("quarterly_due_date_q1"),
+        storage.getSetting("quarterly_due_date_q2"),
+        storage.getSetting("quarterly_due_date_q3"),
+        storage.getSetting("quarterly_due_date_q4"),
+      ]);
+      res.json({
+        q1: q1 || null,
+        q2: q2 || null,
+        q3: q3 || null,
+        q4: q4 || null,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch quarterly due dates" });
+    }
+  });
+
+  app.put("/api/settings/quarterly-due-dates", async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const staffMember = await storage.getStaff(req.session.selectedStaffId);
+      if (!staffMember || staffMember.role !== "super_admin") {
+        return res.status(403).json({ error: "Only super admins can change this setting" });
+      }
+      const schema = z.object({
+        quarter: z.enum(["q1", "q2", "q3", "q4"]),
+        dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      const key = `quarterly_due_date_${parsed.data.quarter}`;
+      await storage.setSetting(key, parsed.data.dueDate || "");
+      res.json({ success: true, quarter: parsed.data.quarter, dueDate: parsed.data.dueDate });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update quarterly due date" });
+    }
+  });
+
   // University Strategic Planning routes
   app.get("/api/university-objectives", async (_req, res) => {
     try {
