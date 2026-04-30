@@ -214,7 +214,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
             </div>
           )}
         </div>
-        <p className="text-muted-foreground text-lg">
+        <p className="text-muted-foreground text-lg text-center">
           What would you like to do today?
         </p>
       </div>
