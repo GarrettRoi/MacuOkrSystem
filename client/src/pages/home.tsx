@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, TrendingUp, BarChart3, Settings, Download, Database, ClipboardList, LayoutDashboard, Users, LineChart } from "lucide-react";
+import { FileText, TrendingUp, BarChart3, Settings, Download, Database, ClipboardList, LayoutDashboard, Users, LineChart, CalendarClock } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
 import { getSortableName } from "@/lib/utils";
 
@@ -46,6 +46,30 @@ export default function Home({ staff, isAdmin }: HomeProps) {
   const { data: geniusSetting, isSuccess: geniusSettingLoaded } = useQuery<{ showGeniusAnimation: boolean }>({
     queryKey: ["/api/settings/show-genius-animation"],
   });
+
+  const { data: quarterlyDueDates } = useQuery<{ q1: string | null; q2: string | null; q3: string | null; q4: string | null }>({
+    queryKey: ["/api/settings/quarterly-due-dates"],
+  });
+
+  const nextSubmission = (() => {
+    if (!quarterlyDueDates) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const candidates: { quarter: string; date: Date; days: number }[] = [];
+    (["q1", "q2", "q3", "q4"] as const).forEach((q) => {
+      const raw = quarterlyDueDates[q];
+      if (!raw) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return;
+      const d = new Date(raw + "T00:00:00");
+      const days = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (days > 0) {
+        candidates.push({ quarter: q.toUpperCase(), date: d, days });
+      }
+    });
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a.days - b.days);
+    return candidates[0];
+  })();
 
   const [showGenius, setShowGenius] = useState(false);
   useEffect(() => {
@@ -178,6 +202,36 @@ export default function Home({ staff, isAdmin }: HomeProps) {
           What would you like to do today?
         </p>
       </div>
+      {nextSubmission && (
+        <Card data-testid="card-submission-countdown" className="border-primary/30 bg-primary/5">
+          <CardContent className="py-4 flex flex-wrap items-center gap-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
+              <CalendarClock className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Next OKR Submission Due
+              </div>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="text-2xl font-bold tabular-nums" data-testid="text-submission-countdown-days">
+                  {nextSubmission.days}
+                </span>
+                <span className="text-base">
+                  {nextSubmission.days === 1 ? "day" : "days"} until {nextSubmission.quarter} submissions are due
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5" data-testid="text-submission-countdown-date">
+                Due {nextSubmission.date.toLocaleDateString(undefined, {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {actions.map((action) => {
           const Icon = action.icon;
