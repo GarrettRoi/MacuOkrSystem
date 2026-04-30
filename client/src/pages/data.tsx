@@ -14,9 +14,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText, Shuffle, CheckCircle, Clock } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText, Shuffle, CheckCircle, Clock, HardDriveDownload, RotateCcw, Shield } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog, UnmatchedScore } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog, UnmatchedScore, DataBackupMeta, StaffWithDetails } from "@shared/schema";
 import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
@@ -114,8 +114,12 @@ export default function Data() {
   const [okrSearchQuarter, setOkrSearchQuarter] = useState("all");
   const [okrSearchYear, setOkrSearchYear] = useState("all");
 
-  // Section switcher (OKR Records vs Pending Matches)
-  const [activeDataSection, setActiveDataSection] = useState<"records" | "pending">("records");
+  // Section switcher (OKR Records vs Pending Matches vs Backups)
+  const [activeDataSection, setActiveDataSection] = useState<"records" | "pending" | "backups">("records");
+
+  // Backup state
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState<DataBackupMeta | null>(null);
 
   // Pending matches state — right column (unmatched scores)
   const [pendingFilterSpu, setPendingFilterSpu] = useState("all");
@@ -196,6 +200,53 @@ export default function Data() {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+
+  const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin?: boolean; selectedStaff?: StaffWithDetails }>({
+    queryKey: ["/api/auth/session"],
+  });
+  const isSuperAdmin = sessionData?.selectedStaff?.role === "super_admin";
+
+  const { data: backups, isLoading: backupsLoading } = useQuery<DataBackupMeta[]>({
+    queryKey: ["/api/backups"],
+    enabled: isSuperAdmin,
+  });
+
+  const createBackupMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/backups", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/backups"] });
+      toast({ title: "Backup Created", description: "A manual backup has been created successfully." });
+    },
+    onError: () => {
+      toast({ title: "Backup Failed", description: "Failed to create backup. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const restoreBackupMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("POST", `/api/backups/${id}/restore`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/years"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/backups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/edit-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmatched-scores"] });
+      setRestoreDialogOpen(false);
+      setRestoringBackup(null);
+      toast({ title: "Restore Complete", description: "The system has been restored to the selected backup." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Restore Failed", description: error?.message || "Failed to restore backup. Please try again.", variant: "destructive" });
+    },
+  });
 
   const [showEditLogs, setShowEditLogs] = useState(false);
 
@@ -963,7 +1014,7 @@ export default function Data() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Section Tab Navigation */}
-          <div className="flex items-center gap-1 border-b pb-3">
+          <div className="flex items-center gap-1 border-b pb-3 flex-wrap">
             <Button
               variant={activeDataSection === "records" ? "default" : "ghost"}
               size="sm"
@@ -988,6 +1039,17 @@ export default function Data() {
                 </Badge>
               )}
             </Button>
+            {isSuperAdmin && (
+              <Button
+                variant={activeDataSection === "backups" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setActiveDataSection("backups")}
+                data-testid="tab-backups"
+              >
+                <HardDriveDownload className="h-4 w-4 mr-2" />
+                Backups & Restore
+              </Button>
+            )}
           </div>
 
           {/* OKR Records Section */}
@@ -1762,8 +1824,135 @@ export default function Data() {
             </div>
           )}
 
+          {/* Backups & Restore Section */}
+          {activeDataSection === "backups" && isSuperAdmin && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Data Backups</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({backups?.length ?? 0} backup{backups?.length === 1 ? "" : "s"}, up to 30 retained automatically)
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => createBackupMutation.mutate()}
+                  disabled={createBackupMutation.isPending}
+                  data-testid="button-create-backup"
+                >
+                  <HardDriveDownload className="h-4 w-4 mr-2" />
+                  {createBackupMutation.isPending ? "Creating..." : "Create Backup Now"}
+                </Button>
+              </div>
+
+              {backupsLoading ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">Loading backups...</div>
+              ) : !backups || backups.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  No backups yet. Create one now or wait for the daily automatic backup.
+                </div>
+              ) : (
+                <div className="border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Label</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead className="w-28 text-right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {backups.map((backup) => (
+                        <TableRow key={backup.id} data-testid={`row-backup-${backup.id}`}>
+                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                            {new Date(backup.createdAt).toLocaleString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium">{backup.label}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={backup.backupType === "automatic" ? "secondary" : "outline"}
+                              data-testid={`badge-backup-type-${backup.id}`}
+                            >
+                              {backup.backupType === "automatic" ? "Automatic" : "Manual"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setRestoringBackup(backup);
+                                setRestoreDialogOpen(true);
+                              }}
+                              data-testid={`button-restore-${backup.id}`}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                              Restore
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+
         </CardContent>
       </Card>
+
+      {/* Restore Confirmation Dialog */}
+      <Dialog open={restoreDialogOpen} onOpenChange={(open) => { if (!restoreBackupMutation.isPending) { setRestoreDialogOpen(open); if (!open) setRestoringBackup(null); } }}>
+        <DialogContent data-testid="dialog-restore-backup">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Confirm Restore
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-1">
+              <span className="block">
+                You are about to restore the system to:
+              </span>
+              <span className="block font-medium text-foreground">
+                {restoringBackup?.label}
+              </span>
+              <span className="block text-destructive font-medium">
+                This will overwrite all current data including OKRs, staff, SPUs, objectives, dashboards, and settings. This action cannot be undone.
+              </span>
+              <span className="block">
+                Since all other backups are preserved, you can roll forward at any time by restoring a more recent backup.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setRestoreDialogOpen(false); setRestoringBackup(null); }}
+              disabled={restoreBackupMutation.isPending}
+              data-testid="button-cancel-restore"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => restoringBackup && restoreBackupMutation.mutate(restoringBackup.id)}
+              disabled={restoreBackupMutation.isPending}
+              data-testid="button-confirm-restore"
+            >
+              {restoreBackupMutation.isPending ? "Restoring..." : "Yes, Restore This Backup"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Audit Log */}
       <Card className="mt-6">

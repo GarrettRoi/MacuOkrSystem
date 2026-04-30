@@ -40,6 +40,11 @@ import {
   type OkrWithDetails,
   type EmployeeProgressRecord,
   type EmployeeProgressSummary,
+  type DataBackup,
+  type DataBackupMeta,
+  type UniversityKeyResultProgress,
+  type UniversityObjectiveComment,
+  type ProgressDatapoint,
   spus,
   subUnits,
   years,
@@ -60,10 +65,31 @@ import {
   editLogs,
   unmatchedScores,
   inviteTokens,
+  dataBackups,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, inArray, ne, isNull, gt, sql, ilike } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+
+type BackupSnapshot = {
+  spus: Spu[];
+  subUnits: SubUnit[];
+  years: Year[];
+  staff: Staff[];
+  okrs: Okr[];
+  quarterlyUpdates: QuarterlyUpdate[];
+  okrResponsibilities: OkrResponsibility[];
+  staffSpuAssignments: StaffSpuAssignment[];
+  leaderBasicAssignments: LeaderBasicAssignment[];
+  universityObjectives: UniversityObjective[];
+  universityKeyResults: UniversityKeyResult[];
+  universityKeyResultProgress: UniversityKeyResultProgress[];
+  universityObjectiveComments: UniversityObjectiveComment[];
+  universityProgressDatapoints: ProgressDatapoint[];
+  analyticsDashboards: AnalyticsDashboard[];
+  analyticsWidgets: AnalyticsWidget[];
+  appSettings: { key: string; value: string }[];
+};
 
 function safeStaff<T extends { hashedPassword?: string | null }>(s: T): Omit<T, "hashedPassword"> {
   const { hashedPassword: _h, ...rest } = s;
@@ -221,6 +247,12 @@ export interface IStorage {
   // Staff credentials
   setStaffPassword(staffId: string, hashedPassword: string): Promise<void>;
   getStaffByEmailWithPassword(email: string): Promise<Staff | undefined>;
+
+  // Data Backups
+  createBackup(label: string, backupType: "automatic" | "manual"): Promise<DataBackupMeta>;
+  listBackups(): Promise<DataBackupMeta[]>;
+  deleteBackupsOlderThan(date: Date): Promise<number>;
+  restoreBackup(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1671,6 +1703,162 @@ export class DatabaseStorage implements IStorage {
       .from(staff)
       .where(eq(staff.email, email.toLowerCase().trim()));
     return result || undefined;
+  }
+
+  async createBackup(label: string, backupType: "automatic" | "manual"): Promise<DataBackupMeta> {
+    // Run all reads inside a REPEATABLE READ transaction so every table is
+    // captured at the exact same database snapshot — no concurrent write can
+    // produce a partially-consistent backup.
+    const created = await db.transaction(async (tx) => {
+      const [
+        allSpus,
+        allSubUnits,
+        allYears,
+        allStaff,
+        allOkrs,
+        allQuarterlyUpdates,
+        allOkrResponsibilities,
+        allStaffSpuAssignments,
+        allLeaderBasicAssignments,
+        allUniversityObjectives,
+        allUniversityKeyResults,
+        allUniversityKeyResultProgress,
+        allUniversityObjectiveComments,
+        allUniversityProgressDatapoints,
+        allAnalyticsDashboards,
+        allAnalyticsWidgets,
+        allAppSettings,
+      ] = await Promise.all([
+        tx.select().from(spus),
+        tx.select().from(subUnits),
+        tx.select().from(years),
+        tx.select().from(staff),
+        tx.select().from(okrs),
+        tx.select().from(quarterlyUpdates),
+        tx.select().from(okrResponsibilities),
+        tx.select().from(staffSpuAssignments),
+        tx.select().from(leaderBasicAssignments),
+        tx.select().from(universityObjectives),
+        tx.select().from(universityKeyResults),
+        tx.select().from(universityKeyResultProgress),
+        tx.select().from(universityObjectiveComments),
+        tx.select().from(universityProgressDatapoints),
+        tx.select().from(analyticsDashboards),
+        tx.select().from(analyticsWidgets),
+        tx.select().from(appSettings),
+      ]);
+
+      const snapshot: BackupSnapshot = {
+        spus: allSpus,
+        subUnits: allSubUnits,
+        years: allYears,
+        staff: allStaff,
+        okrs: allOkrs,
+        quarterlyUpdates: allQuarterlyUpdates,
+        okrResponsibilities: allOkrResponsibilities,
+        staffSpuAssignments: allStaffSpuAssignments,
+        leaderBasicAssignments: allLeaderBasicAssignments,
+        universityObjectives: allUniversityObjectives,
+        universityKeyResults: allUniversityKeyResults,
+        universityKeyResultProgress: allUniversityKeyResultProgress,
+        universityObjectiveComments: allUniversityObjectiveComments,
+        universityProgressDatapoints: allUniversityProgressDatapoints,
+        analyticsDashboards: allAnalyticsDashboards,
+        analyticsWidgets: allAnalyticsWidgets,
+        appSettings: allAppSettings,
+      };
+
+      const [row] = await tx
+        .insert(dataBackups)
+        .values({ label, backupType, snapshot })
+        .returning({
+          id: dataBackups.id,
+          label: dataBackups.label,
+          backupType: dataBackups.backupType,
+          createdAt: dataBackups.createdAt,
+        });
+      return row;
+    }, { isolationLevel: "repeatable read" });
+
+    return created;
+  }
+
+  async listBackups(): Promise<DataBackupMeta[]> {
+    const rows = await db
+      .select({
+        id: dataBackups.id,
+        label: dataBackups.label,
+        backupType: dataBackups.backupType,
+        createdAt: dataBackups.createdAt,
+      })
+      .from(dataBackups)
+      .orderBy(desc(dataBackups.createdAt));
+    return rows;
+  }
+
+  async deleteBackupsOlderThan(date: Date): Promise<number> {
+    const rows = await db
+      .select({ id: dataBackups.id })
+      .from(dataBackups)
+      .where(sql`${dataBackups.createdAt} < ${date}`);
+    if (rows.length === 0) return 0;
+    const ids = rows.map(r => r.id);
+    await db.delete(dataBackups).where(inArray(dataBackups.id, ids));
+    return ids.length;
+  }
+
+  async restoreBackup(id: string): Promise<void> {
+    const [backup] = await db.select().from(dataBackups).where(eq(dataBackups.id, id));
+    if (!backup) throw new Error(`Backup ${id} not found`);
+
+    const snap = backup.snapshot as BackupSnapshot;
+    if (!snap || typeof snap !== "object" || !Array.isArray(snap.spus)) {
+      throw new Error("Backup snapshot is malformed or corrupted");
+    }
+
+    await db.transaction(async (tx) => {
+      // Delete in reverse dependency order (leaves first).
+      // invite_tokens are deleted here to avoid orphaned FK references but are
+      // intentionally NOT restored from the snapshot — they are transient
+      // credentials that should not be replayed from a historical backup.
+      await tx.delete(analyticsWidgets);
+      await tx.delete(universityProgressDatapoints);
+      await tx.delete(universityKeyResultProgress);
+      await tx.delete(universityObjectiveComments);
+      await tx.delete(okrResponsibilities);
+      await tx.delete(quarterlyUpdates);
+      await tx.delete(okrs);
+      await tx.delete(staffSpuAssignments);
+      await tx.delete(leaderBasicAssignments);
+      await tx.delete(inviteTokens);
+      await tx.delete(staff);
+      await tx.delete(universityKeyResults);
+      await tx.delete(universityObjectives);
+      await tx.delete(analyticsDashboards);
+      await tx.delete(subUnits);
+      await tx.delete(spus);
+      await tx.delete(years);
+      await tx.delete(appSettings);
+
+      // Re-insert in dependency order (parents first)
+      if (snap.spus?.length) await tx.insert(spus).values(snap.spus);
+      if (snap.subUnits?.length) await tx.insert(subUnits).values(snap.subUnits);
+      if (snap.years?.length) await tx.insert(years).values(snap.years);
+      if (snap.appSettings?.length) await tx.insert(appSettings).values(snap.appSettings);
+      if (snap.universityObjectives?.length) await tx.insert(universityObjectives).values(snap.universityObjectives);
+      if (snap.analyticsDashboards?.length) await tx.insert(analyticsDashboards).values(snap.analyticsDashboards);
+      if (snap.staff?.length) await tx.insert(staff).values(snap.staff);
+      if (snap.universityKeyResults?.length) await tx.insert(universityKeyResults).values(snap.universityKeyResults);
+      if (snap.analyticsWidgets?.length) await tx.insert(analyticsWidgets).values(snap.analyticsWidgets);
+      if (snap.okrs?.length) await tx.insert(okrs).values(snap.okrs);
+      if (snap.staffSpuAssignments?.length) await tx.insert(staffSpuAssignments).values(snap.staffSpuAssignments);
+      if (snap.leaderBasicAssignments?.length) await tx.insert(leaderBasicAssignments).values(snap.leaderBasicAssignments);
+      if (snap.quarterlyUpdates?.length) await tx.insert(quarterlyUpdates).values(snap.quarterlyUpdates);
+      if (snap.okrResponsibilities?.length) await tx.insert(okrResponsibilities).values(snap.okrResponsibilities);
+      if (snap.universityKeyResultProgress?.length) await tx.insert(universityKeyResultProgress).values(snap.universityKeyResultProgress);
+      if (snap.universityObjectiveComments?.length) await tx.insert(universityObjectiveComments).values(snap.universityObjectiveComments);
+      if (snap.universityProgressDatapoints?.length) await tx.insert(universityProgressDatapoints).values(snap.universityProgressDatapoints);
+    });
   }
 }
 

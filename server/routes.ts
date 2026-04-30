@@ -4528,6 +4528,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
+  // ── Backup & Restore (super_admin only) ──────────────────────────────────────
+  async function requireSuperAdmin(req: Request, res: Response): Promise<boolean> {
+    if (!req.session.selectedStaffId) {
+      res.status(401).json({ error: "Not authenticated" });
+      return false;
+    }
+    const staffMember = await storage.getStaff(req.session.selectedStaffId);
+    if (!staffMember || staffMember.role !== "super_admin") {
+      res.status(403).json({ error: "Only super admins can access backups" });
+      return false;
+    }
+    return true;
+  }
+
+  app.get("/api/backups", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const backups = await storage.listBackups();
+      res.json(backups);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to list backups" });
+    }
+  });
+
+  app.post("/api/backups", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const now = new Date();
+      const label = `Manual Backup — ${now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+      const backup = await storage.createBackup(label, "manual");
+      res.json(backup);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create backup" });
+    }
+  });
+
+  app.post("/api/backups/:id/restore", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const { id } = req.params;
+      await storage.restoreBackup(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      const msg: string = error?.message ?? "Failed to restore backup";
+      const status = msg.toLowerCase().includes("not found") || msg.toLowerCase().includes("malformed") ? 404 : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

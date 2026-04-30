@@ -1,9 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import cron from "node-cron";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { seedDatabase } from "./storage";
+import { seedDatabase, storage } from "./storage";
 import { pool } from "./db";
 
 const PgSession = connectPgSimple(session);
@@ -73,6 +74,14 @@ async function runStartupMigrations() {
          AND COALESCE(a.sub_unit_id, '') = COALESCE(b.sub_unit_id, '')`,
     `CREATE UNIQUE INDEX IF NOT EXISTS staff_spu_assignments_unique_idx
        ON staff_spu_assignments (staff_id, spu_id, COALESCE(sub_unit_id, ''))`,
+    `CREATE TABLE IF NOT EXISTS data_backups (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      label TEXT NOT NULL,
+      backup_type TEXT NOT NULL DEFAULT 'manual',
+      snapshot JSONB NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `ALTER TABLE data_backups ALTER COLUMN snapshot TYPE JSONB USING snapshot::JSONB`,
   ];
   let failed = 0;
   for (const sql of migrations) {
@@ -177,6 +186,25 @@ app.use((req, res, next) => {
 
   // Seed core super-admin accounts on every startup
   await seedDatabase();
+
+  // Schedule daily automatic backup at midnight server time
+  cron.schedule("0 0 * * *", async () => {
+    try {
+      const now = new Date();
+      const label = `Daily Backup — ${now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+      await storage.createBackup(label, "automatic");
+      log(`[backup] Daily automatic backup created: ${label}`);
+
+      // Prune backups older than 30 days
+      const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const pruned = await storage.deleteBackupsOlderThan(cutoff);
+      if (pruned > 0) {
+        log(`[backup] Pruned ${pruned} backup(s) older than 30 days`);
+      }
+    } catch (err) {
+      console.error("[backup] Daily backup failed:", err);
+    }
+  });
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

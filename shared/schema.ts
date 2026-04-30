@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, json, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, json, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -508,3 +508,16 @@ export type EmployeeProgressSummary = {
   okrCount: number;
   okrs: EmployeeProgressRecord[];
 };
+
+export const dataBackups = pgTable("data_backups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  label: text("label").notNull(),
+  backupType: text("backup_type", { enum: ["automatic", "manual"] }).notNull().default("manual"),
+  snapshot: jsonb("snapshot").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertDataBackupSchema = createInsertSchema(dataBackups).omit({ id: true, createdAt: true });
+export type InsertDataBackup = z.infer<typeof insertDataBackupSchema>;
+export type DataBackup = typeof dataBackups.$inferSelect;
+export type DataBackupMeta = Omit<DataBackup, "snapshot">;
