@@ -2065,7 +2065,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
           {staff.role === "super_admin" && (
             <TabsTrigger value="spus" data-testid="tab-spus">SPUs & Sub-Units</TabsTrigger>
           )}
-          <TabsTrigger value="years" data-testid="tab-years">Years</TabsTrigger>
+          {staff.role === "super_admin" && (
+            <TabsTrigger value="years" data-testid="tab-years">Years</TabsTrigger>
+          )}
           {staff.role === "super_admin" && (
             <TabsTrigger value="strategic" data-testid="tab-strategic">
               <Target className="h-4 w-4 mr-2" />
@@ -3840,6 +3842,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
         </TabsContent>
         )}
 
+        {staff.role === "super_admin" && (
         <TabsContent value="years">
           <Card>
             <CardHeader>
@@ -3944,6 +3947,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
         {staff.role === "super_admin" && (
           <TabsContent value="strategic">
             <Card>
