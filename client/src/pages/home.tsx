@@ -200,9 +200,18 @@ export default function Home({ staff, isAdmin }: HomeProps) {
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <h1 className="text-4xl font-bold">Welcome, {staff.name.toLowerCase() === "phil greenwald" ? "PG5" : getSortableName(staff.name).split(" ")[0]}!</h1>
           {nextSubmission && (
-            <div data-testid="card-submission-countdown" className="flex items-center gap-1.5 text-muted-foreground shrink-0">
-              <CalendarClock className="h-4 w-4 shrink-0" />
-              <span className="text-sm">
+            <div
+              data-testid="card-submission-countdown"
+              className={`flex items-center gap-1.5 shrink-0 ${
+                nextSubmission.days <= 3
+                  ? "text-destructive"
+                  : nextSubmission.days <= 14
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-muted-foreground"
+              }`}
+            >
+              <CalendarClock className={`h-4 w-4 shrink-0 ${nextSubmission.days <= 3 ? "animate-pulse" : ""}`} />
+              <span className={`text-sm ${nextSubmission.days <= 3 ? "font-bold" : ""}`}>
                 {nextSubmission.quarter} due in{" "}
                 <span className="font-semibold tabular-nums" data-testid="text-submission-countdown-days">{nextSubmission.days}</span>
                 {" "}{nextSubmission.days === 1 ? "day" : "days"}

@@ -158,16 +158,41 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6">
       {nextSubmission && (
-        <Card data-testid="card-submission-countdown" className="border-primary/30 bg-primary/5">
+        <Card
+          data-testid="card-submission-countdown"
+          className={
+            nextSubmission.days <= 3
+              ? "border-destructive/40 bg-destructive/5"
+              : nextSubmission.days <= 14
+              ? "border-amber-500/40 bg-amber-500/5"
+              : "border-primary/30 bg-primary/5"
+          }
+        >
           <CardContent className="py-4 flex flex-wrap items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
-              <CalendarClock className="h-5 w-5" />
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-md shrink-0 ${
+                nextSubmission.days <= 3
+                  ? "bg-destructive/10 text-destructive"
+                  : nextSubmission.days <= 14
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "bg-primary/10 text-primary"
+              }`}
+            >
+              <CalendarClock className={`h-5 w-5 ${nextSubmission.days <= 3 ? "animate-pulse" : ""}`} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 Next OKR Submission Due
               </div>
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <div
+                className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 ${
+                  nextSubmission.days <= 3
+                    ? "text-destructive"
+                    : nextSubmission.days <= 14
+                    ? "text-amber-600 dark:text-amber-400"
+                    : ""
+                }`}
+              >
                 <span
                   className="text-2xl font-bold tabular-nums"
                   data-testid="text-submission-countdown-days"
