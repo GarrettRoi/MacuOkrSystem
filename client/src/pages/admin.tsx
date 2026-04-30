@@ -2053,6 +2053,12 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
               My Team
             </TabsTrigger>
           )}
+          {staff.role === "leader" && (
+            <TabsTrigger value="myspus" data-testid="tab-myspus">
+              <LayoutDashboard className="h-4 w-4 mr-2" />
+              My SPUs
+            </TabsTrigger>
+          )}
           {staff.role === "super_admin" && (
             <TabsTrigger value="staff" data-testid="tab-staff">Staff Management</TabsTrigger>
           )}
@@ -2431,6 +2437,108 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          </TabsContent>
+        )}
+
+        {staff.role === "leader" && (
+          <TabsContent value="myspus">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <LayoutDashboard className="h-5 w-5" />
+                      My SPUs &amp; Sub-Units
+                    </CardTitle>
+                    <CardDescription>
+                      The SPUs you oversee and the sub-units within each. You can add new sub-units; renaming, moving, or removing items is restricted to administrators.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {subUnitsLoading || !spus ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-24 w-full" />
+                    ))}
+                  </div>
+                ) : addStaffSpus.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-6 text-center" data-testid="text-myspus-empty">
+                    You are not assigned to manage any SPUs yet. Ask an administrator to assign one to you.
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {addStaffSpus
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((spu) => {
+                        const spuSubUnits = (subUnits || [])
+                          .filter((su) => su.spuId === spu.id)
+                          .sort((a, b) => a.name.localeCompare(b.name));
+                        const isPrimary = spu.id === staff.spuId;
+                        return (
+                          <div
+                            key={spu.id}
+                            className="py-4 first:pt-0 last:pb-0 space-y-3"
+                            data-testid={`row-myspu-${spu.id}`}
+                          >
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium" data-testid={`text-myspu-name-${spu.id}`}>
+                                  {spu.name}
+                                </span>
+                                {isPrimary && (
+                                  <Badge variant="secondary" data-testid={`badge-myspu-primary-${spu.id}`}>
+                                    Primary
+                                  </Badge>
+                                )}
+                                <Badge variant="outline" data-testid={`badge-myspu-subunit-count-${spu.id}`}>
+                                  {spuSubUnits.length} sub-unit{spuSubUnits.length === 1 ? "" : "s"}
+                                </Badge>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setAddSubUnitForSpuId(spu.id);
+                                  setNewSubUnitParent(spu.id);
+                                  setNewSubUnitName("");
+                                  setSubUnitDialogOpen(true);
+                                }}
+                                data-testid={`button-add-subunit-myspus-${spu.id}`}
+                              >
+                                <Plus className="h-4 w-4 mr-1" />
+                                Add Sub-Unit
+                              </Button>
+                            </div>
+                            {spuSubUnits.length === 0 ? (
+                              <div
+                                className="text-sm text-muted-foreground"
+                                data-testid={`text-myspu-empty-${spu.id}`}
+                              >
+                                No sub-units yet.
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {spuSubUnits.map((su) => (
+                                  <Badge
+                                    key={su.id}
+                                    variant="outline"
+                                    data-testid={`badge-myspu-subunit-${spu.id}-${su.id}`}
+                                  >
+                                    {su.name}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         )}
 
