@@ -16,7 +16,6 @@ import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCH
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
 
-const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 
 function DashboardTab() {
   const [quarterFilter, setQuarterFilter] = usePersistedFilter("ua-dash:quarter", "All");
@@ -166,13 +165,14 @@ function DashboardTab() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex flex-wrap gap-3 items-center">
             <Select value={quarterFilter} onValueChange={setQuarterFilter}>
-              <SelectTrigger className="w-32" data-testid="select-filter-quarter">
+              <SelectTrigger className="w-52" data-testid="select-filter-quarter">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {QUARTERS.map((q) => (
-                  <SelectItem key={q} value={q} data-testid={`option-filter-quarter-${q}`}>
-                    {q}
+                <SelectItem key="All" value="All" data-testid="option-filter-quarter-All">All</SelectItem>
+                {SCHEMA_QUARTERS.map((q) => (
+                  <SelectItem key={q.value} value={q.value} data-testid={`option-filter-quarter-${q.value}`}>
+                    {q.label}
                   </SelectItem>
                 ))}
               </SelectContent>
