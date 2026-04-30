@@ -1616,6 +1616,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
       setNewSubUnitParent("");
       toast({ title: "Sub-Unit Added", description: "The sub-unit has been created successfully." });
     },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const deleteSubUnitMutation = useMutation({
@@ -2055,7 +2056,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
           {staff.role === "super_admin" && (
             <TabsTrigger value="staff" data-testid="tab-staff">Staff Management</TabsTrigger>
           )}
-          <TabsTrigger value="spus" data-testid="tab-spus">SPUs & Sub-Units</TabsTrigger>
+          {staff.role === "super_admin" && (
+            <TabsTrigger value="spus" data-testid="tab-spus">SPUs & Sub-Units</TabsTrigger>
+          )}
           <TabsTrigger value="years" data-testid="tab-years">Years</TabsTrigger>
           {staff.role === "super_admin" && (
             <TabsTrigger value="strategic" data-testid="tab-strategic">
@@ -2089,22 +2092,41 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     </CardTitle>
                     <CardDescription>All staff members in your SPUs (regardless of sub-unit)</CardDescription>
                   </div>
-                  <Button
-                    onClick={() => {
-                      setAddTeamMemberName("");
-                      setAddTeamMemberEmail("");
-                      const defaultSpu = staff.role === "leader"
-                        ? (staff.spuId || "")
-                        : (addStaffSpus[0]?.id || "");
-                      setAddTeamMemberSpuId(defaultSpu);
-                      setAddTeamMemberSubUnitId("");
-                      setAddTeamMemberOpen(true);
-                    }}
-                    data-testid="button-add-team-member"
-                  >
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Add Team Member
-                  </Button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const defaultSpu = staff.role === "leader"
+                          ? (staff.spuId || addStaffSpus[0]?.id || "")
+                          : (addStaffSpus[0]?.id || "");
+                        setAddSubUnitForSpuId(defaultSpu);
+                        setNewSubUnitParent(defaultSpu);
+                        setNewSubUnitName("");
+                        setSubUnitDialogOpen(true);
+                      }}
+                      disabled={addStaffSpus.length === 0}
+                      data-testid="button-add-subunit-myteam"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Sub-Unit
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setAddTeamMemberName("");
+                        setAddTeamMemberEmail("");
+                        const defaultSpu = staff.role === "leader"
+                          ? (staff.spuId || "")
+                          : (addStaffSpus[0]?.id || "");
+                        setAddTeamMemberSpuId(defaultSpu);
+                        setAddTeamMemberSubUnitId("");
+                        setAddTeamMemberOpen(true);
+                      }}
+                      data-testid="button-add-team-member"
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Add Team Member
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -3142,6 +3164,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
         </TabsContent>
         )}
 
+        {staff.role === "super_admin" && (
         <TabsContent value="spus">
           <Card>
             <CardHeader>
@@ -3374,58 +3397,6 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
               )}
             </CardContent>
           </Card>
-
-          <Dialog open={subUnitDialogOpen} onOpenChange={setSubUnitDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Sub-Unit</DialogTitle>
-                <DialogDescription>Create a new sub-unit{addSubUnitForSpuId && spus ? ` under ${spus.find(s => s.id === addSubUnitForSpuId)?.name || ""}` : ""}</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="subunit-name">Sub-Unit Name *</Label>
-                  <Input
-                    id="subunit-name"
-                    value={newSubUnitName}
-                    onChange={(e) => setNewSubUnitName(e.target.value)}
-                    placeholder="e.g., Undergraduate Studies"
-                    data-testid="input-subunit-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="subunit-parent">Parent SPU *</Label>
-                  <Select value={newSubUnitParent} onValueChange={setNewSubUnitParent}>
-                    <SelectTrigger data-testid="select-subunit-parent">
-                      <SelectValue placeholder="Select parent SPU" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {spus?.map((spu) => (
-                        <SelectItem key={spu.id} value={spu.id}>
-                          {spu.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={() => {
-                    if (newSubUnitName && newSubUnitParent) {
-                      addSubUnitMutation.mutate({
-                        name: newSubUnitName,
-                        spuId: newSubUnitParent,
-                      });
-                    }
-                  }}
-                  disabled={!newSubUnitName || !newSubUnitParent || addSubUnitMutation.isPending}
-                  data-testid="button-save-subunit"
-                >
-                  {addSubUnitMutation.isPending ? "Adding..." : "Add Sub-Unit"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
 
           <Dialog open={editSpuDialogOpen} onOpenChange={setEditSpuDialogOpen}>
             <DialogContent>
@@ -3759,6 +3730,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
             </DialogContent>
           </Dialog>
         </TabsContent>
+        )}
 
         <TabsContent value="years">
           <Card>
@@ -4791,6 +4763,58 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
           </TabsContent>
         )}
       </Tabs>
+
+      <Dialog open={subUnitDialogOpen} onOpenChange={setSubUnitDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Sub-Unit</DialogTitle>
+            <DialogDescription>Create a new sub-unit{addSubUnitForSpuId && spus ? ` under ${spus.find(s => s.id === addSubUnitForSpuId)?.name || ""}` : ""}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="subunit-name">Sub-Unit Name *</Label>
+              <Input
+                id="subunit-name"
+                value={newSubUnitName}
+                onChange={(e) => setNewSubUnitName(e.target.value)}
+                placeholder="e.g., Undergraduate Studies"
+                data-testid="input-subunit-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="subunit-parent">Parent SPU *</Label>
+              <Select value={newSubUnitParent} onValueChange={setNewSubUnitParent}>
+                <SelectTrigger data-testid="select-subunit-parent">
+                  <SelectValue placeholder="Select parent SPU" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(staff.role === "super_admin" ? spus : addStaffSpus)?.map((spu) => (
+                    <SelectItem key={spu.id} value={spu.id}>
+                      {spu.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                if (newSubUnitName && newSubUnitParent) {
+                  addSubUnitMutation.mutate({
+                    name: newSubUnitName,
+                    spuId: newSubUnitParent,
+                  });
+                }
+              }}
+              disabled={!newSubUnitName || !newSubUnitParent || addSubUnitMutation.isPending}
+              data-testid="button-save-subunit"
+            >
+              {addSubUnitMutation.isPending ? "Adding..." : "Add Sub-Unit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* First reset confirmation */}
       <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>

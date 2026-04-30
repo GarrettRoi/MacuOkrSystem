@@ -1888,16 +1888,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/sub-units", requireAdmin, async (req, res) => {
+  app.post("/api/sub-units", async (req, res) => {
     try {
+      // Super admins can create sub-units anywhere; leaders can only create
+      // them inside SPUs they manage (primary or assigned).
+      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+
       const parsed = insertSubUnitSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
-      
+
+      const sessionStaffId = req.session.selectedStaffId!;
+      const sessionStaff = await storage.getStaff(sessionStaffId);
+
+      if (sessionStaff?.role === "leader") {
+        const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+        const allowedSpuIds = new Set<string>([
+          sessionStaff.spuId,
+          ...assignments.map((a: any) => a.spuId),
+        ]);
+        if (!parsed.data.spuId || !allowedSpuIds.has(parsed.data.spuId)) {
+          return res.status(403).json({ error: "Leaders can only add sub-units to SPUs they manage." });
+        }
+      }
+
       const subUnit = await storage.createSubUnit(parsed.data);
       res.status(201).json(subUnit);
     } catch (error) {
+      console.error("Create sub-unit error:", error);
       res.status(500).json({ error: "Failed to create sub-unit" });
     }
   });
