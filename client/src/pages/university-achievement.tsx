@@ -1569,6 +1569,9 @@ export function UniversityAchievementContent({ hideAnalytics = false }: { hideAn
         )}
         <TabsTrigger value="strategic-advancement" data-testid="tab-strategic-advancement">Strategic Advancement</TabsTrigger>
       </TabsList>
+      <p className="font-bold text-sm">
+        This page shows a comprehensive view of University Achievement towards our goals, and tracks much more than just submitted OKR&apos;s
+      </p>
 
       <TabsContent value="dashboard">
         <DashboardTab />
