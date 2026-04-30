@@ -2684,7 +2684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/export/csv", async (req, res) => {
     try {
-      const { quarter, year, planningYear } = req.query;
+      const { quarter, year, planningYear, spuId } = req.query;
       let okrs = await storage.getAllOkrsWithDetails();
       
       if (quarter && quarter !== "All") {
@@ -2700,6 +2700,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const startYear = startYearSetting ? parseInt(startYearSetting) : 2024;
         const pyNum = parseInt(planningYear as string);
         okrs = okrs.filter((okr) => getPlanningYear(okr.quarter, okr.year, startYear) === pyNum);
+      }
+
+      if (spuId && spuId !== "All") {
+        okrs = okrs.filter((okr) => okr.spuId === spuId);
       }
       
       const updates = await storage.getAllQuarterlyUpdates();

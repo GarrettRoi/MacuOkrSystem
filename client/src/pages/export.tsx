@@ -7,21 +7,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Download, FileSpreadsheet, X } from "lucide-react";
-import type { OkrWithDetails } from "@shared/schema";
-import { getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
-
-const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
-const QUARTER_LABELS: Record<string, string> = { All: ALL_QUARTERS_LABEL, Q1: "Q1", Q2: "Q2", Q3: "Q3", Q4: "Q4" };
+import type { OkrWithDetails, Spu } from "@shared/schema";
+import { getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, QUARTERS } from "@shared/schema";
 
 export default function Export() {
   const { toast } = useToast();
   const [quarterFilter, setQuarterFilter] = usePersistedFilter("export:quarter", "All");
   const [yearFilter, setYearFilter] = usePersistedFilter("export:year", "All");
   const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("export:planningYear", "All");
+  const [spuFilter, setSpuFilter] = usePersistedFilter("export:spu", "All");
   const [isExporting, setIsExporting] = useState(false);
 
   const { data: okrs } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
+  });
+
+  const { data: spus } = useQuery<Spu[]>({
+    queryKey: ["/api/spus"],
   });
 
   const { data: planStartYearData } = useQuery<{ startYear: number }>({
@@ -44,19 +46,22 @@ export default function Export() {
     quarterFilter !== "All",
     yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
     planningYearFilter !== "All",
+    spuFilter !== "All",
   ].filter(Boolean).length;
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
     setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
+    setSpuFilter("All");
   };
 
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
     const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
-    return quarterMatch && yearMatch && planningYearMatch;
+    const spuMatch = spuFilter === "All" || okr.spuId === spuFilter;
+    return quarterMatch && yearMatch && planningYearMatch && spuMatch;
   }) || [];
 
   const handleExport = async () => {
@@ -66,6 +71,7 @@ export default function Export() {
       if (quarterFilter !== "All") params.append("quarter", quarterFilter);
       if (yearFilter !== "All") params.append("year", yearFilter);
       if (planningYearFilter !== "All") params.append("planningYear", planningYearFilter);
+      if (spuFilter !== "All") params.append("spuId", spuFilter);
 
       const response = await fetch(`/api/export/csv?${params.toString()}`);
       
@@ -124,7 +130,7 @@ export default function Export() {
                 </Button>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="export-quarter">Quarter</Label>
                 <Select value={quarterFilter} onValueChange={setQuarterFilter}>
@@ -132,9 +138,12 @@ export default function Export() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="All" data-testid="option-export-quarter-All">
+                      {ALL_QUARTERS_LABEL}
+                    </SelectItem>
                     {QUARTERS.map((q) => (
-                      <SelectItem key={q} value={q} data-testid={`option-export-quarter-${q}`}>
-                        {QUARTER_LABELS[q]}
+                      <SelectItem key={q.value} value={q.value} data-testid={`option-export-quarter-${q.value}`}>
+                        {q.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -168,6 +177,23 @@ export default function Export() {
                     {PLANNING_YEARS.map((py) => (
                       <SelectItem key={py} value={String(py)} data-testid={`option-export-planning-year-${py}`}>
                         Year {py}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="export-spu">SPU</Label>
+                <Select value={spuFilter} onValueChange={setSpuFilter}>
+                  <SelectTrigger id="export-spu" data-testid="select-export-spu">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All" data-testid="option-export-spu-all">All SPUs</SelectItem>
+                    {spus?.map((spu) => (
+                      <SelectItem key={spu.id} value={spu.id} data-testid={`option-export-spu-${spu.id}`}>
+                        {spu.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
