@@ -196,42 +196,28 @@ export default function Home({ staff, isAdmin }: HomeProps) {
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
       {showGenius && <GeniusAnimation onDone={() => setShowGenius(false)} />}
-      <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold">Welcome, {staff.name.toLowerCase() === "phil greenwald" ? "PG5" : getSortableName(staff.name).split(" ")[0]}!</h1>
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <h1 className="text-4xl font-bold">Welcome, {staff.name.toLowerCase() === "phil greenwald" ? "PG5" : getSortableName(staff.name).split(" ")[0]}!</h1>
+          {nextSubmission && (
+            <div data-testid="card-submission-countdown" className="flex items-center gap-1.5 text-muted-foreground shrink-0">
+              <CalendarClock className="h-4 w-4 shrink-0" />
+              <span className="text-sm">
+                {nextSubmission.quarter} due in{" "}
+                <span className="font-semibold tabular-nums" data-testid="text-submission-countdown-days">{nextSubmission.days}</span>
+                {" "}{nextSubmission.days === 1 ? "day" : "days"}
+                {" · "}
+                <span data-testid="text-submission-countdown-date">
+                  {nextSubmission.date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
         <p className="text-muted-foreground text-lg">
           What would you like to do today?
         </p>
       </div>
-      {nextSubmission && (
-        <Card data-testid="card-submission-countdown" className="border-primary/30 bg-primary/5">
-          <CardContent className="py-4 flex flex-wrap items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
-              <CalendarClock className="h-5 w-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                Next OKR Submission Due
-              </div>
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="text-2xl font-bold tabular-nums" data-testid="text-submission-countdown-days">
-                  {nextSubmission.days}
-                </span>
-                <span className="text-base">
-                  {nextSubmission.days === 1 ? "day" : "days"} until {nextSubmission.quarter} submissions are due
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5" data-testid="text-submission-countdown-date">
-                Due {nextSubmission.date.toLocaleDateString(undefined, {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {actions.map((action) => {
           const Icon = action.icon;
