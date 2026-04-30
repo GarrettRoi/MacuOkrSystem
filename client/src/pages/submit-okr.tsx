@@ -493,8 +493,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                       <FormItem>
                         <FormLabel>Sub-Unit or Division (Optional)</FormLabel>
                         <Select 
-                          onValueChange={field.onChange} 
-                          value={field.value}
+                          onValueChange={(value) => field.onChange(value === "__none__" ? undefined : value)} 
+                          value={field.value || "__none__"}
                           disabled={lockedToSubUnit || !selectedSpuId || filteredSubUnits.length === 0}
                         >
                           <FormControl>
@@ -503,6 +503,9 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
+                            <SelectItem value="__none__" data-testid="select-sub-unit-none">
+                              None (apply to whole SPU)
+                            </SelectItem>
                             {filteredSubUnits.map((subUnit) => (
                               <SelectItem key={subUnit.id} value={subUnit.id}>
                                 {subUnit.name}
@@ -513,7 +516,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         <FormDescription>
                           {lockedToSubUnit
                             ? "Locked to your assigned sub-unit."
-                            : "Select a specific sub-unit if applicable"}
+                            : "Select a specific sub-unit, or choose \"None\" to apply this OKR to the entire SPU"}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
