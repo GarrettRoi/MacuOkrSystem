@@ -19,6 +19,7 @@ import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget } from "@shared/schema";
+import { ALL_QUARTERS_LABEL } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
 import type { WidgetConfig } from "@/components/analytics-widget";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -804,7 +805,7 @@ function AnalyticsBuilderTab() {
                             <Select value={wFilterQuarter || "__all__"} onValueChange={v => setWFilterQuarter(v === "__all__" ? "" : v)}>
                               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="__all__">All Quarters</SelectItem>
+                                <SelectItem value="__all__">{ALL_QUARTERS_LABEL}</SelectItem>
                                 {["Q1","Q2","Q3","Q4"].map(q => <SelectItem key={q} value={q}>{q}</SelectItem>)}
                               </SelectContent>
                             </Select>

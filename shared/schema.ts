@@ -246,6 +246,8 @@ export const QUARTERS = [
   { value: "Q4", label: "Q4: March - May" },
 ] as const;
 
+export const ALL_QUARTERS_LABEL = "All quarters";
+
 export const getQuarterLabel = (value: string): string => {
   const quarter = QUARTERS.find(q => q.value === value);
   return quarter?.label || value;

@@ -17,7 +17,7 @@ import { z } from "zod";
 import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText, Shuffle, CheckCircle, Clock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog, UnmatchedScore } from "@shared/schema";
-import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
+import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
 
@@ -1075,10 +1075,10 @@ export default function Data() {
                   <label className="text-xs font-medium text-muted-foreground">Quarter</label>
                   <Select value={filterQuarter} onValueChange={setFilterQuarter}>
                     <SelectTrigger data-testid="select-filter-quarter">
-                      <SelectValue placeholder="All Quarters" />
+                      <SelectValue placeholder={ALL_QUARTERS_LABEL} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Quarters</SelectItem>
+                      <SelectItem value="all">{ALL_QUARTERS_LABEL}</SelectItem>
                       <SelectItem value="Q1">{getQuarterLabel("Q1")}</SelectItem>
                       <SelectItem value="Q2">{getQuarterLabel("Q2")}</SelectItem>
                       <SelectItem value="Q3">{getQuarterLabel("Q3")}</SelectItem>
@@ -1549,11 +1549,11 @@ export default function Data() {
                     </SelectContent>
                   </Select>
                   <Select value={unscoredFilterQuarter} onValueChange={setUnscoredFilterQuarter}>
-                    <SelectTrigger className="h-8 text-xs w-[90px]" data-testid="select-unscored-quarter">
+                    <SelectTrigger className="h-8 text-xs w-32" data-testid="select-unscored-quarter">
                       <SelectValue placeholder="Quarter" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Qtrs</SelectItem>
+                      <SelectItem value="all">{ALL_QUARTERS_LABEL}</SelectItem>
                       {QUARTERS.map(q => <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -1636,11 +1636,11 @@ export default function Data() {
                 {/* Filters */}
                 <div className="flex items-center gap-1 flex-wrap">
                   <Select value={pendingFilterQuarter} onValueChange={setPendingFilterQuarter}>
-                    <SelectTrigger className="h-8 text-xs w-[90px]" data-testid="select-pending-quarter">
+                    <SelectTrigger className="h-8 text-xs w-32" data-testid="select-pending-quarter">
                       <SelectValue placeholder="Quarter" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Qtrs</SelectItem>
+                      <SelectItem value="all">{ALL_QUARTERS_LABEL}</SelectItem>
                       {QUARTERS.map(q => <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -3395,7 +3395,7 @@ export default function Data() {
                 <Select value={okrSearchQuarter} onValueChange={setOkrSearchQuarter}>
                   <SelectTrigger data-testid="select-okr-search-quarter"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Quarters</SelectItem>
+                    <SelectItem value="all">{ALL_QUARTERS_LABEL}</SelectItem>
                     {QUARTERS.map(q => <SelectItem key={q.value} value={q.value}>{q.value}</SelectItem>)}
                   </SelectContent>
                 </Select>

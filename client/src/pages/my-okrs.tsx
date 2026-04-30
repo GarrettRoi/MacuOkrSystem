@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Target, Calendar, Building2, TrendingUp, Filter, X, User, Users, Pencil, Plus, Minus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
 
 interface MyOkrsProps {
   staff: StaffWithDetails;
@@ -330,7 +330,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                   <SelectValue placeholder="Quarter" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Quarters</SelectItem>
+                  <SelectItem value="All">{ALL_QUARTERS_LABEL}</SelectItem>
                   {QUARTERS.map((q) => (
                     <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
                   ))}

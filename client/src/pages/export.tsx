@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Download, FileSpreadsheet, X } from "lucide-react";
 import type { OkrWithDetails } from "@shared/schema";
-import { getPlanningYear, PLANNING_YEARS } from "@shared/schema";
+import { getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
+const QUARTER_LABELS: Record<string, string> = { All: ALL_QUARTERS_LABEL, Q1: "Q1", Q2: "Q2", Q3: "Q3", Q4: "Q4" };
 
 export default function Export() {
   const { toast } = useToast();
@@ -133,7 +134,7 @@ export default function Export() {
                   <SelectContent>
                     {QUARTERS.map((q) => (
                       <SelectItem key={q} value={q} data-testid={`option-export-quarter-${q}`}>
-                        {q}
+                        {QUARTER_LABELS[q]}
                       </SelectItem>
                     ))}
                   </SelectContent>

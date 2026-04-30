@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
 import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar, Building2, Users, ChevronRight, ChevronDown } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, StrategicChartData, AnalyticsDashboardWithWidgets, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS, ALL_QUARTERS_LABEL } from "@shared/schema";
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
 
@@ -169,7 +169,7 @@ function DashboardTab() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem key="All" value="All" data-testid="option-filter-quarter-All">All</SelectItem>
+                <SelectItem key="All" value="All" data-testid="option-filter-quarter-All">{ALL_QUARTERS_LABEL}</SelectItem>
                 {SCHEMA_QUARTERS.map((q) => (
                   <SelectItem key={q.value} value={q.value} data-testid={`option-filter-quarter-${q.value}`}>
                     {q.label}
@@ -1105,7 +1105,7 @@ function ObjectiveResultsTab() {
                   <SelectValue placeholder="Quarter" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All quarters</SelectItem>
+                  <SelectItem value="all">{ALL_QUARTERS_LABEL}</SelectItem>
                   {SCHEMA_QUARTERS.map(q => (
                     <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
                   ))}

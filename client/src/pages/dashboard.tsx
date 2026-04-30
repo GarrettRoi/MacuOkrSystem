@@ -11,9 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter, CalendarClock } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
+const QUARTER_LABELS: Record<string, string> = { All: ALL_QUARTERS_LABEL, Q1: "Q1", Q2: "Q2", Q3: "Q3", Q4: "Q4" };
 
 const CHART_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -205,7 +206,7 @@ export default function Dashboard() {
               <SelectContent>
                 {QUARTERS.map((q) => (
                   <SelectItem key={q} value={q} data-testid={`option-filter-quarter-${q}`}>
-                    {q}
+                    {QUARTER_LABELS[q]}
                   </SelectItem>
                 ))}
               </SelectContent>

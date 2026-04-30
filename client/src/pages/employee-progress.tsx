@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, MessageSquare } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, OkrResponsibilityWithDetails, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
 
 interface SpuGroup {
   spuName: string;
@@ -254,7 +254,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                     <SelectValue placeholder="Quarter" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All quarters</SelectItem>
+                    <SelectItem value="all">{ALL_QUARTERS_LABEL}</SelectItem>
                     {QUARTERS.map(q => (
                       <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
                     ))}
