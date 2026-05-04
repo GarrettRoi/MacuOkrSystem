@@ -146,7 +146,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
       // Initialize form with key result scores
       const initialScores = keyResults.map((kr, index) => ({
         keyResultNumber: index + 1,
-        description: kr.description || `Key Result ${index + 1}`,
+        description: (typeof kr === 'string' ? kr : kr.description) || `Key Result ${index + 1}`,
         score: 0,
       }));
 
@@ -182,7 +182,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
 
     const initialScores = keyResults.map((kr, index) => ({
       keyResultNumber: index + 1,
-      description: kr.description || `Key Result ${index + 1}`,
+      description: (typeof kr === 'string' ? kr : kr.description) || `Key Result ${index + 1}`,
       score: 0,
     }));
 

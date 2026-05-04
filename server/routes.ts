@@ -2263,7 +2263,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         okrs = okrs.filter(o =>
           o.objectiveStatement.toLowerCase().includes(search) ||
           o.okrNumber.toLowerCase().includes(search) ||
-          (o.keyResults && o.keyResults.toLowerCase().includes(search)) ||
+          (o.keyResults && (typeof o.keyResults === 'string' ? o.keyResults : JSON.stringify(o.keyResults)).toLowerCase().includes(search)) ||
           (o.spu?.name && o.spu.name.toLowerCase().includes(search)) ||
           (o.subUnit?.name && o.subUnit.name.toLowerCase().includes(search)) ||
           (o.staff && o.staff.name.toLowerCase().includes(search))

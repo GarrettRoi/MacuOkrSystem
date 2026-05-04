@@ -121,11 +121,18 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     .filter(v => v && v !== "all").length;
 
   const getKeyResults = (keyResultsJson: any) => {
-    if (Array.isArray(keyResultsJson)) return keyResultsJson;
-    if (typeof keyResultsJson === 'string') {
-      try { return JSON.parse(keyResultsJson); } catch { return []; }
+    let arr: any[] = [];
+    if (Array.isArray(keyResultsJson)) {
+      arr = keyResultsJson;
+    } else if (typeof keyResultsJson === 'string') {
+      try { arr = JSON.parse(keyResultsJson); } catch { return []; }
+    } else {
+      return [];
     }
-    return [];
+    if (!Array.isArray(arr)) return [];
+    return arr.map((item: any) =>
+      typeof item === 'string' ? { description: item } : item
+    );
   };
 
   const getKrScores = (json: any): Array<{ keyResultNumber: number; description?: string; score: number }> => {

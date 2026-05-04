@@ -875,12 +875,19 @@ export default function Data() {
   };
 
   const parseKeyResultsJson = (json: any): Array<{ description: string; percentage?: number }> => {
+    let arr: any[] = [];
     if (!json) return [];
-    if (Array.isArray(json)) return json;
-    if (typeof json === 'string') {
-      try { return JSON.parse(json); } catch { return []; }
+    if (Array.isArray(json)) {
+      arr = json;
+    } else if (typeof json === 'string') {
+      try { arr = JSON.parse(json); } catch { return []; }
+    } else {
+      return [];
     }
-    return [];
+    if (!Array.isArray(arr)) return [];
+    return arr.map((item: any) =>
+      typeof item === 'string' ? { description: item } : item
+    );
   };
 
   const handleEditOkr = (okr: AggregatedOkr) => {
