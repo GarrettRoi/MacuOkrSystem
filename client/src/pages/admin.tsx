@@ -17,8 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp } from "lucide-react";
-import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget } from "@shared/schema";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck } from "lucide-react";
+import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff } from "@shared/schema";
 import { ALL_QUARTERS_LABEL } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
 import type { WidgetConfig } from "@/components/analytics-widget";
@@ -1504,6 +1504,54 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
   });
 
+  const { data: feedbackWidgetEnabledData } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/settings/feedback-widget-enabled"],
+    enabled: staff.role === "super_admin",
+  });
+  const feedbackWidgetEnabled = feedbackWidgetEnabledData?.enabled !== false;
+
+  const toggleFeedbackWidgetMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      return await apiRequest("PUT", "/api/settings/feedback-widget-enabled", { enabled });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/feedback-widget-enabled"] });
+      toast({
+        title: variables ? "Feedback Widget Enabled" : "Feedback Widget Disabled",
+        description: variables
+          ? "The feedback widget is now visible to all authenticated users."
+          : "The feedback widget is now hidden for all users.",
+      });
+    },
+  });
+
+  const { data: feedbackList, isLoading: feedbackLoading } = useQuery<FeedbackWithStaff[]>({
+    queryKey: ["/api/feedback"],
+    enabled: staff.role === "super_admin",
+  });
+
+  const { data: unreadCountData } = useQuery<{ count: number }>({
+    queryKey: ["/api/feedback/unread-count"],
+    enabled: staff.role === "super_admin",
+    refetchInterval: 60000,
+    staleTime: 30000,
+    refetchOnWindowFocus: true,
+  });
+  const unreadFeedbackCount = unreadCountData?.count ?? 0;
+
+  const markFeedbackReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("PATCH", `/api/feedback/${id}/read`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feedback/unread-count"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to mark feedback as read.", variant: "destructive" });
+    },
+  });
+
   type QuarterKey = "q1" | "q2" | "q3" | "q4";
   const { data: quarterlyDueDatesData } = useQuery<Record<QuarterKey, string | null>>({
     queryKey: ["/api/settings/quarterly-due-dates"],
@@ -2078,6 +2126,17 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
             <TabsTrigger value="analytics" data-testid="tab-analytics">
               <BarChart2 className="h-4 w-4 mr-2" />
               Analytics Builder
+            </TabsTrigger>
+          )}
+          {staff.role === "super_admin" && (
+            <TabsTrigger value="feedback" data-testid="tab-feedback" className="relative">
+              <MessageSquarePlus className="h-4 w-4 mr-2" />
+              Feedback
+              {unreadFeedbackCount > 0 && (
+                <Badge className="ml-1.5 h-5 min-w-5 px-1 text-xs no-default-active-elevate" data-testid="badge-unread-feedback">
+                  {unreadFeedbackCount}
+                </Badge>
+              )}
             </TabsTrigger>
           )}
           {staff.role === "super_admin" && (
@@ -4599,6 +4658,95 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
           </TabsContent>
         )}
         {staff.role === "super_admin" && (
+          <TabsContent value="feedback">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <MessageSquarePlus className="h-5 w-5" />
+                      User Feedback
+                    </CardTitle>
+                    <CardDescription>
+                      Feedback submitted by staff members. Newest submissions appear first.
+                    </CardDescription>
+                  </div>
+                  {unreadFeedbackCount > 0 && (
+                    <Badge data-testid="badge-feedback-unread-count">
+                      {unreadFeedbackCount} unread
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {feedbackLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : !feedbackList || feedbackList.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No feedback submitted yet.
+                  </p>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Staff Member</TableHead>
+                          <TableHead>Message</TableHead>
+                          <TableHead>Submitted</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="w-28">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {feedbackList.map((item) => (
+                          <TableRow key={item.id} data-testid={`row-feedback-${item.id}`} className={item.isRead ? "opacity-70" : ""}>
+                            <TableCell className="font-medium text-sm" data-testid={`text-feedback-staff-${item.id}`}>
+                              {item.staffName}
+                            </TableCell>
+                            <TableCell className="text-sm max-w-sm" data-testid={`text-feedback-message-${item.id}`}>
+                              <p className="whitespace-pre-wrap break-words">{item.message}</p>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-feedback-date-${item.id}`}>
+                              {new Date(item.submittedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                              {" "}
+                              {new Date(item.submittedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                            </TableCell>
+                            <TableCell data-testid={`text-feedback-status-${item.id}`}>
+                              {item.isRead ? (
+                                <Badge variant="secondary" className="no-default-active-elevate">Read</Badge>
+                              ) : (
+                                <Badge className="no-default-active-elevate">Unread</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {!item.isRead && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => markFeedbackReadMutation.mutate(item.id)}
+                                  disabled={markFeedbackReadMutation.isPending}
+                                  data-testid={`button-mark-read-${item.id}`}
+                                >
+                                  <CheckCheck className="h-3.5 w-3.5 mr-1" />
+                                  Mark Read
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+        {staff.role === "super_admin" && (
           <TabsContent value="settings">
             <Card>
               <CardHeader>
@@ -4749,6 +4897,26 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         onCheckedChange={(val) => updateHideStrategicChartMutation.mutate(val)}
                         disabled={updateHideStrategicChartMutation.isPending}
                         data-testid="switch-hide-strategic-chart"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {staff.role === "super_admin" && (
+                  <div className="p-4 border rounded-md space-y-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-base font-medium" htmlFor="switch-feedback-widget">Enable Feedback Widget</Label>
+                        <p className="text-sm text-muted-foreground">
+                          When on, a floating feedback button appears in the bottom-right corner for all authenticated users, letting them submit feedback directly within the app.
+                        </p>
+                      </div>
+                      <Switch
+                        id="switch-feedback-widget"
+                        checked={feedbackWidgetEnabled}
+                        onCheckedChange={(val) => toggleFeedbackWidgetMutation.mutate(val)}
+                        disabled={toggleFeedbackWidgetMutation.isPending}
+                        data-testid="switch-feedback-widget"
                       />
                     </div>
                   </div>

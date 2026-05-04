@@ -21,6 +21,7 @@ import TrendsPage from "@/pages/trends";
 import PublicHome from "@/pages/public-home";
 import SetPassword from "@/pages/set-password";
 import AppHeader from "@/components/app-header";
+import { FeedbackWidget } from "@/components/feedback-widget";
 import type { StaffWithDetails } from "@shared/schema";
 
 function LoginRedirect() {
@@ -241,6 +242,7 @@ function AppContent() {
           <AuthenticatedRouter staff={selectedStaff} isAdmin={isAdmin} />
         </main>
       </div>
+      <FeedbackWidget />
       <Toaster />
     </>
   );

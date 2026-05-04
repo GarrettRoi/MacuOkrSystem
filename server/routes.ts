@@ -34,6 +34,7 @@ import {
   universityKeyResults,
   analyticsDashboards,
   analyticsWidgets,
+  feedback,
 } from "@shared/schema";
 import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole, AnalyticsData, Spu } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear } from "@shared/schema";
@@ -795,6 +796,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, showGeniusAnimation: parsed.data.showGeniusAnimation });
     } catch (error) {
       res.status(500).json({ error: "Failed to update setting" });
+    }
+  });
+
+  // Feedback widget enabled setting
+  app.get("/api/settings/feedback-widget-enabled", async (_req, res) => {
+    try {
+      const value = await storage.getSetting("feedback_widget_enabled");
+      res.json({ enabled: value === null || value === undefined ? true : value !== "false" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch setting" });
+    }
+  });
+
+  app.put("/api/settings/feedback-widget-enabled", requireAdmin, async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const staffMember = await storage.getStaff(req.session.selectedStaffId);
+      if (!staffMember || staffMember.role !== "super_admin") {
+        return res.status(403).json({ error: "Only super admins can change this setting" });
+      }
+      const schema = z.object({ enabled: z.boolean() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      await storage.setSetting("feedback_widget_enabled", parsed.data.enabled ? "true" : "false");
+      res.json({ success: true, enabled: parsed.data.enabled });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update setting" });
+    }
+  });
+
+  // Feedback routes
+  app.post("/api/feedback", requireAuth, async (req, res) => {
+    try {
+      const staffId = req.session.selectedStaffId;
+      if (!staffId) {
+        return res.status(401).json({ error: "Please select a staff profile first" });
+      }
+      const schema = z.object({ message: z.string().min(1).max(2000) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body", details: parsed.error.errors });
+      }
+      const entry = await storage.createFeedback({ staffId, message: parsed.data.message });
+      res.status(201).json(entry);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to submit feedback" });
+    }
+  });
+
+  app.get("/api/feedback", requireAdmin, async (_req, res) => {
+    try {
+      const entries = await storage.getAllFeedback();
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch feedback" });
+    }
+  });
+
+  app.get("/api/feedback/unread-count", requireAdmin, async (_req, res) => {
+    try {
+      const count = await storage.getUnreadFeedbackCount();
+      res.json({ count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch unread count" });
+    }
+  });
+
+  app.patch("/api/feedback/:id/read", requireAdmin, async (req, res) => {
+    try {
+      const entry = await storage.markFeedbackRead(req.params.id);
+      if (!entry) {
+        return res.status(404).json({ error: "Feedback not found" });
+      }
+      res.json(entry);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark feedback as read" });
     }
   });
 

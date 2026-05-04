@@ -66,6 +66,7 @@ import {
   unmatchedScores,
   inviteTokens,
   dataBackups,
+  feedback,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, inArray, ne, isNull, gt, sql, ilike } from "drizzle-orm";
@@ -253,6 +254,12 @@ export interface IStorage {
   listBackups(): Promise<DataBackupMeta[]>;
   deleteBackupsOlderThan(date: Date): Promise<number>;
   restoreBackup(id: string): Promise<void>;
+
+  // Feedback
+  createFeedback(data: { staffId: string; message: string }): Promise<import("@shared/schema").Feedback>;
+  getAllFeedback(): Promise<import("@shared/schema").FeedbackWithStaff[]>;
+  markFeedbackRead(id: string): Promise<import("@shared/schema").Feedback>;
+  getUnreadFeedbackCount(): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1859,6 +1866,39 @@ export class DatabaseStorage implements IStorage {
       if (snap.universityObjectiveComments?.length) await tx.insert(universityObjectiveComments).values(snap.universityObjectiveComments);
       if (snap.universityProgressDatapoints?.length) await tx.insert(universityProgressDatapoints).values(snap.universityProgressDatapoints);
     });
+  }
+  async createFeedback(data: { staffId: string; message: string }): Promise<import("@shared/schema").Feedback> {
+    const [result] = await db.insert(feedback).values(data).returning();
+    return result;
+  }
+
+  async getAllFeedback(): Promise<import("@shared/schema").FeedbackWithStaff[]> {
+    const results = await db
+      .select({
+        id: feedback.id,
+        staffId: feedback.staffId,
+        message: feedback.message,
+        submittedAt: feedback.submittedAt,
+        isRead: feedback.isRead,
+        staffName: staff.name,
+      })
+      .from(feedback)
+      .leftJoin(staff, eq(feedback.staffId, staff.id))
+      .orderBy(desc(feedback.submittedAt));
+    return results.map(r => ({ ...r, staffName: r.staffName ?? "Unknown" }));
+  }
+
+  async markFeedbackRead(id: string): Promise<import("@shared/schema").Feedback> {
+    const [result] = await db.update(feedback).set({ isRead: true }).where(eq(feedback.id, id)).returning();
+    return result;
+  }
+
+  async getUnreadFeedbackCount(): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(feedback)
+      .where(eq(feedback.isRead, false));
+    return result?.count ?? 0;
   }
 }
 

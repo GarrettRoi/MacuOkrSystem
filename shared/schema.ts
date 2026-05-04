@@ -521,3 +521,16 @@ export const insertDataBackupSchema = createInsertSchema(dataBackups).omit({ id:
 export type InsertDataBackup = z.infer<typeof insertDataBackupSchema>;
 export type DataBackup = typeof dataBackups.$inferSelect;
 export type DataBackupMeta = Omit<DataBackup, "snapshot">;
+
+export const feedback = pgTable("feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
+  message: text("message").notNull(),
+  submittedAt: timestamp("submitted_at").notNull().defaultNow(),
+  isRead: boolean("is_read").notNull().default(false),
+});
+
+export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, submittedAt: true, isRead: true });
+export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
+export type Feedback = typeof feedback.$inferSelect;
+export type FeedbackWithStaff = Feedback & { staffName: string };
