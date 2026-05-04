@@ -81,12 +81,12 @@ export function FeedbackWidget() {
       </div>
 
       <Button
-        size="icon"
         onClick={() => setOpen((v) => !v)}
         data-testid="button-open-feedback"
         title="Send Feedback"
       >
-        <MessageSquarePlus className="h-5 w-5" />
+        <MessageSquarePlus className="h-4 w-4 mr-2" />
+        Provide Feedback
       </Button>
     </div>
   );
