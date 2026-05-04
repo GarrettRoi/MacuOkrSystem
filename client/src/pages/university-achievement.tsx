@@ -102,8 +102,12 @@ function DashboardTab() {
     return latest.progress ?? 0;
   };
 
-  const getKeyResults = (keyResultsJson: string) => {
-    try { return JSON.parse(keyResultsJson); } catch { return []; }
+  const getKeyResults = (keyResultsJson: any) => {
+    if (Array.isArray(keyResultsJson)) return keyResultsJson;
+    if (typeof keyResultsJson === 'string') {
+      try { return JSON.parse(keyResultsJson); } catch { return []; }
+    }
+    return [];
   };
 
   const totalOkrs = filteredOkrs.length;
@@ -1026,8 +1030,12 @@ function ObjectiveResultsTab() {
     okr.quarterlyUpdates[0] ||
     null;
 
-  const getKeyResults = (keyResultsJson: string) => {
-    try { return JSON.parse(keyResultsJson); } catch { return []; }
+  const getKeyResults = (keyResultsJson: any) => {
+    if (Array.isArray(keyResultsJson)) return keyResultsJson;
+    if (typeof keyResultsJson === 'string') {
+      try { return JSON.parse(keyResultsJson); } catch { return []; }
+    }
+    return [];
   };
 
   return (

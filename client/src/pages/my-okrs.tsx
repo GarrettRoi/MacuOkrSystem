@@ -115,12 +115,12 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     )[0];
   };
 
-  const parseKeyResults = (keyResultsJson: string): Array<{ description: string; percentage?: number }> => {
-    try {
-      return JSON.parse(keyResultsJson);
-    } catch {
-      return [];
+  const parseKeyResults = (keyResultsJson: any): Array<{ description: string; percentage?: number }> => {
+    if (Array.isArray(keyResultsJson)) return keyResultsJson;
+    if (typeof keyResultsJson === 'string') {
+      try { return JSON.parse(keyResultsJson); } catch { return []; }
     }
+    return [];
   };
 
   const clearFilters = () => {
@@ -426,9 +426,11 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
             const latestUpdate = getLatestUpdate(okr.id);
             let keyResultScores: Array<{ keyResultNumber: number; description: string; score: number }> = [];
             if (latestUpdate?.keyResultScores) {
-              try {
-                keyResultScores = JSON.parse(latestUpdate.keyResultScores);
-              } catch {}
+              if (Array.isArray(latestUpdate.keyResultScores)) {
+                keyResultScores = latestUpdate.keyResultScores;
+              } else if (typeof latestUpdate.keyResultScores === 'string') {
+                try { keyResultScores = JSON.parse(latestUpdate.keyResultScores); } catch {}
+              }
             }
 
             return (

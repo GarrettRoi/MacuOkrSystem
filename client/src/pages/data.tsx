@@ -337,13 +337,17 @@ export default function Data() {
     });
   };
 
-  const parseKeyResultsForDisplay = (krText: string | null): string[] => {
+  const parseKeyResultsForDisplay = (krText: any): string[] => {
     if (!krText) return [];
-    try {
-      const parsed = JSON.parse(krText);
-      if (Array.isArray(parsed)) return parsed.map((kr: any) => typeof kr === 'string' ? kr : kr.description || '');
-    } catch {}
-    return [krText];
+    if (Array.isArray(krText)) return krText.map((kr: any) => typeof kr === 'string' ? kr : kr.description || '');
+    if (typeof krText === 'string') {
+      try {
+        const parsed = JSON.parse(krText);
+        if (Array.isArray(parsed)) return parsed.map((kr: any) => typeof kr === 'string' ? kr : kr.description || '');
+      } catch {}
+      return [krText];
+    }
+    return [];
   };
 
   const getOkrStatus = (okr: AggregatedOkr): "unscored" | "collab" | "ok" => {
@@ -870,8 +874,13 @@ export default function Data() {
     }
   };
 
-  const parseKeyResultsJson = (json: string): Array<{ description: string; percentage?: number }> => {
-    try { return JSON.parse(json); } catch { return []; }
+  const parseKeyResultsJson = (json: any): Array<{ description: string; percentage?: number }> => {
+    if (!json) return [];
+    if (Array.isArray(json)) return json;
+    if (typeof json === 'string') {
+      try { return JSON.parse(json); } catch { return []; }
+    }
+    return [];
   };
 
   const handleEditOkr = (okr: AggregatedOkr) => {
@@ -1760,7 +1769,13 @@ export default function Data() {
                       })
                       .map(score => {
                         let krList: { keyResultNumber: number; score: number }[] = [];
-                        try { if (score.krScores) krList = JSON.parse(score.krScores); } catch {}
+                        if (score.krScores) {
+                          if (Array.isArray(score.krScores)) {
+                            krList = score.krScores;
+                          } else if (typeof score.krScores === 'string') {
+                            try { krList = JSON.parse(score.krScores); } catch {}
+                          }
+                        }
                         return (
                           <Card key={score.id} data-testid={`card-unmatched-score-${score.id}`}>
                             <CardContent className="p-3 space-y-2">

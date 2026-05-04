@@ -120,13 +120,21 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   const activeFiltersCount = [selectedYear, selectedQuarter, selectedPlanningYear, selectedStaffId, selectedSpuId]
     .filter(v => v && v !== "all").length;
 
-  const getKeyResults = (keyResultsJson: string) => {
-    try { return JSON.parse(keyResultsJson); } catch { return []; }
+  const getKeyResults = (keyResultsJson: any) => {
+    if (Array.isArray(keyResultsJson)) return keyResultsJson;
+    if (typeof keyResultsJson === 'string') {
+      try { return JSON.parse(keyResultsJson); } catch { return []; }
+    }
+    return [];
   };
 
-  const getKrScores = (json: string | null | undefined): Array<{ keyResultNumber: number; description?: string; score: number }> => {
+  const getKrScores = (json: any): Array<{ keyResultNumber: number; description?: string; score: number }> => {
     if (!json) return [];
-    try { return JSON.parse(json); } catch { return []; }
+    if (Array.isArray(json)) return json;
+    if (typeof json === 'string') {
+      try { return JSON.parse(json); } catch { return []; }
+    }
+    return [];
   };
 
   const totalProgress = progressSummaries && progressSummaries.length > 0

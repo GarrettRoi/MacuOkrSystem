@@ -2485,14 +2485,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updates = allUpdates.filter(u => u.okrId === okr.id)
           .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
         
-        // Parse keyResultScores for each update
+        // Parse keyResultScores for each update (handle both string and pre-parsed formats)
         const updatesWithParsedScores = updates.map(update => {
           let parsedScores = null;
           if (update.keyResultScores) {
-            try {
-              parsedScores = JSON.parse(update.keyResultScores);
-            } catch (e) {
-              console.error("Failed to parse keyResultScores:", e);
+            if (Array.isArray(update.keyResultScores)) {
+              parsedScores = update.keyResultScores;
+            } else if (typeof update.keyResultScores === 'string') {
+              try {
+                parsedScores = JSON.parse(update.keyResultScores);
+              } catch (e) {
+                console.error("Failed to parse keyResultScores:", e);
+              }
             }
           }
           return {
@@ -2614,9 +2618,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      if (updates.keyResultScores && typeof updates.keyResultScores === 'string') {
+      if (updates.keyResultScores) {
         try {
-          const scores = JSON.parse(updates.keyResultScores);
+          const scores = Array.isArray(updates.keyResultScores)
+            ? updates.keyResultScores
+            : typeof updates.keyResultScores === 'string'
+              ? JSON.parse(updates.keyResultScores)
+              : null;
           if (Array.isArray(scores) && scores.length > 0) {
             const validScores = scores.every(
               (kr: any) => typeof kr.score === 'number' && kr.score >= 0 && kr.score <= 100
@@ -2626,6 +2634,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             const total = scores.reduce((sum: number, kr: any) => sum + kr.score, 0);
             updates.averageScore = Math.round(total / scores.length);
+            if (Array.isArray(updates.keyResultScores)) {
+              updates.keyResultScores = JSON.stringify(updates.keyResultScores);
+            }
           }
         } catch (e) {
           return res.status(400).json({ error: "Invalid keyResultScores format" });
@@ -2749,14 +2760,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let keyResultScoresJson = "N/A";
         if (latestUpdate?.keyResultScores) {
           try {
-            const scores = JSON.parse(latestUpdate.keyResultScores);
+            const scores = Array.isArray(latestUpdate.keyResultScores)
+              ? latestUpdate.keyResultScores
+              : JSON.parse(latestUpdate.keyResultScores);
             keyResultScoresReadable = scores.map((kr: any) => 
               `KR${kr.keyResultNumber}: ${kr.score}%`
             ).join("; ");
-            keyResultScoresJson = latestUpdate.keyResultScores.replace(/"/g, '""');
+            const scoresStr = typeof latestUpdate.keyResultScores === 'string'
+              ? latestUpdate.keyResultScores
+              : JSON.stringify(latestUpdate.keyResultScores);
+            keyResultScoresJson = scoresStr.replace(/"/g, '""');
           } catch (e) {
-            keyResultScoresReadable = latestUpdate.keyResultScores;
-            keyResultScoresJson = latestUpdate.keyResultScores;
+            keyResultScoresReadable = String(latestUpdate.keyResultScores);
+            keyResultScoresJson = String(latestUpdate.keyResultScores);
           }
         }
 
@@ -2774,7 +2790,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `"${parseMultiSelectField(okr.universityObjective).join("; ").replace(/"/g, '""')}"`,
           `"${parseMultiSelectField(okr.universityKeyResult).join("; ").replace(/"/g, '""')}"`,
           `"${okr.objectiveStatement.replace(/"/g, '""')}"`,
-          `"${okr.keyResults.replace(/"/g, '""')}"`,
+          `"${(typeof okr.keyResults === 'string' ? okr.keyResults : JSON.stringify(okr.keyResults)).replace(/"/g, '""')}"`,
           okr.currentValue,
           okr.status,
           new Date(okr.createdAt).toISOString().split("T")[0],
@@ -4077,7 +4093,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let krScores = null;
       try {
         if (pending.krScores) {
-          const parsed = JSON.parse(pending.krScores);
+          const parsed = Array.isArray(pending.krScores)
+            ? pending.krScores
+            : typeof pending.krScores === 'string'
+              ? JSON.parse(pending.krScores)
+              : null;
+          if (!parsed) throw new Error("Invalid krScores format");
           krScores = JSON.stringify(parsed.map((kr: any) => ({
             keyResultNumber: kr.keyResultNumber,
             description: `Key Result ${kr.keyResultNumber}`,
