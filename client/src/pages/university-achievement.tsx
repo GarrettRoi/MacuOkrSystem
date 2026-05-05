@@ -1596,9 +1596,7 @@ export function UniversityAchievementContent({ hideAnalytics = false }: { hideAn
         <DashboardTab />
       </TabsContent>
       <TabsContent value="objective-results" className="space-y-0 mt-0">
-        <p className="text-center text-[16px] font-extrabold mt-6 mb-6" data-testid="text-tab-description-objective-results">
-          See how each SPU's OKRs align with the University's strategic objectives and key results.
-        </p>
+        <p className="text-center text-[16px] font-extrabold mt-6 mb-6" data-testid="text-tab-description-objective-results">This page reflects SPU alignment with the University Objectives outlined in the 2024-2027 Strategic Plan.</p>
         <ObjectiveResultsTab />
       </TabsContent>
       {!analyticsHidden && (
