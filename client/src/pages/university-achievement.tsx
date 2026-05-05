@@ -1585,7 +1585,7 @@ export function UniversityAchievementContent({ hideAnalytics = false }: { hideAn
     <Tabs defaultValue="dashboard" className="space-y-6">
       <TabsList data-testid="tabs-achievement">
         <TabsTrigger value="dashboard" data-testid="tab-dashboard">Dashboard</TabsTrigger>
-        <TabsTrigger value="objective-results" data-testid="tab-objective-results">Objective Results</TabsTrigger>
+        <TabsTrigger value="objective-results" data-testid="tab-objective-results">Objective Alignment</TabsTrigger>
         {!analyticsHidden && (
           <TabsTrigger value="trends" data-testid="tab-trends">Analytics</TabsTrigger>
         )}
