@@ -42,6 +42,7 @@ interface SubmitOkrProps {
 }
 
 const currentYear = new Date().getFullYear();
+const WHOLE_SPU_SENTINEL = "__whole_spu__";
 
 export default function SubmitOkr({ staff }: SubmitOkrProps) {
   const { toast } = useToast();
@@ -101,8 +102,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       staffId: staff.id,
-      spuId: staff.spuId,
-      subUnitId: staff.subUnitId || undefined,
+      spuId: lockedToSubUnit ? staff.spuId : "",
+      subUnitId: lockedToSubUnit ? (staff.subUnitId || undefined) : undefined,
       quarter: "",
       year: currentYear,
       collaborationSpuIds: [],
@@ -222,7 +223,22 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   });
 
   const onSubmit = (data: FormValues) => {
-    mutation.mutate(data);
+    const availableSpuIds = availableSpus.map((s) => s.id);
+    const subUnitsForSpu = (subUnits || []).filter(
+      (su) => su.spuId === data.spuId && availableSpuIds.includes(su.spuId)
+    );
+    if (subUnitsForSpu.length > 0 && !data.subUnitId) {
+      form.setError("subUnitId", {
+        type: "manual",
+        message: "Please select a sub-unit, or choose \"Apply to whole SPU\"",
+      });
+      return;
+    }
+    const payload =
+      data.subUnitId === WHOLE_SPU_SENTINEL
+        ? { ...data, subUnitId: undefined }
+        : data;
+    mutation.mutate(payload);
   };
 
 
@@ -230,8 +246,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     setIsSubmitted(false);
     form.reset({
       staffId: staff.id,
-      spuId: staff.spuId,
-      subUnitId: staff.subUnitId || undefined,
+      spuId: lockedToSubUnit ? staff.spuId : "",
+      subUnitId: lockedToSubUnit ? (staff.subUnitId || undefined) : undefined,
       quarter: "",
       year: currentYear,
       collaborationSpuIds: [],
@@ -518,9 +534,10 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                             field.onChange(value);
                             if (!lockedToSubUnit) {
                               form.setValue("subUnitId", undefined);
+                              form.clearErrors("subUnitId");
                             }
                           }} 
-                          value={field.value}
+                          value={field.value || ""}
                           disabled={lockedToSubUnit}
                         >
                           <FormControl>
@@ -556,23 +573,33 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     const selectedSpuId = form.watch("spuId");
                     const availableSpuIds = availableSpus.map(s => s.id);
                     const filteredSubUnits = subUnits?.filter(su => su.spuId === selectedSpuId && availableSpuIds.includes(su.spuId)) || [];
-                    
+                    const hasSubUnits = filteredSubUnits.length > 0;
+                    const isRequired = hasSubUnits && !lockedToSubUnit;
+
                     return (
                       <FormItem>
-                        <FormLabel>Sub-Unit or Division (Optional)</FormLabel>
+                        <FormLabel>
+                          Sub-Unit or Division {isRequired ? "*" : "(Optional)"}
+                        </FormLabel>
                         <Select 
-                          onValueChange={(value) => field.onChange(value === "__none__" ? undefined : value)} 
-                          value={field.value || "__none__"}
-                          disabled={lockedToSubUnit || !selectedSpuId || filteredSubUnits.length === 0}
+                          onValueChange={(value) => field.onChange(value)} 
+                          value={field.value || ""}
+                          disabled={lockedToSubUnit || !selectedSpuId || !hasSubUnits}
                         >
                           <FormControl>
                             <SelectTrigger data-testid="select-sub-unit">
-                              <SelectValue placeholder={filteredSubUnits.length === 0 ? "No sub-units available" : "Select sub-unit"} />
+                              <SelectValue placeholder={
+                                !selectedSpuId
+                                  ? "Select an SPU first"
+                                  : !hasSubUnits
+                                    ? "No sub-units available"
+                                    : "Select sub-unit or whole SPU"
+                              } />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="__none__" data-testid="select-sub-unit-none">
-                              None (apply to whole SPU)
+                            <SelectItem value={WHOLE_SPU_SENTINEL} data-testid="select-sub-unit-none">
+                              Apply to whole SPU
                             </SelectItem>
                             {filteredSubUnits.map((subUnit) => (
                               <SelectItem key={subUnit.id} value={subUnit.id}>
@@ -584,7 +611,11 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         <FormDescription>
                           {lockedToSubUnit
                             ? "Locked to your assigned sub-unit."
-                            : "Select a specific sub-unit, or choose \"None\" to apply this OKR to the entire SPU"}
+                            : !selectedSpuId
+                              ? "Select an SPU above to choose a sub-unit."
+                              : !hasSubUnits
+                                ? "This SPU has no sub-units."
+                                : "Pick a specific sub-unit, or choose \"Apply to whole SPU\""}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
