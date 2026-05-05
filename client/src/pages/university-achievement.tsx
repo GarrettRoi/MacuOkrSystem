@@ -1608,9 +1608,7 @@ export function UniversityAchievementContent({ hideAnalytics = false }: { hideAn
         </TabsContent>
       )}
       <TabsContent value="strategic-advancement">
-        <p className="text-center text-[16px] font-extrabold mb-6" data-testid="text-tab-description-strategic-advancement">
-          Track multi-year progress against University-wide strategic objectives and key results.
-        </p>
+        <p className="text-center text-[16px] font-extrabold mb-6" data-testid="text-tab-description-strategic-advancement">This page displays the comprehensive progress toward the University OKRs outlined in the 2024-2027 Strategic Plan.</p>
         <StrategicAdvancementTab />
       </TabsContent>
     </Tabs>
