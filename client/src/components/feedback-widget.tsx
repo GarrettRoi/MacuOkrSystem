@@ -38,10 +38,11 @@ export function FeedbackWidget() {
   if (!enabled) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 pointer-events-none">
       <div
         style={{ visibility: open ? "visible" : "hidden" }}
-        className="w-80 rounded-md border bg-background shadow-md p-4 space-y-3"
+        aria-hidden={!open}
+        className={`w-80 rounded-md border bg-background shadow-md p-4 space-y-3 ${open ? "pointer-events-auto" : "pointer-events-none"}`}
       >
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">Send Feedback</h3>
@@ -88,6 +89,7 @@ export function FeedbackWidget() {
         onClick={() => setOpen((v) => !v)}
         data-testid="button-open-feedback"
         title="Send Feedback"
+        className="pointer-events-auto"
       >
         <MessageSquarePlus className="h-4 w-4 mr-2" />
         Provide Feedback
