@@ -82,6 +82,13 @@ async function runStartupMigrations() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )`,
     `ALTER TABLE data_backups ALTER COLUMN snapshot TYPE JSONB USING snapshot::JSONB`,
+    `CREATE TABLE IF NOT EXISTS feedback (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_id VARCHAR NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      message TEXT NOT NULL,
+      submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      is_read BOOLEAN NOT NULL DEFAULT false
+    )`,
   ];
   let failed = 0;
   for (const sql of migrations) {
