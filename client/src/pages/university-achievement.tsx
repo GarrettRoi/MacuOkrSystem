@@ -1591,19 +1591,30 @@ export function UniversityAchievementContent({ hideAnalytics = false }: { hideAn
         )}
         <TabsTrigger value="strategic-advancement" data-testid="tab-strategic-advancement">University Achievement</TabsTrigger>
       </TabsList>
-      <p className="text-center text-[16px] font-extrabold">This page provides a comprehensive overview of how University Strategic Planning Units are achieving their OKRs on a quarterly basis.</p>
       <TabsContent value="dashboard">
+        <p className="text-center text-[16px] font-extrabold mb-6" data-testid="text-tab-description-dashboard">
+          This page shows a comprehensive view of University Achievement towards our goals, and tracks much more than just submitted OKR's
+        </p>
         <DashboardTab />
       </TabsContent>
       <TabsContent value="objective-results" className="space-y-0 mt-0">
+        <p className="text-center text-[16px] font-extrabold mt-6 mb-6" data-testid="text-tab-description-objective-results">
+          See how each SPU's OKRs align with the University's strategic objectives and key results.
+        </p>
         <ObjectiveResultsTab />
       </TabsContent>
       {!analyticsHidden && (
         <TabsContent value="trends">
+          <p className="text-center text-[16px] font-extrabold mb-6" data-testid="text-tab-description-trends">
+            Explore historical trends and analytics across quarters, plan years, and SPUs.
+          </p>
           <AnalyticsTab />
         </TabsContent>
       )}
       <TabsContent value="strategic-advancement">
+        <p className="text-center text-[16px] font-extrabold mb-6" data-testid="text-tab-description-strategic-advancement">
+          Track multi-year progress against University-wide strategic objectives and key results.
+        </p>
         <StrategicAdvancementTab />
       </TabsContent>
     </Tabs>
