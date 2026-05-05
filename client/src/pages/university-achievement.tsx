@@ -1592,9 +1592,7 @@ export function UniversityAchievementContent({ hideAnalytics = false }: { hideAn
         <TabsTrigger value="strategic-advancement" data-testid="tab-strategic-advancement">University Achievement</TabsTrigger>
       </TabsList>
       <TabsContent value="dashboard">
-        <p className="text-center text-[16px] font-extrabold mb-6" data-testid="text-tab-description-dashboard">
-          This page shows a comprehensive view of University Achievement towards our goals, and tracks much more than just submitted OKR's
-        </p>
+        <p className="text-center text-[16px] font-extrabold mb-6" data-testid="text-tab-description-dashboard">This page provides a comprehensive overview of how University Strategic Planning Units are achieving their OKRs on a quarterly basis.</p>
         <DashboardTab />
       </TabsContent>
       <TabsContent value="objective-results" className="space-y-0 mt-0">
