@@ -599,10 +599,25 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                 name="collaborationSpuIds"
                 render={({ field }) => {
                   const selectedSpuId = form.watch("spuId");
-                  const collaborationOptions = availableSpus.filter((s) => s.id !== selectedSpuId);
+                  const selectedSubUnitId = form.watch("subUnitId");
+                  const allSpus = spus || [];
+                  const allSubUnits = subUnits || [];
+                  const spuNameById = new Map(allSpus.map((s) => [s.id, s.name]));
+                  const spuOptions = allSpus
+                    .filter((s) => s.id !== selectedSpuId)
+                    .map((s) => ({ id: s.id, name: s.name }));
+                  const subUnitOptions = allSubUnits
+                    .filter((su) => su.id !== selectedSubUnitId)
+                    .map((su) => ({
+                      id: su.id,
+                      name: `${spuNameById.get(su.spuId) ?? "SPU"} — ${su.name}`,
+                    }));
+                  const collaborationOptions = [...spuOptions, ...subUnitOptions].sort((a, b) =>
+                    a.name.localeCompare(b.name)
+                  );
                   return (
                     <FormItem>
-                      <FormLabel>Collaboration SPU(s) (Optional)</FormLabel>
+                      <FormLabel>Collaboration SPU(s) or Sub-Unit(s) (Optional)</FormLabel>
                       <FormControl>
                         <MultiSelectSpus
                           options={collaborationOptions}
@@ -613,7 +628,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         />
                       </FormControl>
                       <FormDescription>
-                        If you are collaborating with one or more other Primary SPUs, please select them here
+                        If you are collaborating with one or more other SPUs or sub-units, select them here
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
