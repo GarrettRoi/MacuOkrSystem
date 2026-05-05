@@ -67,6 +67,7 @@ import {
   inviteTokens,
   dataBackups,
   feedback,
+  appRatings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, inArray, ne, isNull, gt, sql, ilike } from "drizzle-orm";
@@ -256,10 +257,12 @@ export interface IStorage {
   restoreBackup(id: string): Promise<void>;
 
   // Feedback
-  createFeedback(data: { staffId: string; message: string }): Promise<import("@shared/schema").Feedback>;
+  createFeedback(data: { staffId: string; message: string; pageUrl?: string | null }): Promise<import("@shared/schema").Feedback>;
   getAllFeedback(): Promise<import("@shared/schema").FeedbackWithStaff[]>;
   markFeedbackRead(id: string): Promise<import("@shared/schema").Feedback>;
   getUnreadFeedbackCount(): Promise<number>;
+  createAppRating(data: { staffId: string; rating: string; pageUrl?: string | null; context?: string | null }): Promise<import("@shared/schema").AppRating>;
+  getAllAppRatings(): Promise<import("@shared/schema").AppRatingWithStaff[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1867,7 +1870,7 @@ export class DatabaseStorage implements IStorage {
       if (snap.universityProgressDatapoints?.length) await tx.insert(universityProgressDatapoints).values(snap.universityProgressDatapoints);
     });
   }
-  async createFeedback(data: { staffId: string; message: string }): Promise<import("@shared/schema").Feedback> {
+  async createFeedback(data: { staffId: string; message: string; pageUrl?: string | null }): Promise<import("@shared/schema").Feedback> {
     const [result] = await db.insert(feedback).values(data).returning();
     return result;
   }
@@ -1878,6 +1881,7 @@ export class DatabaseStorage implements IStorage {
         id: feedback.id,
         staffId: feedback.staffId,
         message: feedback.message,
+        pageUrl: feedback.pageUrl,
         submittedAt: feedback.submittedAt,
         isRead: feedback.isRead,
         staffName: staff.name,
@@ -1899,6 +1903,28 @@ export class DatabaseStorage implements IStorage {
       .from(feedback)
       .where(eq(feedback.isRead, false));
     return result?.count ?? 0;
+  }
+
+  async createAppRating(data: { staffId: string; rating: string; pageUrl?: string | null; context?: string | null }): Promise<import("@shared/schema").AppRating> {
+    const [result] = await db.insert(appRatings).values(data).returning();
+    return result;
+  }
+
+  async getAllAppRatings(): Promise<import("@shared/schema").AppRatingWithStaff[]> {
+    const results = await db
+      .select({
+        id: appRatings.id,
+        staffId: appRatings.staffId,
+        rating: appRatings.rating,
+        pageUrl: appRatings.pageUrl,
+        context: appRatings.context,
+        submittedAt: appRatings.submittedAt,
+        staffName: staff.name,
+      })
+      .from(appRatings)
+      .leftJoin(staff, eq(appRatings.staffId, staff.id))
+      .orderBy(desc(appRatings.submittedAt));
+    return results.map(r => ({ ...r, staffName: r.staffName ?? "Unknown" }));
   }
 }
 

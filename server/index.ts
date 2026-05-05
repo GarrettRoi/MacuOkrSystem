@@ -89,6 +89,15 @@ async function runStartupMigrations() {
       submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
       is_read BOOLEAN NOT NULL DEFAULT false
     )`,
+    `ALTER TABLE feedback ADD COLUMN IF NOT EXISTS page_url TEXT`,
+    `CREATE TABLE IF NOT EXISTS app_ratings (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_id VARCHAR NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      rating TEXT NOT NULL,
+      page_url TEXT,
+      context TEXT,
+      submitted_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
   ];
   let failed = 0;
   for (const sql of migrations) {

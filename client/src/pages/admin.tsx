@@ -17,8 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck } from "lucide-react";
-import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff } from "@shared/schema";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck, Smile, Frown } from "lucide-react";
+import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff, AppRatingWithStaff } from "@shared/schema";
 import { ALL_QUARTERS_LABEL } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
 import type { WidgetConfig } from "@/components/analytics-widget";
@@ -1551,6 +1551,13 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
       toast({ title: "Error", description: "Failed to mark feedback as read.", variant: "destructive" });
     },
   });
+
+  const { data: appRatingsList, isLoading: appRatingsLoading } = useQuery<AppRatingWithStaff[]>({
+    queryKey: ["/api/app-ratings"],
+    enabled: staff.role === "super_admin",
+  });
+  const goodRatingCount = (appRatingsList ?? []).filter(r => r.rating === "good").length;
+  const badRatingCount = (appRatingsList ?? []).filter(r => r.rating === "bad").length;
 
   type QuarterKey = "q1" | "q2" | "q3" | "q4";
   const { data: quarterlyDueDatesData } = useQuery<Record<QuarterKey, string | null>>({
@@ -4696,6 +4703,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         <TableRow>
                           <TableHead>Staff Member</TableHead>
                           <TableHead>Message</TableHead>
+                          <TableHead>Page</TableHead>
                           <TableHead>Submitted</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="w-28">Action</TableHead>
@@ -4709,6 +4717,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                             </TableCell>
                             <TableCell className="text-sm max-w-sm" data-testid={`text-feedback-message-${item.id}`}>
                               <p className="whitespace-pre-wrap break-words">{item.message}</p>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground font-mono max-w-xs" data-testid={`text-feedback-page-${item.id}`}>
+                              <span className="break-all">{item.pageUrl || "—"}</span>
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-feedback-date-${item.id}`}>
                               {new Date(item.submittedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
@@ -4735,6 +4746,86 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                                   Mark Read
                                 </Button>
                               )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Smile className="h-5 w-5" />
+                      App Ratings
+                    </CardTitle>
+                    <CardDescription>
+                      Quick reactions left by users after submitting OKRs.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="no-default-active-elevate" data-testid="badge-rating-good-count">
+                      <Smile className="h-3.5 w-3.5 mr-1 text-green-600" />
+                      {goodRatingCount} good
+                    </Badge>
+                    <Badge variant="secondary" className="no-default-active-elevate" data-testid="badge-rating-bad-count">
+                      <Frown className="h-3.5 w-3.5 mr-1 text-red-600" />
+                      {badRatingCount} bad
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {appRatingsLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-12 w-full" />
+                    ))}
+                  </div>
+                ) : !appRatingsList || appRatingsList.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No ratings submitted yet.
+                  </p>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-20">Rating</TableHead>
+                          <TableHead>Staff Member</TableHead>
+                          <TableHead>Context</TableHead>
+                          <TableHead>Page</TableHead>
+                          <TableHead>Submitted</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {appRatingsList.map((item) => (
+                          <TableRow key={item.id} data-testid={`row-rating-${item.id}`}>
+                            <TableCell data-testid={`text-rating-value-${item.id}`}>
+                              {item.rating === "good" ? (
+                                <Smile className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <Frown className="h-5 w-5 text-red-600" />
+                              )}
+                            </TableCell>
+                            <TableCell className="font-medium text-sm" data-testid={`text-rating-staff-${item.id}`}>
+                              {item.staffName}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground" data-testid={`text-rating-context-${item.id}`}>
+                              {item.context || "—"}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground font-mono max-w-xs" data-testid={`text-rating-page-${item.id}`}>
+                              <span className="break-all">{item.pageUrl || "—"}</span>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-rating-date-${item.id}`}>
+                              {new Date(item.submittedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                              {" "}
+                              {new Date(item.submittedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                             </TableCell>
                           </TableRow>
                         ))}

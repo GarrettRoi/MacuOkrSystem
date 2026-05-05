@@ -526,6 +526,7 @@ export const feedback = pgTable("feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
   message: text("message").notNull(),
+  pageUrl: text("page_url"),
   submittedAt: timestamp("submitted_at").notNull().defaultNow(),
   isRead: boolean("is_read").notNull().default(false),
 });
@@ -534,3 +535,17 @@ export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true
 export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
 export type Feedback = typeof feedback.$inferSelect;
 export type FeedbackWithStaff = Feedback & { staffName: string };
+
+export const appRatings = pgTable("app_ratings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
+  rating: text("rating").notNull(),
+  pageUrl: text("page_url"),
+  context: text("context"),
+  submittedAt: timestamp("submitted_at").notNull().defaultNow(),
+});
+
+export const insertAppRatingSchema = createInsertSchema(appRatings).omit({ id: true, submittedAt: true });
+export type InsertAppRating = z.infer<typeof insertAppRatingSchema>;
+export type AppRating = typeof appRatings.$inferSelect;
+export type AppRatingWithStaff = AppRating & { staffName: string };

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Plus, Trash2, Sparkles } from "lucide-react";
+import { CheckCircle2, Plus, Trash2, Sparkles, Smile, Frown } from "lucide-react";
 import type { StaffWithDetails, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { QUARTERS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -158,6 +158,35 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     }
   }, [keyResultOptions]);
 
+  const ratingMutation = useMutation({
+    mutationFn: async (rating: "good" | "bad") => {
+      const pageUrl = (typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+        : ""
+      ).slice(0, 500);
+      return await apiRequest("POST", "/api/app-ratings", {
+        rating,
+        pageUrl,
+        context: "okr_submitted",
+      });
+    },
+  });
+  const [ratingSubmitted, setRatingSubmitted] = useState<"good" | "bad" | null>(null);
+
+  const handleRate = (rating: "good" | "bad") => {
+    if (ratingSubmitted || ratingMutation.isPending) return;
+    setRatingSubmitted(rating);
+    ratingMutation.mutate(rating, {
+      onSuccess: () => {
+        toast({ title: "Thanks for the feedback!" });
+      },
+      onError: () => {
+        setRatingSubmitted(null);
+        toast({ title: "Failed to submit rating", variant: "destructive" });
+      },
+    });
+  };
+
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
       const normalizedKeyResults = data.keyResults.map(kr => ({
@@ -177,6 +206,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
       setIsSubmitted(true);
+      setRatingSubmitted(null);
       toast({
         title: "OKR Submitted Successfully",
         description: "Your OKR has been recorded in the system.",
@@ -304,6 +334,44 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.5, duration: 0.5 }}
+                  className="mb-6 mx-auto max-w-sm rounded-md border bg-muted/40 p-4"
+                  data-testid="rating-prompt"
+                >
+                  {ratingSubmitted ? (
+                    <p className="text-sm text-muted-foreground" data-testid="text-rating-thanks">
+                      Thanks for letting us know!
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium mb-3">How was your experience?</p>
+                      <div className="flex items-center justify-center gap-3">
+                        <Button
+                          variant="outline"
+                          onClick={() => handleRate("good")}
+                          disabled={ratingMutation.isPending}
+                          data-testid="button-rate-good"
+                        >
+                          <Smile className="h-5 w-5 mr-2 text-green-600" />
+                          Good
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleRate("bad")}
+                          disabled={ratingMutation.isPending}
+                          data-testid="button-rate-bad"
+                        >
+                          <Frown className="h-5 w-5 mr-2 text-red-600" />
+                          Bad
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6, duration: 0.5 }}
                 >
                   <Button 
                     onClick={handleSubmitAnother} 

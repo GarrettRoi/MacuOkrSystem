@@ -837,15 +837,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!staffId) {
         return res.status(401).json({ error: "Please select a staff profile first" });
       }
-      const schema = z.object({ message: z.string().min(1).max(2000) });
+      const schema = z.object({
+        message: z.string().min(1).max(2000),
+        pageUrl: z.string().max(500).optional(),
+      });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request body", details: parsed.error.errors });
       }
-      const entry = await storage.createFeedback({ staffId, message: parsed.data.message });
+      const entry = await storage.createFeedback({
+        staffId,
+        message: parsed.data.message,
+        pageUrl: parsed.data.pageUrl ?? null,
+      });
       res.status(201).json(entry);
     } catch (error) {
       res.status(500).json({ error: "Failed to submit feedback" });
+    }
+  });
+
+  // App ratings routes
+  app.post("/api/app-ratings", requireAuth, async (req, res) => {
+    try {
+      const staffId = req.session.selectedStaffId;
+      if (!staffId) {
+        return res.status(401).json({ error: "Please select a staff profile first" });
+      }
+      const schema = z.object({
+        rating: z.enum(["good", "bad"]),
+        pageUrl: z.string().max(500).optional(),
+        context: z.string().max(200).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body", details: parsed.error.errors });
+      }
+      const entry = await storage.createAppRating({
+        staffId,
+        rating: parsed.data.rating,
+        pageUrl: parsed.data.pageUrl ?? null,
+        context: parsed.data.context ?? null,
+      });
+      res.status(201).json(entry);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to submit rating" });
+    }
+  });
+
+  app.get("/api/app-ratings", requireAdmin, async (_req, res) => {
+    try {
+      const entries = await storage.getAllAppRatings();
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch ratings" });
     }
   });
 

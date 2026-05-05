@@ -18,7 +18,11 @@ export function FeedbackWidget() {
 
   const submitMutation = useMutation({
     mutationFn: async (msg: string) => {
-      return await apiRequest("POST", "/api/feedback", { message: msg });
+      const pageUrl = (typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+        : ""
+      ).slice(0, 500);
+      return await apiRequest("POST", "/api/feedback", { message: msg, pageUrl });
     },
     onSuccess: () => {
       toast({ title: "Feedback submitted", description: "Thank you for your feedback!" });
