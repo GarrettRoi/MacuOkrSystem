@@ -521,7 +521,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const staffMember = await storage.getStaffByEmail(email);
       if (!staffMember) {
-        return res.redirect(`/login?sso_error=no_account&email=${encodeURIComponent(email)}`);
+        console.warn(`[SSO] No MACU account for email "${email}" — redirecting to public dashboard.`);
+        return res.redirect(`/?sso=no_account&email=${encodeURIComponent(email)}`);
       }
 
       const isAdmin = staffMember.role === "super_admin";
