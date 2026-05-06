@@ -510,24 +510,47 @@ function DashboardTab() {
                                         )}
                                       </td>
                                     </tr>
-                                    {isExpanded && (
-                                      <tr className="bg-muted/10" data-testid={`row-drill-detail-${okr.id}`}>
-                                        <td colSpan={5} className="px-6 py-4">
-                                          {krs.length > 0 ? (
-                                            <div className="space-y-1">
-                                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Key Results</p>
-                                              {krs.map((kr: any, i: number) => (
-                                                <p key={i} className="text-xs text-foreground leading-snug pl-2 border-l-2 border-muted">
-                                                  KR {i + 1}: {typeof kr === "string" ? kr : kr.description}
-                                                </p>
-                                              ))}
-                                            </div>
-                                          ) : (
-                                            <p className="text-sm text-muted-foreground italic">No key results.</p>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    )}
+                                    {isExpanded && (() => {
+                                      const okrUpdates = (updates || [])
+                                        .filter(u => u.okrId === okr.id && (u.notes ?? "").trim().length > 0)
+                                        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+                                      return (
+                                        <tr className="bg-muted/10" data-testid={`row-drill-detail-${okr.id}`}>
+                                          <td colSpan={5} className="px-6 py-4 space-y-4">
+                                            {krs.length > 0 ? (
+                                              <div className="space-y-1">
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Key Results</p>
+                                                {krs.map((kr: any, i: number) => (
+                                                  <p key={i} className="text-xs text-foreground leading-snug pl-2 border-l-2 border-muted">
+                                                    KR {i + 1}: {typeof kr === "string" ? kr : kr.description}
+                                                  </p>
+                                                ))}
+                                              </div>
+                                            ) : (
+                                              <p className="text-sm text-muted-foreground italic">No key results.</p>
+                                            )}
+                                            {okrUpdates.length > 0 && (
+                                              <div className="space-y-1">
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Notes</p>
+                                                {okrUpdates.map((u) => (
+                                                  <div
+                                                    key={u.id}
+                                                    className="text-xs text-foreground leading-snug pl-2 border-l-2 border-muted"
+                                                    data-testid={`text-drill-notes-${u.id}`}
+                                                  >
+                                                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                                      {u.quarter} {u.year}
+                                                      {u.isPrimaryScore === false ? " · Collaborative" : ""}
+                                                    </p>
+                                                    <p className="whitespace-pre-wrap">{u.notes}</p>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })()}
                                   </React.Fragment>
                                 );
                               })}
