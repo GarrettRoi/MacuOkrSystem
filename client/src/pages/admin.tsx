@@ -1031,6 +1031,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
   const [addTeamMemberSpuId, setAddTeamMemberSpuId] = useState("");
   const [addTeamMemberSubUnitId, setAddTeamMemberSubUnitId] = useState("");
 
+  const [editTeamMemberOpen, setEditTeamMemberOpen] = useState(false);
+  const [editingTeamMember, setEditingTeamMember] = useState<{ id: string; name: string; email: string; spuId: string; subUnitId: string | null } | null>(null);
+
   const [selectedSpuIds, setSelectedSpuIds] = useState<Set<string>>(new Set());
   const [bulkDeleteSpuDialogOpen, setBulkDeleteSpuDialogOpen] = useState(false);
 
@@ -1956,6 +1959,30 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
   });
 
+  const updateTeamMemberMutation = useMutation({
+    mutationFn: async (data: { id: string; name: string; email: string; spuId: string; subUnitId: string | null }) => {
+      const { id, ...updates } = data;
+      const res = await apiRequest("PUT", `/api/staff/${id}`, updates);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/staff", staff.id, "basic-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      setEditTeamMemberOpen(false);
+      setEditingTeamMember(null);
+      toast({ title: "Team Member Updated", description: "The team member's details have been saved." });
+    },
+    onError: async (err: any) => {
+      let description = err?.message || "Failed to update team member.";
+      try {
+        const parsed = JSON.parse(description.replace(/^\d+:\s*/, ""));
+        if (parsed?.message) description = parsed.message;
+        else if (parsed?.error) description = parsed.error;
+      } catch {}
+      toast({ title: "Update Failed", description, variant: "destructive" });
+    },
+  });
+
   const updateSpuMutation = useMutation({
     mutationFn: async (data: { id: string; name: string }) => {
       const { id, ...updates } = data;
@@ -2261,19 +2288,39 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setManagingSubUnitsMember(member);
-                                setNewMemberSubUnitId("");
-                                setManageSubUnitsDialogOpen(true);
-                              }}
-                              data-testid={`button-manage-subunits-${member.id}`}
-                            >
-                              <Settings className="h-3 w-3 mr-1" />
-                              Sub-Units
-                            </Button>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingTeamMember({
+                                    id: member.id,
+                                    name: member.name,
+                                    email: member.email,
+                                    spuId: member.spuId,
+                                    subUnitId: member.subUnitId ?? null,
+                                  });
+                                  setEditTeamMemberOpen(true);
+                                }}
+                                data-testid={`button-edit-team-member-${member.id}`}
+                              >
+                                <Pencil className="h-3 w-3 mr-1" />
+                                Edit
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setManagingSubUnitsMember(member);
+                                  setNewMemberSubUnitId("");
+                                  setManageSubUnitsDialogOpen(true);
+                                }}
+                                data-testid={`button-manage-subunits-${member.id}`}
+                              >
+                                <Settings className="h-3 w-3 mr-1" />
+                                Sub-Units
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                         );
@@ -2389,6 +2436,121 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     setNewMemberSubUnitId("");
                   }} data-testid="button-close-manage-subunits">
                     Done
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Edit Team Member Dialog */}
+            <Dialog open={editTeamMemberOpen} onOpenChange={(open) => {
+              setEditTeamMemberOpen(open);
+              if (!open) setEditingTeamMember(null);
+            }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit Team Member</DialogTitle>
+                  <DialogDescription>
+                    Update this team member's name, email, SPU, or sub-unit. Role and admin status can only be changed by a super admin.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-team-member-name">Name</Label>
+                    <Input
+                      id="edit-team-member-name"
+                      value={editingTeamMember?.name || ""}
+                      onChange={(e) => setEditingTeamMember(editingTeamMember ? { ...editingTeamMember, name: e.target.value } : null)}
+                      placeholder="Full name"
+                      data-testid="input-edit-team-member-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-team-member-email">Email</Label>
+                    <Input
+                      id="edit-team-member-email"
+                      type="email"
+                      value={editingTeamMember?.email || ""}
+                      onChange={(e) => setEditingTeamMember(editingTeamMember ? { ...editingTeamMember, email: e.target.value } : null)}
+                      placeholder="name@macu.edu"
+                      data-testid="input-edit-team-member-email"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>SPU</Label>
+                    <Select
+                      value={editingTeamMember?.spuId || ""}
+                      onValueChange={(val) => setEditingTeamMember(editingTeamMember ? { ...editingTeamMember, spuId: val, subUnitId: null } : null)}
+                    >
+                      <SelectTrigger data-testid="select-edit-team-member-spu">
+                        <SelectValue placeholder="Select SPU" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {addStaffSpus.map((spu) => (
+                          <SelectItem key={spu.id} value={spu.id}>{spu.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {staff.role === "leader" && (
+                      <p className="text-xs text-muted-foreground">
+                        You can move them between SPUs you manage.
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Sub-Unit (optional)</Label>
+                    <Select
+                      value={editingTeamMember?.subUnitId || "none"}
+                      onValueChange={(val) => setEditingTeamMember(editingTeamMember ? { ...editingTeamMember, subUnitId: val === "none" ? null : val } : null)}
+                      disabled={!editingTeamMember?.spuId}
+                    >
+                      <SelectTrigger data-testid="select-edit-team-member-subunit">
+                        <SelectValue placeholder="No sub-unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No sub-unit</SelectItem>
+                        {(subUnits || [])
+                          .filter((su) => su.spuId === editingTeamMember?.spuId)
+                          .map((su) => (
+                            <SelectItem key={su.id} value={su.id}>{su.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditTeamMemberOpen(false);
+                      setEditingTeamMember(null);
+                    }}
+                    data-testid="button-cancel-edit-team-member"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    disabled={
+                      !editingTeamMember?.name?.trim() ||
+                      !editingTeamMember?.email?.trim() ||
+                      !editingTeamMember?.spuId ||
+                      updateTeamMemberMutation.isPending
+                    }
+                    onClick={() => {
+                      if (!editingTeamMember) return;
+                      updateTeamMemberMutation.mutate({
+                        id: editingTeamMember.id,
+                        name: editingTeamMember.name.trim(),
+                        email: editingTeamMember.email.trim(),
+                        spuId: editingTeamMember.spuId,
+                        subUnitId: editingTeamMember.subUnitId,
+                      });
+                    }}
+                    data-testid="button-confirm-edit-team-member"
+                  >
+                    {updateTeamMemberMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : null}
+                    Save Changes
                   </Button>
                 </DialogFooter>
               </DialogContent>

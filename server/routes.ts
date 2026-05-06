@@ -1574,16 +1574,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/staff/:id", requireAdmin, async (req, res) => {
+  app.put("/api/staff/:id", async (req, res) => {
     try {
+      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+
+      const sessionStaffId = req.session.selectedStaffId!;
+      const sessionStaff = await storage.getStaff(sessionStaffId);
+      const targetId = req.params.id;
+      const target = await storage.getStaff(targetId);
+      if (!target) {
+        return res.status(404).json({ error: "Staff not found" });
+      }
+
       const parsed = insertStaffSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
-      
-      const updatedStaff = await storage.updateStaff(req.params.id, parsed.data);
+      let updates = { ...parsed.data };
+
+      // Leaders may only edit basic users that are assigned to them, and may
+      // only change name / email / spuId / subUnitId — never role or isAdmin.
+      if (sessionStaff?.role === "leader") {
+        if (target.role !== "basic") {
+          return res.status(403).json({ error: "Leaders can only edit basic team members." });
+        }
+        const myBasics = await storage.getBasicUsersForLeader(sessionStaffId);
+        if (!myBasics.some(b => b.id === targetId)) {
+          return res.status(403).json({ error: "You can only edit team members assigned to you." });
+        }
+
+        const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+        const allowedSpuIds = new Set<string>([
+          sessionStaff.spuId,
+          ...assignments.map((a: any) => a.spuId),
+        ]);
+        if (!allowedSpuIds.has(target.spuId)) {
+          return res.status(403).json({ error: "This team member's SPU is outside your managed SPUs." });
+        }
+        const nextSpuId = updates.spuId ?? target.spuId;
+        if (!allowedSpuIds.has(nextSpuId)) {
+          return res.status(403).json({ error: "Leaders can only assign team members to SPUs they manage." });
+        }
+
+        const nextSubUnitId = updates.subUnitId === undefined ? target.subUnitId : updates.subUnitId;
+        if (nextSubUnitId) {
+          const targetSubUnit = await storage.getSubUnit(nextSubUnitId);
+          if (!targetSubUnit || targetSubUnit.spuId !== nextSpuId) {
+            return res.status(400).json({ error: "Selected sub-unit does not belong to the chosen SPU." });
+          }
+        }
+
+        // Strip any fields a leader is not allowed to change.
+        updates = {
+          name: updates.name,
+          email: updates.email,
+          spuId: nextSpuId,
+          subUnitId: updates.subUnitId === undefined ? undefined : updates.subUnitId,
+        } as typeof updates;
+      }
+
+      const updatedStaff = await storage.updateStaff(targetId, updates);
       res.json(sanitizeStaff(updatedStaff));
     } catch (error) {
+      console.error("Update staff error:", error);
       res.status(500).json({ error: "Failed to update staff" });
     }
   });
@@ -1731,7 +1784,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
-      
+
+      // Leaders may only adopt basic users whose primary SPU is already in
+      // their managed SPU set, to prevent claiming staff they don't oversee.
+      if (sessionStaff?.role === "leader") {
+        const basic = await storage.getStaff(parsed.data.basicId);
+        if (!basic) {
+          return res.status(404).json({ error: "Basic user not found" });
+        }
+        if (basic.role !== "basic") {
+          return res.status(400).json({ error: "Only basic users can be assigned to a leader" });
+        }
+        const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+        const managedSpuIds = new Set<string>([
+          sessionStaff.spuId,
+          ...assignments.map((a: any) => a.spuId),
+        ]);
+        if (!managedSpuIds.has(basic.spuId)) {
+          return res.status(403).json({ error: "You can only add team members from SPUs you manage." });
+        }
+      }
+
       const assignment = await storage.createLeaderBasicAssignment(parsed.data);
       res.status(201).json(assignment);
     } catch (error) {
