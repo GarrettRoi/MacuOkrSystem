@@ -2400,7 +2400,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 <DialogHeader>
                   <DialogTitle>Add Team Member</DialogTitle>
                   <DialogDescription>
-                    Create a new team member by name and email. They'll be added to your SPU and can optionally be assigned to a sub-unit.
+                    Create a new team member by name and email. Choose which of your SPUs they belong to and, optionally, a sub-unit within that SPU.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
@@ -2425,7 +2425,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       data-testid="input-team-member-email"
                     />
                   </div>
-                  {staff.role === "super_admin" && (
+                  {(staff.role === "super_admin" || addStaffSpus.length > 1) && (
                     <div className="space-y-2">
                       <Label>SPU</Label>
                       <Select
@@ -2439,11 +2439,16 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                           <SelectValue placeholder="Select SPU" />
                         </SelectTrigger>
                         <SelectContent>
-                          {(spus || []).map((spu) => (
+                          {addStaffSpus.map((spu) => (
                             <SelectItem key={spu.id} value={spu.id}>{spu.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      {staff.role === "leader" && (
+                        <p className="text-xs text-muted-foreground">
+                          Choose which of your SPUs this team member belongs to.
+                        </p>
+                      )}
                     </div>
                   )}
                   <div className="space-y-2">
