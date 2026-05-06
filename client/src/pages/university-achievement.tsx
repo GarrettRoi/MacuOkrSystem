@@ -125,15 +125,8 @@ function DashboardTab() {
   
   
   const okrsNeedingUpdate = filteredOkrs.filter((okr) => {
-    if (quarterFilter === "All") {
-      return getOkrProgress(okr.id) < 100;
-    }
-    const hasRecentUpdate = updates?.some((update) => {
-      const quarterMatch = update.quarter === quarterFilter;
-      const yearMatch = yearFilter === "All" || update.year === Number(yearFilter);
-      return update.okrId === okr.id && quarterMatch && yearMatch;
-    });
-    return !hasRecentUpdate;
+    const hasAnyUpdate = updates?.some((update) => update.okrId === okr.id);
+    return !hasAnyUpdate;
   }).length;
 
   const spuProgress = spus?.map((spu) => {
@@ -329,13 +322,13 @@ function DashboardTab() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Updates</CardTitle>
+              <CardTitle className="text-sm font-medium">Unscored OKRs</CardTitle>
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold" data-testid="text-pending-updates">{okrsNeedingUpdate}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Need quarterly updates
+                No quarterly score recorded
               </p>
             </CardContent>
           </Card>
