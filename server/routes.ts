@@ -153,10 +153,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (staff && staff.spu) {
           sessionData.selectedStaff = staff;
         } else {
-          delete req.session.selectedStaffId;
-          delete req.session.selectedStaffName;
-          delete sessionData.selectedStaffId;
-          delete sessionData.selectedStaffName;
+          // The session was tied to a staff record that no longer exists
+          // (e.g. the user was deleted by an admin). Don't keep them in any
+          // partially-authenticated state — destroy the whole session so they
+          // fall back to the public view instead of the staff-selection screen.
+          return req.session.destroy((err) => {
+            if (err) {
+              console.error("[session] destroy after stale selectedStaffId failed:", err);
+            }
+            res.clearCookie("connect.sid");
+            res.json({ authenticated: false });
+          });
         }
       }
       
@@ -521,8 +528,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const staffMember = await storage.getStaffByEmail(email);
       if (!staffMember) {
-        console.warn(`[SSO] No MACU account for email "${email}" — redirecting to public dashboard.`);
-        return res.redirect(`/?sso=no_account&email=${encodeURIComponent(email)}`);
+        console.warn(`[SSO] No MACU account for email "${email}" — destroying any prior session and redirecting to public dashboard.`);
+        // Destroy any pre-existing session so a previously-logged-in user
+        // (e.g. someone whose staff record was just deleted) doesn't end up
+        // back inside the authenticated shell after coming through SSO.
+        return req.session.destroy((err) => {
+          if (err) {
+            console.error("[SSO] session.destroy error in no_account branch:", err);
+          }
+          res.clearCookie("connect.sid");
+          res.redirect(`/?sso=no_account&email=${encodeURIComponent(email)}`);
+        });
       }
 
       const isAdmin = staffMember.role === "super_admin";
