@@ -1592,15 +1592,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       let updates = { ...parsed.data };
 
-      // Leaders may only edit basic users that are assigned to them, and may
+      // Leaders may only edit basic users that they oversee, and may
       // only change name / email / spuId / subUnitId — never role or isAdmin.
+      // "Oversee" matches My Team visibility: the user is either explicitly
+      // assigned via leader_basic_assignments OR their current primary SPU
+      // is one of the leader's managed SPUs (primary + staff_spu_assignments).
       if (sessionStaff?.role === "leader") {
         if (target.role !== "basic") {
           return res.status(403).json({ error: "Leaders can only edit basic team members." });
-        }
-        const myBasics = await storage.getBasicUsersForLeader(sessionStaffId);
-        if (!myBasics.some(b => b.id === targetId)) {
-          return res.status(403).json({ error: "You can only edit team members assigned to you." });
         }
 
         const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
@@ -1608,9 +1607,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sessionStaff.spuId,
           ...assignments.map((a: any) => a.spuId),
         ]);
-        if (!allowedSpuIds.has(target.spuId)) {
-          return res.status(403).json({ error: "This team member's SPU is outside your managed SPUs." });
+        const myBasics = await storage.getBasicUsersForLeader(sessionStaffId);
+        const explicitlyAssigned = myBasics.some(b => b.id === targetId);
+        const inManagedSpu = allowedSpuIds.has(target.spuId);
+        if (!explicitlyAssigned && !inManagedSpu) {
+          return res.status(403).json({ error: "You can only edit team members in SPUs you manage." });
         }
+
         const nextSpuId = updates.spuId ?? target.spuId;
         if (!allowedSpuIds.has(nextSpuId)) {
           return res.status(403).json({ error: "Leaders can only assign team members to SPUs they manage." });

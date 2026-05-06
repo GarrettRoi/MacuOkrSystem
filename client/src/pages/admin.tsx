@@ -1750,7 +1750,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
   });
 
   const updateStaffMutation = useMutation({
-    mutationFn: async (data: { id: string; name?: string; email?: string; role?: string; spuId?: string; subUnitId?: string }) => {
+    mutationFn: async (data: { id: string; name?: string; email?: string; role?: string; spuId?: string; subUnitId?: string | null }) => {
       const { id, ...updates } = data;
       return await apiRequest("PUT", `/api/staff/${id}`, updates);
     },
@@ -3369,7 +3369,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       email: editingStaff.email,
                       role: editingStaff.role,
                       spuId: editingStaff.spuId,
-                      subUnitId: editingStaff.subUnitId || undefined,
+                      subUnitId: editingStaff.subUnitId ?? null,
                     });
                   }}
                   disabled={!editingStaff?.name || !editingStaff?.email || !editingStaff?.spuId || updateStaffMutation.isPending || addSpuAssignmentMutation.isPending}
