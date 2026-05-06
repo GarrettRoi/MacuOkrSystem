@@ -2299,7 +2299,19 @@ export default function Data() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>SPU</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select
+                        value={field.value}
+                        onValueChange={(val) => {
+                          field.onChange(val);
+                          const currentSubUnitId = okrForm.getValues("subUnitId");
+                          const stillValid = (subUnits || []).some(
+                            (su) => su.id === currentSubUnitId && su.spuId === val
+                          );
+                          if (!stillValid) {
+                            okrForm.setValue("subUnitId", null);
+                          }
+                        }}
+                      >
                         <FormControl>
                           <SelectTrigger data-testid="select-edit-spu">
                             <SelectValue placeholder="Select SPU" />
