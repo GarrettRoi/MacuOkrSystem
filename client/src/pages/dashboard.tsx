@@ -111,19 +111,23 @@ export default function Dashboard() {
     keywordSearch !== "",
   ].filter(Boolean).length;
 
-  const getOkrProgress = (okrId: string): number => {
-    if (!updates) return 0;
+  const getOkrProgress = (okrId: string): number | null => {
+    if (!updates) return null;
     const okrUpdates = updates.filter(u => u.okrId === okrId && u.isPrimaryScore !== false);
-    if (okrUpdates.length === 0) return 0;
+    if (okrUpdates.length === 0) return null;
     const latest = okrUpdates.sort((a, b) =>
       new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
     )[0];
-    return latest.progress ?? 0;
+    // Only count an OKR once an actual score has been recorded.
+    return latest.averageScore ?? null;
   };
 
   const totalOkrs = filteredOkrs.length;
-  const avgProgress = totalOkrs > 0
-    ? Math.round(filteredOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / totalOkrs)
+  const scoredProgresses = filteredOkrs
+    .map(okr => getOkrProgress(okr.id))
+    .filter((p): p is number => p !== null);
+  const avgProgress = scoredProgresses.length > 0
+    ? Math.round(scoredProgresses.reduce((sum, p) => sum + p, 0) / scoredProgresses.length)
     : 0;
   
   const uniqueStaffWithOkrs = new Set(filteredOkrs.map((okr) => okr.staffId)).size;
@@ -139,8 +143,9 @@ export default function Dashboard() {
 
   const spuProgress = spus?.map((spu) => {
     const spuOkrs = filteredOkrs.filter((okr) => okr.spuId === spu.id);
-    const avgProg = spuOkrs.length > 0
-      ? Math.round(spuOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / spuOkrs.length)
+    const scored = spuOkrs.map(o => getOkrProgress(o.id)).filter((p): p is number => p !== null);
+    const avgProg = scored.length > 0
+      ? Math.round(scored.reduce((sum, p) => sum + p, 0) / scored.length)
       : 0;
     return {
       name: spu.name,

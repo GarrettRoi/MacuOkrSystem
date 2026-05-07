@@ -92,14 +92,15 @@ function DashboardTab() {
     keywordSearch !== "",
   ].filter(Boolean).length;
 
-  const getOkrProgress = (okrId: string): number => {
-    if (!updates) return 0;
+  const getOkrProgress = (okrId: string): number | null => {
+    if (!updates) return null;
     const okrUpdates = updates.filter(u => u.okrId === okrId && u.isPrimaryScore !== false);
-    if (okrUpdates.length === 0) return 0;
+    if (okrUpdates.length === 0) return null;
     const latest = okrUpdates.sort((a, b) =>
       new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
     )[0];
-    return latest.progress ?? 0;
+    // Only count an OKR once an actual score has been recorded.
+    return latest.averageScore ?? null;
   };
 
   const getKeyResults = (keyResultsJson: any) => {
@@ -118,21 +119,28 @@ function DashboardTab() {
   };
 
   const totalOkrs = filteredOkrs.length;
-  const completedOkrs = filteredOkrs.filter(okr => getOkrProgress(okr.id) >= 100).length;
-  const avgProgress = totalOkrs > 0
-    ? Math.round(filteredOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / totalOkrs)
+  const completedOkrs = filteredOkrs.filter(okr => (getOkrProgress(okr.id) ?? -1) >= 100).length;
+  const scoredProgresses = filteredOkrs
+    .map(okr => getOkrProgress(okr.id))
+    .filter((p): p is number => p !== null);
+  const avgProgress = scoredProgresses.length > 0
+    ? Math.round(scoredProgresses.reduce((sum, p) => sum + p, 0) / scoredProgresses.length)
     : 0;
   
   
   const okrsNeedingUpdate = filteredOkrs.filter((okr) => {
-    const hasAnyUpdate = updates?.some((update) => update.okrId === okr.id);
-    return !hasAnyUpdate;
+    // An OKR counts as "scored" only when its latest primary update has a recorded averageScore.
+    const hasScoredUpdate = updates?.some(
+      (u) => u.okrId === okr.id && u.isPrimaryScore !== false && u.averageScore !== null && u.averageScore !== undefined
+    );
+    return !hasScoredUpdate;
   }).length;
 
   const spuProgress = spus?.map((spu) => {
     const spuOkrs = filteredOkrs.filter((okr) => okr.spuId === spu.id);
-    const avgProg = spuOkrs.length > 0
-      ? Math.round(spuOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / spuOkrs.length)
+    const scored = spuOkrs.map(o => getOkrProgress(o.id)).filter((p): p is number => p !== null);
+    const avgProg = scored.length > 0
+      ? Math.round(scored.reduce((sum, p) => sum + p, 0) / scored.length)
       : 0;
     return {
       id: spu.id,
@@ -606,14 +614,20 @@ function TrendsTab() {
     }
   }, [years, selectedYear, comparisonYear]);
 
-  const getOkrProgress = (okrId: string): number => {
-    if (!updates) return 0;
+  const getOkrProgress = (okrId: string): number | null => {
+    if (!updates) return null;
     const okrUpdates = updates.filter(u => u.okrId === okrId && u.isPrimaryScore !== false);
-    if (okrUpdates.length === 0) return 0;
+    if (okrUpdates.length === 0) return null;
     const latest = okrUpdates.sort((a, b) =>
       new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
     )[0];
-    return latest.progress ?? 0;
+    // Only count an OKR once an actual score has been recorded.
+    return latest.averageScore ?? null;
+  };
+
+  const avgScoredProgress = (list: { id: string }[]): number => {
+    const scored = list.map(o => getOkrProgress(o.id)).filter((p): p is number => p !== null);
+    return scored.length > 0 ? scored.reduce((s, p) => s + p, 0) / scored.length : 0;
   };
 
   const quarterlyData = okrs
@@ -625,13 +639,8 @@ function TrendsTab() {
           (okr) => okr.year === parseInt(comparisonYear) && okr.quarter === quarter
         );
 
-        const currentAvg = currentYearOkrs.length > 0
-          ? currentYearOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / currentYearOkrs.length
-          : 0;
-
-        const comparisonAvg = comparisonYearOkrs.length > 0
-          ? comparisonYearOkrs.reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) / comparisonYearOkrs.length
-          : 0;
+        const currentAvg = avgScoredProgress(currentYearOkrs);
+        const comparisonAvg = avgScoredProgress(comparisonYearOkrs);
 
         return {
           quarter,
@@ -657,7 +666,8 @@ function TrendsTab() {
           }
 
           const progressPercent = getOkrProgress(okr.id);
-          
+          if (progressPercent === null) return acc;
+
           if (okr.year === parseInt(selectedYear)) {
             acc[spuName].currentYear += progressPercent;
             acc[spuName].currentCount += 1;
@@ -680,7 +690,7 @@ function TrendsTab() {
         const currentYearOkrs = okrs.filter(
           (okr) => okr.year === parseInt(selectedYear) && okr.quarter === quarter
         );
-        const completedCount = currentYearOkrs.filter((okr) => getOkrProgress(okr.id) >= 100).length;
+        const completedCount = currentYearOkrs.filter((okr) => (getOkrProgress(okr.id) ?? -1) >= 100).length;
         const completionRate = currentYearOkrs.length > 0
           ? Math.round((completedCount / currentYearOkrs.length) * 100)
           : 0;
@@ -696,15 +706,10 @@ function TrendsTab() {
 
   const totalOkrs = okrs?.filter((okr) => okr.year === parseInt(selectedYear)).length || 0;
   const completedOkrs = okrs?.filter(
-    (okr) => okr.year === parseInt(selectedYear) && getOkrProgress(okr.id) >= 100
+    (okr) => okr.year === parseInt(selectedYear) && (getOkrProgress(okr.id) ?? -1) >= 100
   ).length || 0;
   const avgProgress = okrs
-    ? Math.round(
-        okrs
-          .filter((okr) => okr.year === parseInt(selectedYear))
-          .reduce((sum, okr) => sum + getOkrProgress(okr.id), 0) /
-          (okrs.filter((okr) => okr.year === parseInt(selectedYear)).length || 1)
-      )
+    ? Math.round(avgScoredProgress(okrs.filter((okr) => okr.year === parseInt(selectedYear))))
     : 0;
 
   return (
@@ -1412,8 +1417,9 @@ function StrategicAdvancementTab() {
           <CardContent className="space-y-6">
             {snapshotObjectives.map(obj => {
               const krs = obj.keyResults ?? [];
-              const avg = krs.length > 0
-                ? Math.round(krs.reduce((s, kr) => s + (kr.progressPercent ?? 0), 0) / krs.length)
+              const scoredKrs = krs.filter(kr => kr.progressPercent !== null && kr.progressPercent !== undefined);
+              const avg = scoredKrs.length > 0
+                ? Math.round(scoredKrs.reduce((s, kr) => s + (kr.progressPercent as number), 0) / scoredKrs.length)
                 : 0;
               return (
                 <div key={obj.id} className="space-y-3" data-testid={`snapshot-objective-${obj.id}`}>

@@ -22,7 +22,7 @@ interface SpuGroup {
     okrs: EmployeeProgressRecord[];
   }[];
   allOkrs: EmployeeProgressRecord[];
-  overallProgress: number;
+  overallProgress: number | null;
 }
 
 interface AggregatedOkr {
@@ -144,8 +144,11 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     return [];
   };
 
-  const totalProgress = progressSummaries && progressSummaries.length > 0
-    ? Math.round(progressSummaries.reduce((sum, s) => sum + s.overallProgress, 0) / progressSummaries.length)
+  const scoredStaffProgress = (progressSummaries ?? [])
+    .map(s => s.overallProgress)
+    .filter((p): p is number => p !== null);
+  const totalProgress = scoredStaffProgress.length > 0
+    ? Math.round(scoredStaffProgress.reduce((sum, p) => sum + p, 0) / scoredStaffProgress.length)
     : 0;
 
   const spuGroups: SpuGroup[] = useMemo(() => {
@@ -173,9 +176,12 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
         return a.subUnitName.localeCompare(b.subUnitName);
       });
       const okrsList = subUnits.flatMap(s => s.okrs);
-      const prog = okrsList.length > 0
-        ? Math.round(okrsList.reduce((sum, r) => sum + (r.latestUpdate?.averageScore || 0), 0) / okrsList.length)
-        : 0;
+      const scored = okrsList
+        .map(r => r.latestUpdate?.averageScore)
+        .filter((v): v is number => v !== null && v !== undefined && !isNaN(v));
+      const prog = scored.length > 0
+        ? Math.round(scored.reduce((sum, v) => sum + v, 0) / scored.length)
+        : null;
       return { spuName: spu.spuName, spuId: spu.spuId, subUnits, allOkrs: okrsList, overallProgress: prog };
     }).sort((a, b) => a.spuName.localeCompare(b.spuName));
   }, [progressSummaries, selectedPlanningYear, planStartYear]);
@@ -343,9 +349,9 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="hidden sm:flex items-center gap-2 w-32">
-                            <Progress value={spuGroup.overallProgress} className="h-1.5 flex-1" />
+                            <Progress value={spuGroup.overallProgress ?? 0} className="h-1.5 flex-1" />
                           </div>
-                          <span className="text-lg font-bold tabular-nums w-14 text-right">{spuGroup.overallProgress}%</span>
+                          <span className="text-lg font-bold tabular-nums w-14 text-right">{spuGroup.overallProgress ?? 0}%</span>
                           <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-90" />
                         </div>
                       </div>

@@ -149,9 +149,15 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     return spus?.filter((spu) => spuIds.has(spu.id)) || [];
   }, [mySpuOkrs, spus]);
 
-  const totalProgress = filteredOkrs.length > 0
-    ? Math.round(filteredOkrs.reduce((sum, okr) => sum + okr.currentValue, 0) / filteredOkrs.length)
+  // Only count OKRs that actually have a recorded score (latest primary update with averageScore).
+  const okrScores = filteredOkrs
+    .map((okr) => getLatestUpdate(okr.id)?.averageScore)
+    .filter((s): s is number => s !== null && s !== undefined);
+  const totalProgress = okrScores.length > 0
+    ? Math.round(okrScores.reduce((sum, s) => sum + s, 0) / okrScores.length)
     : 0;
+  const scoredCount = okrScores.length;
+  const unscoredCount = filteredOkrs.length - scoredCount;
 
   const openEditDialog = (okr: OkrWithDetails) => {
     setEditingOkr(okr);
@@ -394,12 +400,12 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
           <CardHeader className="pb-2">
             <CardDescription>Scored</CardDescription>
             <CardTitle className="text-3xl" data-testid="text-scored">
-              {filteredOkrs.filter((o) => o.currentValue > 0).length}
+              {scoredCount}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
-              {filteredOkrs.filter((o) => o.currentValue === 0).length} not yet scored
+              {unscoredCount} not yet scored
             </p>
           </CardContent>
         </Card>

@@ -962,16 +962,18 @@ export class DatabaseStorage implements IStorage {
     for (const [staffId, staffRecords] of Array.from(staffMap.entries())) {
       const staff = staffRecords[0].okr.staff;
       
-      // Calculate overall progress (average across all OKRs, treating missing updates as 0)
-      const okrsWithProgress = staffRecords.map((r: EmployeeProgressRecord) => {
-        if (!r.latestUpdate || r.latestUpdate.averageScore === null || r.latestUpdate.averageScore === undefined || isNaN(r.latestUpdate.averageScore)) {
-          return 0;
-        }
-        return r.latestUpdate.averageScore;
-      });
-      const overallProgress = okrsWithProgress.length > 0
-        ? Math.round(okrsWithProgress.reduce((sum: number, score: number) => sum + score, 0) / okrsWithProgress.length)
-        : 0;
+      // Calculate overall progress (average across SCORED OKRs only; unscored OKRs are excluded)
+      const scoredProgress = staffRecords
+        .map((r: EmployeeProgressRecord) => {
+          if (!r.latestUpdate || r.latestUpdate.averageScore === null || r.latestUpdate.averageScore === undefined || isNaN(r.latestUpdate.averageScore)) {
+            return null;
+          }
+          return r.latestUpdate.averageScore;
+        })
+        .filter((score): score is number => score !== null);
+      const overallProgress = scoredProgress.length > 0
+        ? Math.round(scoredProgress.reduce((sum: number, score: number) => sum + score, 0) / scoredProgress.length)
+        : null;
       
       summaries.push({
         staff,
@@ -1311,7 +1313,7 @@ export class DatabaseStorage implements IStorage {
         ...obj,
         keyResults: krs
           .filter(kr => kr.objectiveId === obj.id)
-          .map(kr => ({ ...kr, progressPercent: progressMap.get(kr.id) ?? 0 })),
+          .map(kr => ({ ...kr, progressPercent: progressMap.get(kr.id) ?? null })),
         comment: commentMap.get(obj.id) ?? "",
       })),
       lastUpdated: lastUpdatedRow[0]?.value ?? null,

@@ -1244,7 +1244,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
       for (const obj of advancementData.objectives) {
         comments[obj.id] = obj.comment;
         for (const kr of obj.keyResults) {
-          progress[kr.id] = kr.progressPercent;
+          progress[kr.id] = kr.progressPercent ?? 0;
         }
       }
       setLocalProgress((prev) => {

@@ -403,7 +403,7 @@ export type UniversityKeyResultProgress = typeof universityKeyResultProgress.$in
 export type UniversityObjectiveComment = typeof universityObjectiveComments.$inferSelect;
 
 export type UniversityKeyResultWithProgress = UniversityKeyResult & {
-  progressPercent: number;
+  progressPercent: number | null;
 };
 
 export type UniversityObjectiveWithKeyResults = UniversityObjective & {
@@ -504,7 +504,7 @@ export type EmployeeProgressRecord = {
 
 export type EmployeeProgressSummary = {
   staff: StaffWithDetails;
-  overallProgress: number;
+  overallProgress: number | null;
   okrCount: number;
   okrs: EmployeeProgressRecord[];
 };
