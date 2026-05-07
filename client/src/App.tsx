@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient, apiRequest } from "./lib/queryClient";
 import { QueryClientProvider, useQuery, useMutation } from "@tanstack/react-query";
@@ -242,10 +242,29 @@ function AppContent() {
           <AuthenticatedRouter staff={selectedStaff} isAdmin={isAdmin} />
         </main>
       </div>
+      <ActivityTracker staffId={selectedStaff.id} />
       <FeedbackWidget />
       <Toaster />
     </>
   );
+}
+
+function ActivityTracker({ staffId }: { staffId: string }) {
+  const [location] = useLocation();
+  const lastSent = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (staffId === "admin-bypass") return;
+    if (!location) return;
+    const key = `${staffId}::${location}`;
+    if (lastSent.current === key) return;
+    lastSent.current = key;
+    apiRequest("POST", "/api/activity", { path: location }).catch(() => {
+      // best-effort; don't disrupt UX on failure
+    });
+  }, [location, staffId]);
+
+  return null;
 }
 
 function App() {

@@ -98,6 +98,16 @@ async function runStartupMigrations() {
       context TEXT,
       submitted_at TIMESTAMP NOT NULL DEFAULT NOW()
     )`,
+    `CREATE TABLE IF NOT EXISTS activity_log (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_id VARCHAR REFERENCES staff(id) ON DELETE SET NULL,
+      staff_name TEXT NOT NULL,
+      staff_email TEXT,
+      path TEXT NOT NULL,
+      occurred_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "IDX_activity_log_staff" ON activity_log(staff_id)`,
+    `CREATE INDEX IF NOT EXISTS "IDX_activity_log_occurred" ON activity_log(occurred_at)`,
   ];
   let failed = 0;
   for (const sql of migrations) {

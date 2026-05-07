@@ -68,7 +68,9 @@ import {
   dataBackups,
   feedback,
   appRatings,
+  activityLog,
 } from "@shared/schema";
+import type { ActivityLogEntry, InsertActivityLog, InactiveStaffEntry } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, inArray, ne, isNull, gt, sql, ilike } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -263,6 +265,11 @@ export interface IStorage {
   getUnreadFeedbackCount(): Promise<number>;
   createAppRating(data: { staffId: string; rating: string; pageUrl?: string | null; context?: string | null }): Promise<import("@shared/schema").AppRating>;
   getAllAppRatings(): Promise<import("@shared/schema").AppRatingWithStaff[]>;
+
+  // Activity Log
+  createActivityLog(data: InsertActivityLog): Promise<ActivityLogEntry>;
+  getActivityLogs(filters: { staffId?: string; limit?: number }): Promise<ActivityLogEntry[]>;
+  getInactiveStaff(days: number): Promise<InactiveStaffEntry[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1925,6 +1932,52 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(staff, eq(appRatings.staffId, staff.id))
       .orderBy(desc(appRatings.submittedAt));
     return results.map(r => ({ ...r, staffName: r.staffName ?? "Unknown" }));
+  }
+
+  async createActivityLog(data: InsertActivityLog): Promise<ActivityLogEntry> {
+    const [created] = await db.insert(activityLog).values(data).returning();
+    return created;
+  }
+
+  async getActivityLogs(filters: { staffId?: string; limit?: number }): Promise<ActivityLogEntry[]> {
+    const limit = Math.min(Math.max(filters.limit ?? 200, 1), 1000);
+    const where = filters.staffId ? eq(activityLog.staffId, filters.staffId) : undefined;
+    const q = db.select().from(activityLog).orderBy(desc(activityLog.occurredAt)).limit(limit);
+    const results = where ? await q.where(where) : await q;
+    return results;
+  }
+
+  async getInactiveStaff(days: number): Promise<InactiveStaffEntry[]> {
+    const safeDays = Math.max(1, Math.min(days, 365));
+    const threshold = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+
+    const lastByStaff = await db
+      .select({
+        staffId: activityLog.staffId,
+        lastAt: sql<Date>`MAX(${activityLog.occurredAt})`.as("last_at"),
+      })
+      .from(activityLog)
+      .groupBy(activityLog.staffId);
+
+    const lastMap = new Map<string, Date>();
+    for (const row of lastByStaff) {
+      if (row.staffId && row.lastAt) lastMap.set(row.staffId, new Date(row.lastAt as any));
+    }
+
+    const allStaff = await this.getAllStaffWithDetails();
+    const inactive: InactiveStaffEntry[] = [];
+    for (const s of allStaff) {
+      const last = lastMap.get(s.id) ?? null;
+      if (!last || last < threshold) {
+        inactive.push({ ...s, lastActivityAt: last });
+      }
+    }
+    inactive.sort((a, b) => {
+      const aT = a.lastActivityAt ? a.lastActivityAt.getTime() : 0;
+      const bT = b.lastActivityAt ? b.lastActivityAt.getTime() : 0;
+      return aT - bT;
+    });
+    return inactive;
   }
 }
 

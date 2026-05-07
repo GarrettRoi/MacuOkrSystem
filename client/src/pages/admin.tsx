@@ -17,8 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck, Smile, Frown } from "lucide-react";
-import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff, AppRatingWithStaff } from "@shared/schema";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck, Smile, Frown, Activity, UserX } from "lucide-react";
+import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff, AppRatingWithStaff, ActivityLogEntry, InactiveStaffEntry } from "@shared/schema";
 import { ALL_QUARTERS_LABEL } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
 import type { WidgetConfig } from "@/components/analytics-widget";
@@ -1562,6 +1562,31 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
   const goodRatingCount = (appRatingsList ?? []).filter(r => r.rating === "good").length;
   const badRatingCount = (appRatingsList ?? []).filter(r => r.rating === "bad").length;
 
+  // ─── Activity Log state ─────────────────────────────────────────────────────
+  const [activityFilterStaffId, setActivityFilterStaffId] = useState<string>("all");
+  const [inactiveDays, setInactiveDays] = useState<string>("30");
+
+  const { data: activityList, isLoading: activityLoading } = useQuery<ActivityLogEntry[]>({
+    queryKey: ["/api/admin/activity", activityFilterStaffId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (activityFilterStaffId && activityFilterStaffId !== "all") params.set("staffId", activityFilterStaffId);
+      params.set("limit", "300");
+      const r = await apiRequest("GET", `/api/admin/activity?${params.toString()}`);
+      return r.json();
+    },
+    enabled: staff.role === "super_admin",
+  });
+
+  const { data: inactiveData, isLoading: inactiveLoading } = useQuery<{ days: number; staff: InactiveStaffEntry[] }>({
+    queryKey: ["/api/admin/activity/inactive", inactiveDays],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/activity/inactive?days=${encodeURIComponent(inactiveDays)}`);
+      return r.json();
+    },
+    enabled: staff.role === "super_admin",
+  });
+
   type QuarterKey = "q1" | "q2" | "q3" | "q4";
   const { data: quarterlyDueDatesData } = useQuery<Record<QuarterKey, string | null>>({
     queryKey: ["/api/settings/quarterly-due-dates"],
@@ -2171,6 +2196,12 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                   {unreadFeedbackCount}
                 </Badge>
               )}
+            </TabsTrigger>
+          )}
+          {staff.role === "super_admin" && (
+            <TabsTrigger value="activity" data-testid="tab-activity">
+              <Activity className="h-4 w-4 mr-2" />
+              Activity
             </TabsTrigger>
           )}
           {staff.role === "super_admin" && (
@@ -4999,6 +5030,176 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       </TableBody>
                     </Table>
                   </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+        {staff.role === "super_admin" && (
+          <TabsContent value="activity">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="h-5 w-5" />
+                      Recent Activity
+                    </CardTitle>
+                    <CardDescription>
+                      Page visits by staff. Newest first. Filter by user to see one person's history.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm text-muted-foreground" htmlFor="select-activity-staff">User:</Label>
+                    <Select value={activityFilterStaffId} onValueChange={setActivityFilterStaffId}>
+                      <SelectTrigger id="select-activity-staff" className="w-64" data-testid="select-activity-staff">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All users</SelectItem>
+                        {(staffList ?? [])
+                          .slice()
+                          .sort((a, b) => compareNames(a.name, b.name))
+                          .map((s) => (
+                            <SelectItem key={s.id} value={s.id} data-testid={`option-activity-staff-${s.id}`}>
+                              {s.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {activityLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : !activityList || activityList.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8" data-testid="text-activity-empty">
+                    No activity recorded yet.
+                  </p>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Staff Member</TableHead>
+                          <TableHead>Page</TableHead>
+                          <TableHead className="w-56">When</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {activityList.map((entry) => (
+                          <TableRow key={entry.id} data-testid={`row-activity-${entry.id}`}>
+                            <TableCell className="font-medium text-sm" data-testid={`text-activity-staff-${entry.id}`}>
+                              {entry.staffName}
+                              {!entry.staffId && (
+                                <Badge variant="secondary" className="ml-2 no-default-active-elevate">deleted</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs font-mono text-muted-foreground" data-testid={`text-activity-path-${entry.id}`}>
+                              <span className="break-all">{entry.path}</span>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-activity-when-${entry.id}`}>
+                              {new Date(entry.occurredAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                              {" "}
+                              {new Date(entry.occurredAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <UserX className="h-5 w-5" />
+                      Inactive Users
+                    </CardTitle>
+                    <CardDescription>
+                      Staff with no recorded page visits in the selected window.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm text-muted-foreground" htmlFor="select-inactive-days">No activity in:</Label>
+                    <Select value={inactiveDays} onValueChange={setInactiveDays}>
+                      <SelectTrigger id="select-inactive-days" className="w-44" data-testid="select-inactive-days">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">Last 7 days</SelectItem>
+                        <SelectItem value="14">Last 14 days</SelectItem>
+                        <SelectItem value="30">Last 30 days</SelectItem>
+                        <SelectItem value="60">Last 60 days</SelectItem>
+                        <SelectItem value="90">Last 90 days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {inactiveLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3, 4].map((i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : !inactiveData || inactiveData.staff.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8" data-testid="text-inactive-empty">
+                    Everyone has been active in the last {inactiveDays} days.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-muted-foreground mb-3" data-testid="text-inactive-count">
+                      {inactiveData.staff.length} user{inactiveData.staff.length !== 1 ? "s" : ""} with no activity in the last {inactiveDays} days.
+                    </p>
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Staff Member</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>SPU</TableHead>
+                            <TableHead className="w-56">Last Activity</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {inactiveData.staff.map((s) => (
+                            <TableRow key={s.id} data-testid={`row-inactive-${s.id}`}>
+                              <TableCell className="font-medium text-sm" data-testid={`text-inactive-name-${s.id}`}>
+                                {s.name}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground" data-testid={`text-inactive-email-${s.id}`}>
+                                {s.email}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground" data-testid={`text-inactive-spu-${s.id}`}>
+                                {s.spu?.name ?? "—"}
+                                {s.subUnit?.name ? ` · ${s.subUnit.name}` : ""}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-inactive-last-${s.id}`}>
+                                {s.lastActivityAt ? (
+                                  <>
+                                    {new Date(s.lastActivityAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                                  </>
+                                ) : (
+                                  <Badge variant="secondary" className="no-default-active-elevate">Never</Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>

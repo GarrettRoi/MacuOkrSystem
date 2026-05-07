@@ -221,6 +221,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Activity Log ──────────────────────────────────────────────────────────
+  app.post("/api/activity", requireAuth, async (req, res) => {
+    try {
+      const staffId = req.session.selectedStaffId;
+      if (!staffId) {
+        return res.status(401).json({ error: "Please select a staff profile first" });
+      }
+      const staffMember = await storage.getStaff(staffId);
+      if (!staffMember) {
+        return res.status(401).json({ error: "Invalid staff session" });
+      }
+      const path = typeof req.body?.path === "string" ? req.body.path.slice(0, 500) : "";
+      if (!path) {
+        return res.status(400).json({ error: "path required" });
+      }
+      await storage.createActivityLog({
+        staffId: staffMember.id,
+        staffName: staffMember.name,
+        staffEmail: staffMember.email,
+        path,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[activity] log failed:", error);
+      res.status(500).json({ error: "Failed to log activity" });
+    }
+  });
+
+  app.get("/api/admin/activity", requireAuth, async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      const staffId = typeof req.query.staffId === "string" && req.query.staffId.length > 0
+        ? req.query.staffId : undefined;
+      const limit = req.query.limit ? Math.max(1, Math.min(parseInt(String(req.query.limit), 10) || 200, 1000)) : 200;
+      const logs = await storage.getActivityLogs({ staffId, limit });
+      res.json(logs);
+    } catch (error) {
+      console.error("[activity] list failed:", error);
+      res.status(500).json({ error: "Failed to fetch activity" });
+    }
+  });
+
+  app.get("/api/admin/activity/inactive", requireAuth, async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      const days = Math.max(1, Math.min(parseInt(String(req.query.days || "30"), 10) || 30, 365));
+      const list = await storage.getInactiveStaff(days);
+      res.json({ days, staff: list });
+    } catch (error) {
+      console.error("[activity] inactive failed:", error);
+      res.status(500).json({ error: "Failed to fetch inactive users" });
+    }
+  });
+
   // App Settings
   app.get("/api/settings/password-login", async (_req, res) => {
     try {

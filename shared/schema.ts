@@ -536,6 +536,23 @@ export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
 export type Feedback = typeof feedback.$inferSelect;
 export type FeedbackWithStaff = Feedback & { staffName: string };
 
+export const activityLog = pgTable("activity_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  staffId: varchar("staff_id").references(() => staff.id, { onDelete: "set null" }),
+  staffName: text("staff_name").notNull(),
+  staffEmail: text("staff_email"),
+  path: text("path").notNull(),
+  occurredAt: timestamp("occurred_at").notNull().defaultNow(),
+}, (table) => ({
+  staffIdx: index("IDX_activity_log_staff").on(table.staffId),
+  occurredIdx: index("IDX_activity_log_occurred").on(table.occurredAt),
+}));
+
+export const insertActivityLogSchema = createInsertSchema(activityLog).omit({ id: true, occurredAt: true });
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+export type ActivityLogEntry = typeof activityLog.$inferSelect;
+export type InactiveStaffEntry = StaffWithDetails & { lastActivityAt: Date | null };
+
 export const appRatings = pgTable("app_ratings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
