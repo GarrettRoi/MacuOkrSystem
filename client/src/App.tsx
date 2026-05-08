@@ -23,6 +23,7 @@ import SetPassword from "@/pages/set-password";
 import AppHeader from "@/components/app-header";
 import { FeedbackWidget } from "@/components/feedback-widget";
 import type { StaffWithDetails } from "@shared/schema";
+import { isLeaderRole } from "@shared/schema";
 
 function LoginRedirect() {
   useEffect(() => {
@@ -44,7 +45,7 @@ function AuthenticatedRouter({ staff, isAdmin }: { staff: StaffWithDetails; isAd
       <Route path="/employee-progress" component={() => <EmployeeProgress staff={staff} />} />
       <Route path="/trends" component={TrendsPage} />
       <Route path="/data" component={Data} />
-      {(isAdmin || staff.role === "leader" || staff.role === "super_admin") && (
+      {(isAdmin || isLeaderRole(staff.role) || staff.role === "super_admin") && (
         <Route path="/admin" component={() => <Admin staff={staff} isAdmin={isAdmin} />} />
       )}
       <Route path="/export" component={Export} />

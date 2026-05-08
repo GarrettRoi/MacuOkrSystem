@@ -20,6 +20,7 @@ import {
   insertStaffSpuAssignmentSchema,
   insertLeaderBasicAssignmentSchema,
   USER_ROLES,
+  isLeaderRole,
   spus,
   subUnits,
   staff,
@@ -1647,7 +1648,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/staff/:id", async (req, res) => {
     try {
-      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      if (!await requireRole(req, res, ["super_admin", "leader", "cabinet"])) return;
 
       const sessionStaffId = req.session.selectedStaffId!;
       const sessionStaff = await storage.getStaff(sessionStaffId);
@@ -1668,7 +1669,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // "Oversee" matches My Team visibility: the user is either explicitly
       // assigned via leader_basic_assignments OR their current primary SPU
       // is one of the leader's managed SPUs (primary + staff_spu_assignments).
-      if (sessionStaff?.role === "leader") {
+      if (sessionStaff && isLeaderRole(sessionStaff.role)) {
         if (target.role !== "basic") {
           return res.status(403).json({ error: "Leaders can only edit basic team members." });
         }
@@ -1781,14 +1782,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/staff/:staffId/assignments", async (req, res) => {
     try {
       // Only super admins and leaders can assign SPUs
-      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      if (!await requireRole(req, res, ["super_admin", "leader", "cabinet"])) return;
       
       const sessionStaffId = req.session.selectedStaffId!;
       const sessionStaff = await storage.getStaff(sessionStaffId);
       const targetStaffId = req.params.staffId;
       
       // Leaders can only assign SPUs to their own basic users
-      if (sessionStaff?.role === "leader" && sessionStaffId !== targetStaffId) {
+      if (sessionStaff && isLeaderRole(sessionStaff.role) && sessionStaffId !== targetStaffId) {
         const basicUsers = await storage.getBasicUsersForLeader(sessionStaffId);
         if (!basicUsers.find(u => u.id === targetStaffId)) {
           return res.status(403).json({ error: "Leaders can only manage their own basic users" });
@@ -1813,7 +1814,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/staff/:staffId/assignments/:assignmentId", async (req, res) => {
     try {
       // Only super admins and leaders can delete assignments
-      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      if (!await requireRole(req, res, ["super_admin", "leader", "cabinet"])) return;
       
       await storage.deleteStaffSpuAssignment(req.params.assignmentId);
       res.status(204).send();
@@ -1844,13 +1845,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leader-assignments", async (req, res) => {
     try {
       // Only super admins and leaders can create leader-basic assignments
-      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      if (!await requireRole(req, res, ["super_admin", "leader", "cabinet"])) return;
       
       const sessionStaffId = req.session.selectedStaffId!;
       const sessionStaff = await storage.getStaff(sessionStaffId);
       
       // Leaders can only assign themselves as leader
-      if (sessionStaff?.role === "leader" && req.body.leaderId !== sessionStaffId) {
+      if (sessionStaff && isLeaderRole(sessionStaff.role) && req.body.leaderId !== sessionStaffId) {
         return res.status(403).json({ error: "Leaders can only assign themselves" });
       }
       
@@ -1861,7 +1862,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Leaders may only adopt basic users whose primary SPU is already in
       // their managed SPU set, to prevent claiming staff they don't oversee.
-      if (sessionStaff?.role === "leader") {
+      if (sessionStaff && isLeaderRole(sessionStaff.role)) {
         const basic = await storage.getStaff(parsed.data.basicId);
         if (!basic) {
           return res.status(404).json({ error: "Basic user not found" });
@@ -1889,13 +1890,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/leader-assignments/:leaderId/:basicId", async (req, res) => {
     try {
       // Only super admins and the leader themselves can delete assignments
-      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      if (!await requireRole(req, res, ["super_admin", "leader", "cabinet"])) return;
       
       const sessionStaffId = req.session.selectedStaffId!;
       const sessionStaff = await storage.getStaff(sessionStaffId);
       
       // Leaders can only delete their own assignments
-      if (sessionStaff?.role === "leader" && req.params.leaderId !== sessionStaffId) {
+      if (sessionStaff && isLeaderRole(sessionStaff.role) && req.params.leaderId !== sessionStaffId) {
         return res.status(403).json({ error: "Leaders can only remove their own assignments" });
       }
       
@@ -1910,7 +1911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/users/create", async (req, res) => {
     try {
       // Super admins can create any role, leaders can only create basic users
-      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      if (!await requireRole(req, res, ["super_admin", "leader", "cabinet"])) return;
       
       const sessionStaffId = req.session.selectedStaffId!;
       const sessionStaff = await storage.getStaff(sessionStaffId);
@@ -1918,12 +1919,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { name, email, spuId, subUnitId, role } = req.body;
       
       // Leaders can only create basic users
-      if (sessionStaff?.role === "leader" && role !== "basic") {
+      if (sessionStaff && isLeaderRole(sessionStaff.role) && role !== "basic") {
         return res.status(403).json({ error: "Leaders can only create basic users" });
       }
 
       // Leaders can only create users in their primary or assigned SPUs.
-      if (sessionStaff?.role === "leader") {
+      if (sessionStaff && isLeaderRole(sessionStaff.role)) {
         const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
         const allowedSpuIds = new Set<string>([
           sessionStaff.spuId,
@@ -1967,7 +1968,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newStaff = await storage.createStaff(parsed.data);
       
       // If a leader created this user, automatically assign leader-basic relationship
-      if (sessionStaff?.role === "leader") {
+      if (sessionStaff && isLeaderRole(sessionStaff.role)) {
         await storage.createLeaderBasicAssignment({
           leaderId: sessionStaffId,
           basicId: newStaff.id,
@@ -2164,7 +2165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Super admins can create sub-units anywhere; leaders can only create
       // them inside SPUs they manage (primary or assigned).
-      if (!await requireRole(req, res, ["super_admin", "leader"])) return;
+      if (!await requireRole(req, res, ["super_admin", "leader", "cabinet"])) return;
 
       const parsed = insertSubUnitSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -2174,7 +2175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sessionStaffId = req.session.selectedStaffId!;
       const sessionStaff = await storage.getStaff(sessionStaffId);
 
-      if (sessionStaff?.role === "leader") {
+      if (sessionStaff && isLeaderRole(sessionStaff.role)) {
         const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
         const allowedSpuIds = new Set<string>([
           sessionStaff.spuId,
@@ -2288,7 +2289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!callerStaff) {
           return res.status(401).json({ error: "Invalid session" });
         }
-        if (callerStaff.role === "leader") {
+        if (isLeaderRole(callerStaff.role)) {
           callerIsLeaderOnly = true;
         } else if (callerStaff.role !== "super_admin") {
           return res.status(403).json({ error: "Forbidden: Admin, super admin, or leader access required" });
@@ -2375,7 +2376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!callerStaff) {
           return res.status(401).json({ error: "Invalid session" });
         }
-        if (callerStaff.role === "leader") {
+        if (isLeaderRole(callerStaff.role)) {
           callerIsLeaderOnly = true;
         } else if (callerStaff.role !== "super_admin") {
           return res.status(403).json({ error: "Forbidden: Admin, super admin, or leader access required" });
@@ -2556,7 +2557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (sessionStaff.subUnitId && parsed.data.subUnitId !== sessionStaff.subUnitId) {
             return res.status(403).json({ error: "Forbidden: You can only submit OKRs for your assigned sub-unit." });
           }
-        } else if (sessionStaff?.role === "leader") {
+        } else if (sessionStaff && isLeaderRole(sessionStaff.role)) {
           const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
           const allowedSpuIds = new Set<string>([
             sessionStaff.spuId,
@@ -2605,7 +2606,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ error: "Forbidden: Admin or Leader access required" });
         }
         const sessionStaff = await storage.getStaff(sessionStaffId);
-        if (!sessionStaff || sessionStaff.role !== "leader") {
+        if (!sessionStaff || !isLeaderRole(sessionStaff.role)) {
           return res.status(403).json({ error: "Forbidden: Admin or Leader access required" });
         }
         isLeaderOnly = true;
@@ -2833,7 +2834,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (sessionStaff.subUnitId && okr.subUnitId !== sessionStaff.subUnitId) {
             return res.status(403).json({ error: "Forbidden: You can only score OKRs in your assigned sub-unit." });
           }
-        } else if (sessionStaff?.role === "leader") {
+        } else if (sessionStaff && isLeaderRole(sessionStaff.role)) {
           const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
           const allowedSpuIds = new Set<string>([
             sessionStaff.spuId,
@@ -4643,7 +4644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return su;
       };
 
-      const getOrCreateStaff = async (name: string, role: "super_admin" | "leader" | "basic", spuId: string, subUnitId: string | null) => {
+      const getOrCreateStaff = async (name: string, role: UserRole, spuId: string, subUnitId: string | null) => {
         const nameKey = name.toLowerCase();
         if (staffByName.has(nameKey)) return staffByName.get(nameKey)!;
         const emailBase = name.toLowerCase().replace(/[^a-z0-9]/g, ".").replace(/\.+/g, ".");

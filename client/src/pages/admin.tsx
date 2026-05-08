@@ -19,7 +19,7 @@ import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck, Smile, Frown, Activity, UserX } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff, AppRatingWithStaff, ActivityLogEntry, InactiveStaffEntry } from "@shared/schema";
-import { ALL_QUARTERS_LABEL } from "@shared/schema";
+import { ALL_QUARTERS_LABEL, isLeaderRole } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
 import type { WidgetConfig } from "@/components/analytics-widget";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -1000,7 +1000,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
   const [newStaffEmail, setNewStaffEmail] = useState("");
   const [newStaffSpu, setNewStaffSpu] = useState("");
   const [newStaffSubUnit, setNewStaffSubUnit] = useState("");
-  const [newStaffRole, setNewStaffRole] = useState<"super_admin" | "leader" | "basic">("basic");
+  const [newStaffRole, setNewStaffRole] = useState<"super_admin" | "leader" | "cabinet" | "basic">("basic");
   const [newYear, setNewYear] = useState("");
   
   const [editingSpu, setEditingSpu] = useState<Spu | null>(null);
@@ -1131,7 +1131,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
       if (!response.ok) return [];
       return response.json();
     },
-    enabled: staff.role === "leader" || staff.role === "super_admin",
+    enabled: isLeaderRole(staff.role) || staff.role === "super_admin",
   });
 
   const { data: passwordLoginSetting } = useQuery<{ enabled: boolean }>({
@@ -2154,13 +2154,13 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
 
       <Tabs defaultValue={staff.role === "super_admin" ? "staff" : "myteam"} className="space-y-6">
         <TabsList>
-          {(staff.role === "leader" || staff.role === "super_admin") && (
+          {(isLeaderRole(staff.role) || staff.role === "super_admin") && (
             <TabsTrigger value="myteam" data-testid="tab-myteam">
               <Users className="h-4 w-4 mr-2" />
               My Team
             </TabsTrigger>
           )}
-          {staff.role === "leader" && (
+          {isLeaderRole(staff.role) && (
             <TabsTrigger value="myspus" data-testid="tab-myspus">
               <LayoutDashboard className="h-4 w-4 mr-2" />
               My SPUs
@@ -2212,7 +2212,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
           )}
         </TabsList>
 
-        {(staff.role === "leader" || staff.role === "super_admin") && (
+        {(isLeaderRole(staff.role) || staff.role === "super_admin") && (
           <TabsContent value="myteam">
             <Card>
               <CardHeader>
@@ -2228,7 +2228,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        const defaultSpu = staff.role === "leader"
+                        const defaultSpu = isLeaderRole(staff.role)
                           ? (staff.spuId || addStaffSpus[0]?.id || "")
                           : (addStaffSpus[0]?.id || "");
                         setAddSubUnitForSpuId(defaultSpu);
@@ -2246,7 +2246,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       onClick={() => {
                         setAddTeamMemberName("");
                         setAddTeamMemberEmail("");
-                        const defaultSpu = staff.role === "leader"
+                        const defaultSpu = isLeaderRole(staff.role)
                           ? (staff.spuId || "")
                           : (addStaffSpus[0]?.id || "");
                         setAddTeamMemberSpuId(defaultSpu);
@@ -2521,7 +2521,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         ))}
                       </SelectContent>
                     </Select>
-                    {staff.role === "leader" && (
+                    {isLeaderRole(staff.role) && (
                       <p className="text-xs text-muted-foreground">
                         You can move them between SPUs you manage.
                       </p>
@@ -2637,7 +2637,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                           ))}
                         </SelectContent>
                       </Select>
-                      {staff.role === "leader" && (
+                      {isLeaderRole(staff.role) && (
                         <p className="text-xs text-muted-foreground">
                           Choose which of your SPUs this team member belongs to.
                         </p>
@@ -2706,7 +2706,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
           </TabsContent>
         )}
 
-        {staff.role === "leader" && (
+        {isLeaderRole(staff.role) && (
           <TabsContent value="myspus">
             <Card>
               <CardHeader>
@@ -2922,13 +2922,14 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="staff-role">Role *</Label>
-                        <Select value={newStaffRole} onValueChange={(v) => setNewStaffRole(v as "super_admin" | "leader" | "basic")}>
+                        <Select value={newStaffRole} onValueChange={(v) => setNewStaffRole(v as "super_admin" | "leader" | "cabinet" | "basic")}>
                           <SelectTrigger data-testid="select-staff-role">
                             <SelectValue placeholder="Select role" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="basic">Basic User</SelectItem>
                             <SelectItem value="leader">Leader User</SelectItem>
+                            <SelectItem value="cabinet">Cabinet User</SelectItem>
                             {staff.role === "super_admin" && (
                               <SelectItem value="super_admin">Super Admin</SelectItem>
                             )}
@@ -3041,11 +3042,13 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                               member.role === "super_admin" 
                                 ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" 
-                                : member.role === "leader" 
-                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" 
-                                  : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+                                : member.role === "cabinet"
+                                  ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
+                                  : member.role === "leader" 
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" 
+                                    : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
                             }`}>
-                              {member.role === "super_admin" ? "Super Admin" : member.role === "leader" ? "Leader" : "Basic"}
+                              {member.role === "super_admin" ? "Super Admin" : member.role === "cabinet" ? "Cabinet" : member.role === "leader" ? "Leader" : "Basic"}
                             </span>
                           </TableCell>
                           <TableCell>{getSpuName(member.spuId)}</TableCell>
@@ -3077,7 +3080,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                               if (names.length === 0) {
                                 return <span className="text-muted-foreground text-sm">—</span>;
                               }
-                              const isBasic = member.role !== "leader" && member.role !== "super_admin";
+                              const isBasic = !isLeaderRole(member.role) && member.role !== "super_admin";
                               return (
                                 <div className="flex flex-wrap gap-1 items-center">
                                   {names.map((spuName, idx) => (
@@ -3202,6 +3205,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     <SelectContent>
                       <SelectItem value="basic">Basic User</SelectItem>
                       <SelectItem value="leader">Leader User</SelectItem>
+                      <SelectItem value="cabinet">Cabinet User</SelectItem>
                       <SelectItem value="super_admin">Super Admin</SelectItem>
                     </SelectContent>
                   </Select>

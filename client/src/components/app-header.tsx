@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Home, FileText, TrendingUp, BarChart3, Settings, Download, LogOut, Award } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
+import { isLeaderRole } from "@shared/schema";
 
 interface AppHeaderProps {
   staff: StaffWithDetails;
@@ -22,7 +23,7 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
     { path: "/export", icon: Download, label: "Export", adminOnly: false },
   ];
 
-  const canAccessAdmin = isAdmin || staff.role === "leader" || staff.role === "super_admin";
+  const canAccessAdmin = isAdmin || isLeaderRole(staff.role) || staff.role === "super_admin";
   const navItems = allNavItems.filter((item) => !item.adminOnly || canAccessAdmin);
 
   return (

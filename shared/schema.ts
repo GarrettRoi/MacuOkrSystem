@@ -3,7 +3,14 @@ import { pgTable, text, varchar, integer, timestamp, boolean, json, jsonb, index
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const USER_ROLES = ["super_admin", "leader", "basic"] as const;
+export const USER_ROLES = ["super_admin", "leader", "cabinet", "basic"] as const;
+
+// "cabinet" has the exact same capabilities as "leader" — they manage SPUs and
+// the basic users assigned to them. Use this helper anywhere you would have
+// previously checked `role === "leader"` for a permissions decision.
+export function isLeaderRole(role?: string | null): boolean {
+  return role === "leader" || role === "cabinet";
+}
 
 // Session table managed by connect-pg-simple. Declared here so `npm run db:push`
 // (run by scripts/post-merge.sh after task merges) does NOT drop it.

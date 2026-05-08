@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { FileText, TrendingUp, BarChart3, Settings, Download, Database, ClipboardList, LayoutDashboard, Users, LineChart, CalendarClock } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
+import { isLeaderRole } from "@shared/schema";
 import { getSortableName } from "@/lib/utils";
 
 interface HomeProps {
@@ -41,7 +42,7 @@ function GeniusAnimation({ onDone }: { onDone: () => void }) {
 }
 
 export default function Home({ staff, isAdmin }: HomeProps) {
-  const isLeader = staff.role === "leader" || staff.role === "super_admin";
+  const isLeader = isLeaderRole(staff.role) || staff.role === "super_admin";
 
   const { data: geniusSetting, isSuccess: geniusSettingLoaded } = useQuery<{ showGeniusAnimation: boolean }>({
     queryKey: ["/api/settings/show-genius-animation"],

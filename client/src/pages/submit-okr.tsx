@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2, Sparkles, Smile, Frown } from "lucide-react";
 import type { StaffWithDetails, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { QUARTERS } from "@shared/schema";
+import { QUARTERS, isLeaderRole } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
@@ -69,7 +69,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   // Fetch SPU assignments for leaders/super_admins
   const { data: spuAssignments } = useQuery<any[]>({
     queryKey: ["/api/staff", staff.id, "spu-assignments"],
-    enabled: staff.role === "leader" || staff.role === "super_admin",
+    enabled: isLeaderRole(staff.role) || staff.role === "super_admin",
   });
 
   // Get available SPUs for this user
@@ -82,7 +82,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     }
     
     // Leaders can see their primary SPU plus assigned SPUs
-    if (staff.role === "leader") {
+    if (isLeaderRole(staff.role)) {
       const assignedSpuIds = (spuAssignments || []).map((a: any) => a.spuId);
       return spus.filter(spu => 
         spu.id === staff.spuId || assignedSpuIds.includes(spu.id)
@@ -557,7 +557,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         <FormDescription className="text-xs">
                           {lockedToSubUnit
                             ? "You can only submit OKRs for your assigned SPU and sub-unit."
-                            : staff.role === "leader" || staff.role === "super_admin" 
+                            : isLeaderRole(staff.role) || staff.role === "super_admin" 
                               ? "Choose the department this OKR targets. You can submit for your assigned SPUs."
                               : "Choose the department this OKR targets"}
                         </FormDescription>

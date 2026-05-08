@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Target, Calendar, Building2, TrendingUp, Filter, X, User, Users, Pencil, Plus, Minus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, isLeaderRole } from "@shared/schema";
 
 interface MyOkrsProps {
   staff: StaffWithDetails;
@@ -37,7 +37,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   const [editStatus, setEditStatus] = useState("not_started");
   const [editReason, setEditReason] = useState("");
 
-  const isAdmin = staff.role === "super_admin" || staff.role === "leader";
+  const isAdmin = staff.role === "super_admin" || isLeaderRole(staff.role);
 
   const { data: planStartYearData } = useQuery<{ startYear: number }>({
     queryKey: ["/api/settings/strategic-plan-start-year"],
