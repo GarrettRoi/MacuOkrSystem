@@ -9,19 +9,28 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from "recharts";
 import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar, Building2, Users, ChevronRight, ChevronDown } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, StrategicChartData, AnalyticsDashboardWithWidgets, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS, ALL_QUARTERS_LABEL } from "@shared/schema";
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
+import { MultiSelectSpus } from "@/components/multi-select-spus";
 
 
 function DashboardTab() {
   const [quarterFilter, setQuarterFilter] = usePersistedFilter("ua-dash:quarter", "All");
   const [yearFilter, setYearFilter] = usePersistedFilter("ua-dash:year", "All");
   const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("ua-dash:planningYear", "All");
-  const [spuFilter, setSpuFilter] = usePersistedFilter("ua-dash:spu", "All");
+  const [spuFilterRaw, setSpuFilterRaw] = usePersistedFilter("ua-dash:spu", "");
+  const spuFilterIds = useMemo(
+    () =>
+      !spuFilterRaw || spuFilterRaw === "All"
+        ? []
+        : spuFilterRaw.split(",").filter(Boolean),
+    [spuFilterRaw]
+  );
+  const setSpuFilterIds = (ids: string[]) => setSpuFilterRaw(ids.join(","));
   const [keywordSearch, setKeywordSearch] = usePersistedFilter("ua-dash:keyword", "");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [spuSearch, setSpuSearch] = useState<string>("");
@@ -65,7 +74,7 @@ function DashboardTab() {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
     const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
     const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
-    const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
+    const spuMatch = spuFilterIds.length === 0 || spuFilterIds.includes(okr.spuId);
     const keywordMatch = !keywordSearch || 
       okr.objectiveStatement.toLowerCase().includes(keywordSearch.toLowerCase()) ||
       parseMultiSelectField(okr.universityObjective).some(o => o.toLowerCase().includes(keywordSearch.toLowerCase())) ||
@@ -79,7 +88,7 @@ function DashboardTab() {
     setQuarterFilter("All");
     setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
-    setSpuFilter("All");
+    setSpuFilterIds([]);
     setKeywordSearch("");
     setSelectedSpuId(null);
   };
@@ -88,7 +97,7 @@ function DashboardTab() {
     quarterFilter !== "All",
     yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
     planningYearFilter !== "All",
-    spuFilter !== "All",
+    spuFilterIds.length > 0,
     keywordSearch !== "",
   ].filter(Boolean).length;
 
@@ -153,6 +162,62 @@ function DashboardTab() {
   const filteredSpuProgress = spuProgress.filter((spu) =>
     spu.name.toLowerCase().includes(spuSearch.toLowerCase())
   );
+
+  // Sub-unit breakdown: only computed when at least one SPU is selected.
+  // For each selected SPU, returns the SPU rollup + per-sub-unit averages
+  // (including a synthetic "No Sub-Unit" bucket for OKRs not assigned to one).
+  const subUnitBreakdown = useMemo(() => {
+    if (spuFilterIds.length === 0 || !spus) return [];
+    return spuFilterIds
+      .map((spuId) => {
+        const spu = spus.find((s) => s.id === spuId);
+        if (!spu) return null;
+        const spuOkrs = filteredOkrs.filter((o) => o.spuId === spuId);
+        const spuScored = spuOkrs.map((o) => getOkrProgress(o.id)).filter((p): p is number => p !== null);
+        const spuAvg = spuScored.length > 0
+          ? Math.round(spuScored.reduce((a, b) => a + b, 0) / spuScored.length)
+          : 0;
+
+        const buckets = new Map<string, { id: string | null; name: string; okrs: OkrWithDetails[] }>();
+        for (const okr of spuOkrs) {
+          const key = okr.subUnitId || "__none__";
+          const name = okr.subUnit?.name || "No Sub-Unit";
+          if (!buckets.has(key)) buckets.set(key, { id: okr.subUnitId || null, name, okrs: [] });
+          buckets.get(key)!.okrs.push(okr);
+        }
+
+        const subUnitRows = Array.from(buckets.values())
+          .map((b) => {
+            const scored = b.okrs.map((o) => getOkrProgress(o.id)).filter((p): p is number => p !== null);
+            const avg = scored.length > 0
+              ? Math.round(scored.reduce((a, c) => a + c, 0) / scored.length)
+              : 0;
+            return { id: b.id, name: b.name, progress: avg, count: b.okrs.length, scoredCount: scored.length };
+          })
+          .sort((a, b) => {
+            if (a.id === null) return 1;
+            if (b.id === null) return -1;
+            return a.name.localeCompare(b.name);
+          });
+
+        return {
+          spuId: spu.id,
+          spuName: spu.name,
+          spuProgress: spuAvg,
+          spuCount: spuOkrs.length,
+          spuScoredCount: spuScored.length,
+          subUnits: subUnitRows,
+        };
+      })
+      .filter(Boolean) as Array<{
+        spuId: string;
+        spuName: string;
+        spuProgress: number;
+        spuCount: number;
+        spuScoredCount: number;
+        subUnits: Array<{ id: string | null; name: string; progress: number; count: number; scoredCount: number }>;
+      }>;
+  }, [spuFilterIds, spus, filteredOkrs, updates]);
 
   const selectedSpuOkrs = useMemo(() => {
     if (!selectedSpuId) return [];
@@ -251,19 +316,13 @@ function DashboardTab() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Primary SPU</label>
-                  <Select value={spuFilter} onValueChange={setSpuFilter}>
-                    <SelectTrigger data-testid="select-filter-spu">
-                      <SelectValue placeholder="All SPUs" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All">All SPUs</SelectItem>
-                      {spus?.map((spu) => (
-                        <SelectItem key={spu.id} value={String(spu.id)} data-testid={`option-filter-spu-${spu.id}`}>
-                          {spu.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelectSpus
+                    options={spus?.map((s) => ({ id: s.id, name: s.name })) || []}
+                    selectedIds={spuFilterIds}
+                    onChange={setSpuFilterIds}
+                    placeholder="All SPUs"
+                    testIdPrefix="multi-select-filter-spu"
+                  />
                 </div>
               </div>
 
@@ -387,6 +446,63 @@ function DashboardTab() {
             )}
           </CardContent>
         </Card>
+
+        {subUnitBreakdown.length > 0 && (
+          <Card data-testid="card-sub-unit-breakdown">
+            <CardHeader>
+              <CardTitle>Sub-Unit Breakdown</CardTitle>
+              <CardDescription>
+                SPU total average plus the average for each sub-unit (only shown for selected SPUs)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {subUnitBreakdown.map((row) => {
+                const chartData = [
+                  { name: `${row.spuName} (Total)`, progress: row.spuProgress, isTotal: true },
+                  ...row.subUnits.map((su) => ({ name: su.name, progress: su.progress, isTotal: false })),
+                ];
+                return (
+                  <div key={row.spuId} className="space-y-3" data-testid={`section-breakdown-${row.spuId}`}>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-semibold text-base">{row.spuName}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {row.spuCount} OKR{row.spuCount !== 1 ? "s" : ""}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        Total avg{" "}
+                        <span className="font-semibold text-foreground" data-testid={`text-breakdown-total-${row.spuId}`}>
+                          {row.spuProgress}%
+                        </span>{" "}
+                        ({row.spuScoredCount} scored)
+                      </span>
+                    </div>
+                    {row.subUnits.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4">No OKRs for this SPU under the current filters.</p>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={Math.max(160, 60 + chartData.length * 36)}>
+                        <BarChart data={chartData} layout="vertical" margin={{ left: 16, right: 16 }}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis type="number" domain={[0, 100]} className="text-xs" />
+                          <YAxis type="category" dataKey="name" width={160} className="text-xs" />
+                          <Tooltip formatter={(value: number) => `${value}%`} />
+                          <Bar dataKey="progress" radius={[0, 4, 4, 0]}>
+                            {chartData.map((entry, idx) => (
+                              <Cell
+                                key={idx}
+                                fill={entry.isTotal ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))"}
+                              />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Cards chunked into rows so the drilldown can appear inline after its row */}
         {(() => {
