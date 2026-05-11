@@ -2288,12 +2288,31 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     <TableBody>
                       {myTeam.sort((a, b) => compareNames(a.name, b.name)).map((member) => {
                         const additionalSubUnitNames = getAdditionalSubUnitNames(member.id, member.spuId);
+                        const additionalSpuNames = Array.from(new Set(
+                          (allSpuAssignments || [])
+                            .filter(a => a.staffId === member.id && a.spuId !== member.spuId)
+                            .map(a => a.spu?.name || getSpuName(a.spuId))
+                            .filter((n): n is string => !!n)
+                        )).sort((a, b) => a.localeCompare(b));
                         return (
                         <TableRow key={member.id} data-testid={`row-team-${member.id}`}>
                           <TableCell className="font-medium">{member.name}</TableCell>
                           <TableCell>{member.email}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">{member.spu?.name || "-"}</Badge>
+                          <TableCell data-testid={`cell-team-spus-${member.id}`}>
+                            <div className="flex flex-wrap gap-1 items-center">
+                              <Badge variant="secondary" data-testid={`badge-team-primary-spu-${member.id}`}>
+                                {member.spu?.name || "-"}
+                              </Badge>
+                              {additionalSpuNames.map((name, idx) => (
+                                <Badge
+                                  key={`${member.id}-extra-spu-${idx}`}
+                                  variant="outline"
+                                  data-testid={`badge-team-additional-spu-${member.id}-${idx}`}
+                                >
+                                  {name}
+                                </Badge>
+                              ))}
+                            </div>
                           </TableCell>
                           <TableCell data-testid={`cell-team-subunits-${member.id}`}>
                             {!member.subUnit?.name && additionalSubUnitNames.length === 0 ? (
