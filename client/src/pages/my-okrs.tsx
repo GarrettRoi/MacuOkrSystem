@@ -45,15 +45,15 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   const planStartYear = planStartYearData?.startYear || 2024;
 
   const { data: spuOkrs, isLoading: okrsLoading } = useQuery<OkrWithDetails[]>({
-    queryKey: ["/api/okrs/by-spu", staff.spuId],
+    queryKey: ["/api/my-okrs", staff.id],
     queryFn: async () => {
-      const response = await fetch(`/api/okrs/by-spu/${staff.spuId}`, {
+      const response = await fetch(`/api/my-okrs`, {
         credentials: "include",
       });
-      if (!response.ok) throw new Error("Failed to fetch SPU OKRs");
+      if (!response.ok) throw new Error("Failed to fetch OKRs");
       return response.json();
     },
-    enabled: !!staff.spuId,
+    enabled: !!staff.id,
   });
 
   const { data: updates } = useQuery<QuarterlyUpdate[]>({
@@ -205,7 +205,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/okrs/by-spu", staff.spuId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-okrs", staff.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/edit-logs"] });
       closeEditDialog();

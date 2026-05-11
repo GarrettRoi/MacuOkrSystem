@@ -2518,6 +2518,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get OKRs visible to the current staff session: union of OKRs in the
+  // user's primary SPU + any assigned SPUs (for leaders/cabinet/super_admin),
+  // plus any OKRs they personally submitted (regardless of current SPU).
+  // This handles SPU re-orgs, multi-SPU leaders, and re-linked staff records.
+  app.get("/api/my-okrs", async (req, res) => {
+    try {
+      const sessionStaffId = req.session.selectedStaffId;
+      if (!sessionStaffId) {
+        return res.status(401).json({ error: "Please select a staff profile first" });
+      }
+
+      const staffMember = await storage.getStaff(sessionStaffId);
+      if (!staffMember) {
+        return res.status(401).json({ error: "Invalid staff session" });
+      }
+
+      const spuIds = new Set<string>();
+      if (staffMember.spuId) spuIds.add(staffMember.spuId);
+
+      // Leaders/cabinet/super_admin see OKRs across every SPU they manage.
+      if (isLeaderRole(staffMember.role) || staffMember.role === "super_admin") {
+        const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+        for (const a of assignments) {
+          if (a.spuId) spuIds.add(a.spuId);
+        }
+      }
+
+      const okrs = await storage.getOkrsWithDetailsForStaff(sessionStaffId, Array.from(spuIds));
+      res.json(okrs);
+    } catch (error) {
+      console.error("GET /api/my-okrs - Error:", error);
+      res.status(500).json({ error: "Failed to fetch OKRs" });
+    }
+  });
+
   app.post("/api/okrs", async (req, res) => {
     try {
       console.log("[POST /api/okrs] Request body:", JSON.stringify(req.body, null, 2));

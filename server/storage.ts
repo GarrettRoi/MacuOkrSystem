@@ -72,7 +72,7 @@ import {
 } from "@shared/schema";
 import type { ActivityLogEntry, InsertActivityLog, InactiveStaffEntry } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, inArray, ne, isNull, gt, sql, ilike } from "drizzle-orm";
+import { eq, and, or, asc, desc, inArray, ne, isNull, gt, sql, ilike } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 type BackupSnapshot = {
@@ -144,6 +144,7 @@ export interface IStorage {
   getOkrsBySpu(spuId: string): Promise<Okr[]>;
   countOkrsBySpu(spuId: string, year: number): Promise<number>;
   getOkrsWithDetailsBySpu(spuId: string): Promise<OkrWithDetails[]>;
+  getOkrsWithDetailsForStaff(staffId: string, spuIds: string[]): Promise<OkrWithDetails[]>;
   createOkr(okr: InsertOkr & { okrNumber: string }): Promise<Okr>;
   updateOkr(id: string, updates: Partial<Okr>): Promise<Okr>;
   deleteOkr(id: string): Promise<void>;
@@ -643,6 +644,71 @@ export class DatabaseStorage implements IStorage {
 
   async getOkrsBySpu(spuId: string): Promise<Okr[]> {
     return await db.select().from(okrs).where(eq(okrs.spuId, spuId));
+  }
+
+  async getOkrsWithDetailsForStaff(staffId: string, spuIds: string[]): Promise<OkrWithDetails[]> {
+    const okrSpu = alias(spus, 'okrSpu');
+    const okrSubUnit = alias(subUnits, 'okrSubUnit');
+    const staffSpu = alias(spus, 'staffSpu');
+    const staffSubUnit = alias(subUnits, 'staffSubUnit');
+    const collaborationSpu = alias(spus, 'collaborationSpu');
+
+    const conditions = [] as any[];
+    if (spuIds.length > 0) conditions.push(inArray(okrs.spuId, spuIds));
+    if (staffId) conditions.push(eq(okrs.staffId, staffId));
+    if (conditions.length === 0) return [];
+    const whereClause = conditions.length > 1 ? or(...conditions) : conditions[0];
+
+    const [result, allSpus] = await Promise.all([
+      db
+        .select({
+          okr: okrs,
+          staff: staff,
+          okrSpu: okrSpu,
+          okrSubUnit: okrSubUnit,
+          staffSpu: staffSpu,
+          staffSubUnit: staffSubUnit,
+          collaborationSpu: collaborationSpu,
+        })
+        .from(okrs)
+        .leftJoin(staff, eq(okrs.staffId, staff.id))
+        .leftJoin(okrSpu, eq(okrs.spuId, okrSpu.id))
+        .leftJoin(okrSubUnit, eq(okrs.subUnitId, okrSubUnit.id))
+        .leftJoin(staffSpu, eq(staff.spuId, staffSpu.id))
+        .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
+        .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id))
+        .where(whereClause),
+      db.select().from(spus),
+    ]);
+
+    const spuMap = new Map(allSpus.map(s => [s.id, s]));
+
+    return result.map((row) => {
+      const collabIds: string[] = (row.okr.collaborationSpuIds as string[] | null) || [];
+      const collaborationSpus = collabIds.map(id => spuMap.get(id)).filter(Boolean) as typeof allSpus;
+      return {
+        ...row.okr,
+        staff: row.staff ? {
+          ...safeStaff(row.staff),
+          spu: row.staffSpu!,
+          subUnit: row.staffSubUnit || null,
+        } : {
+          id: row.okr.staffId || "deleted",
+          name: row.okr.submitterName || "Unknown",
+          email: "",
+          spuId: row.okr.spuId,
+          subUnitId: null,
+          isAdmin: false,
+          role: "basic" as const,
+          spu: row.okrSpu!,
+          subUnit: null,
+        },
+        spu: row.okrSpu || null,
+        subUnit: row.okrSubUnit || null,
+        collaborationSpu: row.collaborationSpu || null,
+        collaborationSpus,
+      };
+    });
   }
 
   async countOkrsBySpu(spuId: string, year: number): Promise<number> {
