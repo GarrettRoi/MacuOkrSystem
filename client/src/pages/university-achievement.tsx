@@ -1688,7 +1688,7 @@ function StrategicAdvancementTab() {
             <div className="space-y-3">
               <div>
                 <h3 className="text-base font-semibold">Leadership Commentary</h3>
-                <p className="text-xs text-muted-foreground">Notes from leadership on progress for the objectives below.</p>
+                <p className="text-xs text-muted-foreground">Comments from leadership on progress for the objectives below.</p>
               </div>
               {objectives.filter(o => o.comment).map(obj => (
                 <Card key={obj.id} data-testid={`card-objective-comment-${obj.id}`}>
