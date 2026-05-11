@@ -2222,7 +2222,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       <Users className="h-5 w-5" />
                       My Team
                     </CardTitle>
-                    <CardDescription>All staff members in your SPUs (regardless of sub-unit)</CardDescription>
+                    <CardDescription>All OKR Submitters in your SPUs (regardless of sub-unit)</CardDescription>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <Button
