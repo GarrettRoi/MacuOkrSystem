@@ -7,8 +7,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Download, FileSpreadsheet, X } from "lucide-react";
-import type { OkrWithDetails, Spu } from "@shared/schema";
-import { getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, QUARTERS } from "@shared/schema";
+import * as XLSX from "xlsx";
+import type { OkrWithDetails, QuarterlyUpdate, Spu, StaffWithDetails } from "@shared/schema";
+import { getPlanningYear, parseMultiSelectField, PLANNING_YEARS, ALL_QUARTERS_LABEL, QUARTERS } from "@shared/schema";
+
+const NO_KR_LABEL = "(No Key Result)";
+
+function sanitizeSheetName(name: string, used: Set<string>): string {
+  let cleaned = name.replace(/[\\/:*?\[\]]/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) cleaned = "Sheet";
+  if (cleaned.length > 31) cleaned = cleaned.slice(0, 31);
+  let candidate = cleaned;
+  let i = 2;
+  while (used.has(candidate.toLowerCase())) {
+    const suffix = ` (${i++})`;
+    candidate = cleaned.slice(0, 31 - suffix.length) + suffix;
+  }
+  used.add(candidate.toLowerCase());
+  return candidate;
+}
 
 export default function Export() {
   const { toast } = useToast();
@@ -17,6 +34,7 @@ export default function Export() {
   const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("export:planningYear", "All");
   const [spuFilter, setSpuFilter] = usePersistedFilter("export:spu", "All");
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
   const { data: okrs } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
@@ -25,6 +43,15 @@ export default function Export() {
   const { data: spus } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
   });
+
+  const { data: updates } = useQuery<QuarterlyUpdate[]>({
+    queryKey: ["/api/quarterly-updates"],
+  });
+
+  const { data: session } = useQuery<{ authenticated: boolean; selectedStaff?: StaffWithDetails }>({
+    queryKey: ["/api/auth/session"],
+  });
+  const isSuperAdmin = session?.selectedStaff?.role === "super_admin";
 
   const { data: planStartYearData } = useQuery<{ startYear: number }>({
     queryKey: ["/api/settings/strategic-plan-start-year"],
@@ -101,6 +128,140 @@ export default function Export() {
       });
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const buildOkrRow = (okr: OkrWithDetails) => {
+    const okrUpdates = (updates || []).filter((u) => u.okrId === okr.id);
+    const primary = okrUpdates.filter((u) => u.isPrimaryScore !== false);
+    const latest = (primary.length > 0 ? primary : okrUpdates).sort(
+      (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
+    )[0];
+
+    let krScoresReadable = "";
+    if (latest?.keyResultScores) {
+      try {
+        const scores = Array.isArray(latest.keyResultScores)
+          ? latest.keyResultScores
+          : JSON.parse(latest.keyResultScores as unknown as string);
+        krScoresReadable = scores
+          .map((kr: any) => `KR${kr.keyResultNumber}: ${kr.score}%`)
+          .join("; ");
+      } catch {
+        krScoresReadable = String(latest.keyResultScores);
+      }
+    }
+
+    return {
+      "Staff Name": okr.staff?.name || "",
+      "Email": okr.staff?.email || "",
+      "Staff Primary SPU": okr.staff?.spu?.name || "",
+      "Staff Sub-Unit": okr.staff?.subUnit?.name || "",
+      "OKR Submitted for SPU": okr.spu?.name || "",
+      "OKR Submitted for Sub-Unit": okr.subUnit?.name || "",
+      "Collaboration SPU":
+        okr.collaborationSpus && okr.collaborationSpus.length > 0
+          ? okr.collaborationSpus.map((s: Spu) => s.name).join(", ")
+          : (okr.collaborationSpu?.name || ""),
+      "Quarter": okr.quarter,
+      "Year": okr.year,
+      "OKR Number": okr.okrNumber,
+      "University Objective": parseMultiSelectField(okr.universityObjective).join("; "),
+      "University Key Result": parseMultiSelectField(okr.universityKeyResult).join("; "),
+      "Objective Statement": okr.objectiveStatement,
+      "Key Results": typeof okr.keyResults === "string"
+        ? okr.keyResults
+        : JSON.stringify(okr.keyResults),
+      "Current %": okr.currentValue,
+      "Status": okr.status,
+      "Created Date": okr.createdAt ? new Date(okr.createdAt).toISOString().split("T")[0] : "",
+      "Latest Update Quarter": latest?.quarter || "",
+      "Latest Update Year": latest ? String(latest.year) : "",
+      "Latest Update Avg Score": latest?.averageScore ?? "",
+      "Latest Update KR Scores": krScoresReadable,
+      "Latest Update Additional Key Results": latest?.additionalKeyResults || "",
+      "Latest Update Notes": latest?.notes || "",
+      "Latest Update Date": latest ? new Date(latest.submittedAt).toISOString().split("T")[0] : "",
+    };
+  };
+
+  const handleExportXlsxByKr = async () => {
+    setIsExportingXlsx(true);
+    try {
+      // Group OKRs by university key result. An OKR with multiple KRs appears
+      // on every matching tab.
+      const groups = new Map<string, OkrWithDetails[]>();
+      for (const okr of filteredOkrs) {
+        const krs = parseMultiSelectField(okr.universityKeyResult);
+        const labels = krs.length > 0 ? krs : [NO_KR_LABEL];
+        for (const label of labels) {
+          const key = (label || NO_KR_LABEL).trim() || NO_KR_LABEL;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key)!.push(okr);
+        }
+      }
+
+      if (groups.size === 0) {
+        toast({
+          title: "Nothing to export",
+          description: "No OKRs match the current filters.",
+          variant: "destructive",
+        });
+        setIsExportingXlsx(false);
+        return;
+      }
+
+      const wb = XLSX.utils.book_new();
+      const usedNames = new Set<string>();
+
+      // Summary tab listing the KRs and OKR counts per tab.
+      const summaryRows = Array.from(groups.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([kr, list]) => ({
+          "University Key Result": kr,
+          "OKR Count": list.length,
+        }));
+      const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
+      summarySheet["!cols"] = [{ wch: 80 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, summarySheet, sanitizeSheetName("Summary", usedNames));
+
+      const sortedEntries = Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
+      for (const [krLabel, krOkrs] of sortedEntries) {
+        const rows = krOkrs.map(buildOkrRow);
+        const sheet = XLSX.utils.json_to_sheet(rows);
+        // Auto-width estimate
+        if (rows.length > 0) {
+          const cols = Object.keys(rows[0]).map((header) => {
+            const maxLen = Math.max(
+              header.length,
+              ...rows.map((r) => {
+                const v = (r as any)[header];
+                return v == null ? 0 : String(v).length;
+              }),
+            );
+            return { wch: Math.min(60, Math.max(10, maxLen + 2)) };
+          });
+          sheet["!cols"] = cols;
+        }
+        XLSX.utils.book_append_sheet(wb, sheet, sanitizeSheetName(krLabel, usedNames));
+      }
+
+      const date = new Date().toISOString().split("T")[0];
+      XLSX.writeFile(wb, `okrs_by_key_result_${quarterFilter}_${yearFilter}_${date}.xlsx`);
+
+      toast({
+        title: "Export Successful",
+        description: `Workbook created with ${groups.size} key-result tab${groups.size === 1 ? "" : "s"}.`,
+      });
+    } catch (error) {
+      console.error("[export] xlsx by KR failed:", error);
+      toast({
+        title: "Export Failed",
+        description: "There was an error generating the workbook. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExportingXlsx(false);
     }
   };
 
@@ -243,6 +404,33 @@ export default function Export() {
               {isExporting ? "Exporting..." : "Download CSV"}
             </Button>
           </div>
+
+          {isSuperAdmin && (
+            <Card className="bg-card border" data-testid="card-export-xlsx-by-kr">
+              <CardContent className="pt-6 space-y-4">
+                <div>
+                  <h4 className="font-semibold mb-1">Excel Workbook by Key Result</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Generates an .xlsx file with one tab per university key result. OKRs that
+                    list multiple key results will appear on each matching tab. A Summary tab
+                    lists every key result and its OKR count. Available to super admins only.
+                  </p>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={handleExportXlsxByKr}
+                    disabled={isExportingXlsx || filteredOkrs.length === 0 || !updates}
+                    data-testid="button-export-xlsx-by-kr"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {isExportingXlsx ? "Building workbook..." : "Download Excel (by KR)"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </CardContent>
       </Card>
     </div>
