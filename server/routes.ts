@@ -36,10 +36,12 @@ import {
   analyticsDashboards,
   analyticsWidgets,
   feedback,
+  sendAnnouncementSchema,
 } from "@shared/schema";
 import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole, AnalyticsData, Spu } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear } from "@shared/schema";
 import { z } from "zod";
+import webpush from "web-push";
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.isAdmin) {
@@ -4907,6 +4909,236 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const msg: string = error?.message ?? "Failed to restore backup";
       const status = msg.toLowerCase().includes("not found") || msg.toLowerCase().includes("malformed") ? 404 : 500;
       res.status(status).json({ error: msg });
+    }
+  });
+
+  // ── Web Push Notifications ───────────────────────────────────────────────────
+  const VAPID_PUBLIC_KEY_SETTING = "vapid_public_key";
+  const VAPID_PRIVATE_KEY_SETTING = "vapid_private_key";
+  const FALLBACK_VAPID_SUBJECT = "mailto:amanda.harris@macu.edu";
+
+  let cachedVapid: { publicKey: string; privateKey: string } | null = null;
+  async function ensureVapidKeys(): Promise<{ publicKey: string; privateKey: string }> {
+    if (cachedVapid) return cachedVapid;
+    let pub = await storage.getSetting(VAPID_PUBLIC_KEY_SETTING);
+    let priv = await storage.getSetting(VAPID_PRIVATE_KEY_SETTING);
+    if (!pub || !priv) {
+      const generated = webpush.generateVAPIDKeys();
+      await storage.setSetting(VAPID_PUBLIC_KEY_SETTING, generated.publicKey);
+      await storage.setSetting(VAPID_PRIVATE_KEY_SETTING, generated.privateKey);
+      pub = generated.publicKey;
+      priv = generated.privateKey;
+    }
+    const result = { publicKey: pub as string, privateKey: priv as string };
+    cachedVapid = result;
+    return result;
+  }
+
+  async function resolveVapidSubject(): Promise<string> {
+    try {
+      const supers = await storage.getStaffByRole("super_admin");
+      const amanda = supers.find((s) => (s.email || "").toLowerCase() === "amanda.harris@macu.edu");
+      const pick = amanda || supers.find((s) => !!s.email);
+      if (pick?.email) return `mailto:${pick.email}`;
+    } catch {}
+    return FALLBACK_VAPID_SUBJECT;
+  }
+
+  async function configureWebPushForSend() {
+    const keys = await ensureVapidKeys();
+    const subject = await resolveVapidSubject();
+    webpush.setVapidDetails(subject, keys.publicKey, keys.privateKey);
+  }
+
+  // Initialize keys at startup so the public key is available immediately.
+  ensureVapidKeys().catch((err) => console.error("[push] Failed to init VAPID keys", err));
+
+  app.get("/api/push/vapid-public-key", async (_req, res) => {
+    try {
+      const keys = await ensureVapidKeys();
+      res.json({ publicKey: keys.publicKey });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to load VAPID public key" });
+    }
+  });
+
+  const subscribeSchema = z.object({
+    endpoint: z.string().url(),
+    keys: z.object({
+      p256dh: z.string().min(1),
+      auth: z.string().min(1),
+    }),
+    userAgent: z.string().optional(),
+  });
+
+  app.post("/api/push/subscribe", async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const parsed = subscribeSchema.parse(req.body);
+      const row = await storage.upsertPushSubscription({
+        staffId: req.session.selectedStaffId,
+        endpoint: parsed.endpoint,
+        p256dh: parsed.keys.p256dh,
+        auth: parsed.keys.auth,
+        userAgent: parsed.userAgent ?? null,
+      });
+      res.json({ success: true, id: row.id });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid subscription", issues: err.issues });
+      }
+      console.error("[push] subscribe error", err);
+      res.status(500).json({ error: "Failed to save subscription" });
+    }
+  });
+
+  app.post("/api/push/unsubscribe", async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const endpoint = z.string().url().parse(req.body?.endpoint);
+      await storage.deletePushSubscriptionByEndpoint(endpoint);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ error: "Invalid endpoint" });
+    }
+  });
+
+  // SPUs that have at least one OKR for the given quarter+year but zero
+  // quarterly_updates for that same quarter+year.
+  async function spusMissingScore(quarter: string, year: number): Promise<string[]> {
+    const allOkrs = await storage.getAllOkrs();
+    const allUpdates = await storage.getAllQuarterlyUpdates();
+    const okrIdsForQuarter = new Set(
+      allOkrs.filter((o) => o.quarter === quarter && o.year === year).map((o) => o.id)
+    );
+    const okrIdToSpu = new Map(allOkrs.map((o) => [o.id, o.spuId] as const));
+    const spusWithOkrs = new Set<string>();
+    for (const o of allOkrs) {
+      if (o.quarter === quarter && o.year === year) spusWithOkrs.add(o.spuId);
+    }
+    const spusWithScore = new Set<string>();
+    for (const u of allUpdates) {
+      if (u.quarter === quarter && u.year === year && okrIdsForQuarter.has(u.okrId)) {
+        const spu = okrIdToSpu.get(u.okrId);
+        if (spu) spusWithScore.add(spu);
+      }
+    }
+    return Array.from(spusWithOkrs).filter((id) => !spusWithScore.has(id));
+  }
+
+  app.get("/api/announcements/spus-missing-score", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const quarter = String(req.query.quarter || "");
+      const year = parseInt(String(req.query.year || ""), 10);
+      if (!quarter || !Number.isFinite(year)) {
+        return res.status(400).json({ error: "quarter and year required" });
+      }
+      const spuIds = await spusMissingScore(quarter, year);
+      res.json({ quarter, year, spuIds });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to compute SPUs missing score" });
+    }
+  });
+
+  app.get("/api/announcements", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const list = await storage.getAllAnnouncements(100);
+      res.json(list);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to load announcements" });
+    }
+  });
+
+  app.post("/api/announcements", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const sender = await storage.getStaff(req.session.selectedStaffId!);
+      if (!sender) return res.status(403).json({ error: "Sender not found" });
+
+      const input = sendAnnouncementSchema.parse(req.body);
+
+      // Resolve audience -> staff IDs -> subscriptions
+      let targetSpuIds: string[] = [];
+      let staffIds: string[] = [];
+      let subs: Awaited<ReturnType<typeof storage.getAllPushSubscriptions>> = [];
+
+      if (input.audience.type === "all") {
+        subs = await storage.getAllPushSubscriptions();
+      } else {
+        if (input.audience.type === "spu_ids") {
+          targetSpuIds = input.audience.spuIds;
+        } else {
+          targetSpuIds = await spusMissingScore(input.audience.quarter, input.audience.year);
+        }
+        if (targetSpuIds.length > 0) {
+          // Staff whose primary SPU is in target set OR who have an assignment to one
+          const allStaff = await storage.getAllStaff();
+          const primary = allStaff.filter((s) => targetSpuIds.includes(s.spuId)).map((s) => s.id);
+          const assignmentRows = await db
+            .select({ staffId: staffSpuAssignments.staffId })
+            .from(staffSpuAssignments)
+            .where(sql`${staffSpuAssignments.spuId} = ANY(${targetSpuIds})`);
+          staffIds = Array.from(new Set([...primary, ...assignmentRows.map((r) => r.staffId)]));
+          subs = await storage.getPushSubscriptionsForStaff(staffIds);
+        }
+      }
+
+      await configureWebPushForSend();
+
+      const payload = JSON.stringify({
+        title: input.title,
+        body: input.body,
+        url: input.url || "/",
+      });
+
+      let success = 0;
+      let failure = 0;
+      const deadEndpoints: string[] = [];
+      await Promise.all(
+        subs.map(async (s) => {
+          try {
+            await webpush.sendNotification(
+              { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+              payload
+            );
+            success++;
+          } catch (err: any) {
+            failure++;
+            const status = err?.statusCode;
+            if (status === 404 || status === 410) deadEndpoints.push(s.endpoint);
+          }
+        })
+      );
+      // Clean up dead subscriptions
+      await Promise.all(deadEndpoints.map((e) => storage.deletePushSubscriptionByEndpoint(e)));
+
+      const record = await storage.createAnnouncement({
+        sentByStaffId: sender.id,
+        sentByName: sender.name,
+        title: input.title,
+        body: input.body,
+        url: input.url || null,
+        audienceType: input.audience.type,
+        audienceSpuIds: targetSpuIds,
+        audienceQuarter: input.audience.type === "spus_missing_score" ? input.audience.quarter : null,
+        audienceYear: input.audience.type === "spus_missing_score" ? input.audience.year : null,
+        recipientCount: subs.length,
+        successCount: success,
+        failureCount: failure,
+      });
+      res.json(record);
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid announcement", issues: err.issues });
+      }
+      console.error("[announcements] send error", err);
+      res.status(500).json({ error: "Failed to send announcement" });
     }
   });
 

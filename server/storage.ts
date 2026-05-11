@@ -69,6 +69,13 @@ import {
   feedback,
   appRatings,
   activityLog,
+  pushSubscriptions,
+  announcements,
+} from "@shared/schema";
+import type {
+  PushSubscriptionRow,
+  InsertPushSubscription,
+  Announcement,
 } from "@shared/schema";
 import type { ActivityLogEntry, InsertActivityLog, InactiveStaffEntry } from "@shared/schema";
 import { db } from "./db";
@@ -271,6 +278,19 @@ export interface IStorage {
   createActivityLog(data: InsertActivityLog): Promise<ActivityLogEntry>;
   getActivityLogs(filters: { staffId?: string; limit?: number }): Promise<ActivityLogEntry[]>;
   getInactiveStaff(days: number): Promise<InactiveStaffEntry[]>;
+
+  // Push Notifications
+  upsertPushSubscription(sub: InsertPushSubscription): Promise<PushSubscriptionRow>;
+  deletePushSubscriptionByEndpoint(endpoint: string): Promise<void>;
+  getAllPushSubscriptions(): Promise<PushSubscriptionRow[]>;
+  getPushSubscriptionsForStaff(staffIds: string[]): Promise<PushSubscriptionRow[]>;
+
+  // Announcements
+  createAnnouncement(data: Omit<Announcement, "id" | "sentAt">): Promise<Announcement>;
+  getAllAnnouncements(limit?: number): Promise<Announcement[]>;
+
+  // Staff by role
+  getStaffByRole(role: string): Promise<Staff[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1309,6 +1329,49 @@ export class DatabaseStorage implements IStorage {
         eq(leaderBasicAssignments.basicId, basicId)
       )
     );
+  }
+
+  async getStaffByRole(role: string): Promise<Staff[]> {
+    return await db.select().from(staff).where(eq(staff.role, role));
+  }
+
+  async upsertPushSubscription(sub: InsertPushSubscription): Promise<PushSubscriptionRow> {
+    const [row] = await db
+      .insert(pushSubscriptions)
+      .values(sub)
+      .onConflictDoUpdate({
+        target: pushSubscriptions.endpoint,
+        set: {
+          staffId: sub.staffId,
+          p256dh: sub.p256dh,
+          auth: sub.auth,
+          userAgent: sub.userAgent ?? null,
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async deletePushSubscriptionByEndpoint(endpoint: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+  }
+
+  async getAllPushSubscriptions(): Promise<PushSubscriptionRow[]> {
+    return await db.select().from(pushSubscriptions);
+  }
+
+  async getPushSubscriptionsForStaff(staffIds: string[]): Promise<PushSubscriptionRow[]> {
+    if (staffIds.length === 0) return [];
+    return await db.select().from(pushSubscriptions).where(inArray(pushSubscriptions.staffId, staffIds));
+  }
+
+  async createAnnouncement(data: Omit<Announcement, "id" | "sentAt">): Promise<Announcement> {
+    const [row] = await db.insert(announcements).values(data).returning();
+    return row;
+  }
+
+  async getAllAnnouncements(limit: number = 50): Promise<Announcement[]> {
+    return await db.select().from(announcements).orderBy(desc(announcements.sentAt)).limit(limit);
   }
 
   // App Settings

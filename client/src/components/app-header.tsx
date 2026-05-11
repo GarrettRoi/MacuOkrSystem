@@ -1,9 +1,10 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Home, FileText, TrendingUp, BarChart3, Settings, Download, LogOut, Award } from "lucide-react";
+import { Home, FileText, TrendingUp, BarChart3, Settings, Download, LogOut, Award, Bell, BellOff } from "lucide-react";
 import type { StaffWithDetails } from "@shared/schema";
 import { isLeaderRole } from "@shared/schema";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 interface AppHeaderProps {
   staff: StaffWithDetails;
@@ -25,6 +26,7 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
 
   const canAccessAdmin = isAdmin || isLeaderRole(staff.role) || staff.role === "super_admin";
   const navItems = allNavItems.filter((item) => !item.adminOnly || canAccessAdmin);
+  const push = usePushNotifications();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -71,6 +73,24 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
               <p className="text-xs text-muted-foreground">{staff.spu.name}</p>
             )}
           </div>
+          {push.supported && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => (push.subscribed ? push.unsubscribe() : push.subscribe())}
+              disabled={push.busy || push.permission === "denied"}
+              title={
+                push.permission === "denied"
+                  ? "Notifications blocked in browser settings"
+                  : push.subscribed
+                    ? "Disable announcement notifications"
+                    : "Enable announcement notifications"
+              }
+              data-testid="button-toggle-notifications"
+            >
+              {push.subscribed ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={onLogout} data-testid="button-logout">
             <LogOut className="h-4 w-4" />
           </Button>

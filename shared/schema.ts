@@ -560,6 +560,59 @@ export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
 export type ActivityLogEntry = typeof activityLog.$inferSelect;
 export type InactiveStaffEntry = StaffWithDetails & { lastActivityAt: Date | null };
 
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  staffIdx: index("IDX_push_subs_staff").on(table.staffId),
+}));
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+
+export const ANNOUNCEMENT_AUDIENCE_TYPES = ["all", "spu_ids", "spus_missing_score"] as const;
+export type AnnouncementAudienceType = typeof ANNOUNCEMENT_AUDIENCE_TYPES[number];
+
+export const announcements = pgTable("announcements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sentByStaffId: varchar("sent_by_staff_id").references(() => staff.id, { onDelete: "set null" }),
+  sentByName: text("sent_by_name").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  url: text("url"),
+  audienceType: text("audience_type").notNull(),
+  audienceSpuIds: text("audience_spu_ids").array().default([]),
+  audienceQuarter: text("audience_quarter"),
+  audienceYear: integer("audience_year"),
+  recipientCount: integer("recipient_count").notNull().default(0),
+  successCount: integer("success_count").notNull().default(0),
+  failureCount: integer("failure_count").notNull().default(0),
+  sentAt: timestamp("sent_at").notNull().defaultNow(),
+});
+
+export const sendAnnouncementSchema = z.object({
+  title: z.string().min(1, "Title required").max(120),
+  body: z.string().min(1, "Body required").max(500),
+  url: z.string().optional().nullable(),
+  audience: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("all") }),
+    z.object({ type: z.literal("spu_ids"), spuIds: z.array(z.string().min(1)).min(1) }),
+    z.object({
+      type: z.literal("spus_missing_score"),
+      quarter: z.string().min(1),
+      year: z.number().int(),
+    }),
+  ]),
+});
+export type SendAnnouncementInput = z.infer<typeof sendAnnouncementSchema>;
+export type Announcement = typeof announcements.$inferSelect;
+
 export const appRatings = pgTable("app_ratings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),

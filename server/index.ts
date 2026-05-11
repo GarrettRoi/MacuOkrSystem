@@ -108,6 +108,32 @@ async function runStartupMigrations() {
     )`,
     `CREATE INDEX IF NOT EXISTS "IDX_activity_log_staff" ON activity_log(staff_id)`,
     `CREATE INDEX IF NOT EXISTS "IDX_activity_log_occurred" ON activity_log(occurred_at)`,
+    `CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      staff_id VARCHAR NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "IDX_push_subs_staff" ON push_subscriptions(staff_id)`,
+    `CREATE TABLE IF NOT EXISTS announcements (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      sent_by_staff_id VARCHAR REFERENCES staff(id) ON DELETE SET NULL,
+      sent_by_name TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      url TEXT,
+      audience_type TEXT NOT NULL,
+      audience_spu_ids text[] DEFAULT ARRAY[]::text[],
+      audience_quarter TEXT,
+      audience_year INTEGER,
+      recipient_count INTEGER NOT NULL DEFAULT 0,
+      success_count INTEGER NOT NULL DEFAULT 0,
+      failure_count INTEGER NOT NULL DEFAULT 0,
+      sent_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
   ];
   let failed = 0;
   for (const sql of migrations) {

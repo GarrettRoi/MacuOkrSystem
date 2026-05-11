@@ -17,10 +17,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck, Smile, Frown, Activity, UserX } from "lucide-react";
-import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff, AppRatingWithStaff, ActivityLogEntry, InactiveStaffEntry } from "@shared/schema";
-import { ALL_QUARTERS_LABEL, isLeaderRole } from "@shared/schema";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck, Smile, Frown, Activity, UserX, Megaphone, Send } from "lucide-react";
+import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff, AppRatingWithStaff, ActivityLogEntry, InactiveStaffEntry, Announcement } from "@shared/schema";
+import { ALL_QUARTERS_LABEL, isLeaderRole, QUARTERS, getQuarterLabel } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
+import AnnouncementsPanel from "@/components/announcements-panel";
 import type { WidgetConfig } from "@/components/analytics-widget";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames, generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
@@ -2202,6 +2203,12 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
             <TabsTrigger value="activity" data-testid="tab-activity">
               <Activity className="h-4 w-4 mr-2" />
               Activity
+            </TabsTrigger>
+          )}
+          {staff.role === "super_admin" && (
+            <TabsTrigger value="announcements" data-testid="tab-announcements">
+              <Megaphone className="h-4 w-4 mr-2" />
+              Announcements
             </TabsTrigger>
           )}
           {staff.role === "super_admin" && (
@@ -5228,6 +5235,11 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+        )}
+        {staff.role === "super_admin" && (
+          <TabsContent value="announcements">
+            <AnnouncementsPanel />
           </TabsContent>
         )}
         {staff.role === "super_admin" && (
