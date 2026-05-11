@@ -2281,8 +2281,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Primary SPU</TableHead>
-                        <TableHead>Sub-Unit</TableHead>
-                        <TableHead>Additional Sub-Units</TableHead>
+                        <TableHead>Sub-Units</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -2296,16 +2295,19 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                           <TableCell>
                             <Badge variant="secondary">{member.spu?.name || "-"}</Badge>
                           </TableCell>
-                          <TableCell>
-                            {member.subUnit?.name ? (
-                              <Badge variant="outline">{member.subUnit.name}</Badge>
-                            ) : "-"}
-                          </TableCell>
-                          <TableCell data-testid={`cell-team-additional-subunits-${member.id}`}>
-                            {additionalSubUnitNames.length === 0 ? (
+                          <TableCell data-testid={`cell-team-subunits-${member.id}`}>
+                            {!member.subUnit?.name && additionalSubUnitNames.length === 0 ? (
                               <span className="text-muted-foreground text-sm">—</span>
                             ) : (
                               <div className="flex flex-wrap gap-1 items-center">
+                                {member.subUnit?.name && (
+                                  <Badge
+                                    variant="secondary"
+                                    data-testid={`badge-team-primary-subunit-${member.id}`}
+                                  >
+                                    {member.subUnit.name}
+                                  </Badge>
+                                )}
                                 {additionalSubUnitNames.map((name, idx) => (
                                   <Badge
                                     key={`${member.id}-extra-su-${idx}`}
