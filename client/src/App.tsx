@@ -42,6 +42,7 @@ function AuthenticatedRouter({ staff, isAdmin }: { staff: StaffWithDetails; isAd
       <Route path="/university-achievement" component={UniversityAchievement} />
       <Route path="/my-okrs" component={() => <MyOkrs staff={staff} />} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/all-okrs" component={() => <EmployeeProgress staff={staff} />} />
       <Route path="/employee-progress" component={() => <EmployeeProgress staff={staff} />} />
       <Route path="/trends" component={TrendsPage} />
       <Route path="/data" component={Data} />

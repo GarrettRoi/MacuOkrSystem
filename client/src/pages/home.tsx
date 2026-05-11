@@ -128,7 +128,7 @@ export default function Home({ staff, isAdmin }: HomeProps) {
       title: "All OKR's",
       description: "Detailed view of all OKRs and scores by SPU and staff member",
       icon: Users,
-      path: "/employee-progress",
+      path: "/all-okrs",
       color: "text-rose-600",
       bg: "bg-rose-50",
       adminOnly: false,
