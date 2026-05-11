@@ -144,7 +144,7 @@ export interface IStorage {
   getOkrsBySpu(spuId: string): Promise<Okr[]>;
   countOkrsBySpu(spuId: string, year: number): Promise<number>;
   getOkrsWithDetailsBySpu(spuId: string): Promise<OkrWithDetails[]>;
-  getOkrsWithDetailsForStaff(staffId: string, spuIds: string[]): Promise<OkrWithDetails[]>;
+  getOkrsWithDetailsForStaff(staffId: string | null, spuIds: string[]): Promise<OkrWithDetails[]>;
   createOkr(okr: InsertOkr & { okrNumber: string }): Promise<Okr>;
   updateOkr(id: string, updates: Partial<Okr>): Promise<Okr>;
   deleteOkr(id: string): Promise<void>;
@@ -646,7 +646,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(okrs).where(eq(okrs.spuId, spuId));
   }
 
-  async getOkrsWithDetailsForStaff(staffId: string, spuIds: string[]): Promise<OkrWithDetails[]> {
+  async getOkrsWithDetailsForStaff(staffId: string | null, spuIds: string[]): Promise<OkrWithDetails[]> {
     const okrSpu = alias(spus, 'okrSpu');
     const okrSubUnit = alias(subUnits, 'okrSubUnit');
     const staffSpu = alias(spus, 'staffSpu');

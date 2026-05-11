@@ -2518,10 +2518,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get OKRs visible to the current staff session: union of OKRs in the
-  // user's primary SPU + any assigned SPUs (for leaders/cabinet/super_admin),
-  // plus any OKRs they personally submitted (regardless of current SPU).
-  // This handles SPU re-orgs, multi-SPU leaders, and re-linked staff records.
+  // Get OKRs for the SPUs the current staff session is actively associated
+  // with: primary SPU for everyone, plus any assigned SPUs for
+  // leaders/cabinet/super_admin. OKRs from SPUs the user is no longer
+  // associated with are intentionally NOT included.
   app.get("/api/my-okrs", async (req, res) => {
     try {
       const sessionStaffId = req.session.selectedStaffId;
@@ -2545,7 +2545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const okrs = await storage.getOkrsWithDetailsForStaff(sessionStaffId, Array.from(spuIds));
+      const okrs = await storage.getOkrsWithDetailsForStaff(null, Array.from(spuIds));
       res.json(okrs);
     } catch (error) {
       console.error("GET /api/my-okrs - Error:", error);
