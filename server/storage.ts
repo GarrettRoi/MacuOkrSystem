@@ -60,6 +60,7 @@ import {
   universityKeyResultProgress,
   universityObjectiveComments,
   universityProgressDatapoints,
+  universityYearlySnapshots,
   analyticsDashboards,
   analyticsWidgets,
   editLogs,
@@ -197,6 +198,12 @@ export interface IStorage {
   getStrategicChartData(): Promise<import("@shared/schema").StrategicChartData>;
   setChartRange(range: import("@shared/schema").StrategicChartRange): Promise<void>;
   bulkUpsertChartDatapoints(items: Array<{ keyResultId: string; quarter: string; year: number; progressPercent: number | null }>): Promise<void>;
+
+  // Strategic Advancement — Yearly Snapshots
+  listYearlySnapshots(): Promise<import("@shared/schema").UniversityYearlySnapshot[]>;
+  getYearlySnapshot(year: number): Promise<import("@shared/schema").UniversityYearlySnapshot | null>;
+  upsertYearlySnapshot(year: number, payload: import("@shared/schema").YearlySnapshotPayload): Promise<import("@shared/schema").UniversityYearlySnapshot>;
+  deleteYearlySnapshot(year: number): Promise<void>;
 
   // Analytics Dashboards
   getAllAnalyticsDashboards(): Promise<AnalyticsDashboardWithWidgets[]>;
@@ -1516,6 +1523,31 @@ export class DatabaseStorage implements IStorage {
         }
       }
     }
+  }
+
+  async listYearlySnapshots(): Promise<import("@shared/schema").UniversityYearlySnapshot[]> {
+    const rows = await db.select().from(universityYearlySnapshots).orderBy(desc(universityYearlySnapshots.year));
+    return rows.map(r => ({ year: r.year, payload: r.payload as import("@shared/schema").YearlySnapshotPayload, updatedAt: r.updatedAt }));
+  }
+
+  async getYearlySnapshot(year: number): Promise<import("@shared/schema").UniversityYearlySnapshot | null> {
+    const rows = await db.select().from(universityYearlySnapshots).where(eq(universityYearlySnapshots.year, year));
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return { year: r.year, payload: r.payload as import("@shared/schema").YearlySnapshotPayload, updatedAt: r.updatedAt };
+  }
+
+  async upsertYearlySnapshot(year: number, payload: import("@shared/schema").YearlySnapshotPayload): Promise<import("@shared/schema").UniversityYearlySnapshot> {
+    const updatedAt = new Date();
+    await db
+      .insert(universityYearlySnapshots)
+      .values({ year, payload: payload as any, updatedAt })
+      .onConflictDoUpdate({ target: universityYearlySnapshots.year, set: { payload: payload as any, updatedAt } });
+    return { year, payload, updatedAt };
+  }
+
+  async deleteYearlySnapshot(year: number): Promise<void> {
+    await db.delete(universityYearlySnapshots).where(eq(universityYearlySnapshots.year, year));
   }
 
   private async getDashboardsWithWidgets(filter?: { isPublished: boolean }): Promise<AnalyticsDashboardWithWidgets[]> {

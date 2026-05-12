@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from "recharts";
 import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar, Building2, Users, ChevronRight, ChevronDown } from "lucide-react";
-import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, StrategicChartData, AnalyticsDashboardWithWidgets, UniversityObjectiveWithKeyResults } from "@shared/schema";
+import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, StrategicChartData, AnalyticsDashboardWithWidgets, UniversityObjectiveWithKeyResults, UniversityYearlySnapshot } from "@shared/schema";
 import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS, ALL_QUARTERS_LABEL } from "@shared/schema";
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
@@ -1413,12 +1413,81 @@ function ObjectiveResultsTab() {
 
 const QUARTER_LABELS: Record<string, string> = { Q1: "Q1", Q2: "Q2", Q3: "Q3", Q4: "Q4" };
 
+type NormalizedSnapshotKR = { id: string; label: string; description: string; progressPercent: number | null };
+type NormalizedSnapshotObjective = { id: string; label: string; description: string; comment?: string; keyResults: NormalizedSnapshotKR[] };
+type NormalizedSnapshot = { objectives: NormalizedSnapshotObjective[] };
+
+function SnapshotCardView({ title, description, data, testIdPrefix }: {
+  title: string;
+  description: string;
+  data: NormalizedSnapshot;
+  testIdPrefix: string;
+}) {
+  return (
+    <Card data-testid={`card-${testIdPrefix}`}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Target className="h-4 w-4" />
+          {title}
+        </CardTitle>
+        <CardDescription className="text-xs">{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {data.objectives.map(obj => {
+          const krs = obj.keyResults ?? [];
+          const scoredKrs = krs.filter(kr => kr.progressPercent !== null && kr.progressPercent !== undefined);
+          const avg = scoredKrs.length > 0
+            ? Math.round(scoredKrs.reduce((s, kr) => s + (kr.progressPercent as number), 0) / scoredKrs.length)
+            : 0;
+          return (
+            <div key={obj.id} className="space-y-3" data-testid={`${testIdPrefix}-objective-${obj.id}`}>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  <Badge variant="outline" className="font-mono text-xs shrink-0 mt-0.5">{obj.label}</Badge>
+                  <span className="text-sm font-semibold">{obj.description}</span>
+                </div>
+                <Badge variant="secondary" className="font-mono shrink-0" data-testid={`${testIdPrefix}-objective-avg-${obj.id}`}>
+                  {avg}%
+                </Badge>
+              </div>
+              {krs.length > 0 && (
+                <div className="space-y-2 pl-4 border-l-2 border-muted">
+                  {[...krs].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" })).map(kr => {
+                    const pct = kr.progressPercent ?? 0;
+                    return (
+                      <div key={kr.id} className="space-y-1" data-testid={`${testIdPrefix}-kr-${kr.id}`}>
+                        <div className="flex items-start justify-between gap-2 text-xs">
+                          <span className="flex-1 min-w-0">
+                            <span className="font-mono text-muted-foreground mr-1">{kr.label}</span>
+                            {kr.description}
+                          </span>
+                          <span className="font-mono shrink-0 tabular-nums" data-testid={`${testIdPrefix}-kr-pct-${kr.id}`}>{pct}%</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
 function StrategicAdvancementTab() {
   const { data, isLoading } = useQuery<StrategicChartData>({
     queryKey: ["/api/strategic-advancement/chart"],
   });
   const { data: snapshotData } = useQuery<StrategicAdvancementData>({
     queryKey: ["/api/strategic-advancement"],
+  });
+  const { data: yearlySnapshots } = useQuery<UniversityYearlySnapshot[]>({
+    queryKey: ["/api/strategic-advancement/snapshots"],
   });
   const { data: hideChartSetting } = useQuery<{ hideStrategicChart: boolean }>({
     queryKey: ["/api/settings/hide-strategic-chart"],
@@ -1511,6 +1580,42 @@ function StrategicAdvancementTab() {
   const snapshotObjectives = snapshotData?.objectives ?? [];
   const hasSnapshot = snapshotObjectives.some(o => o.keyResults.some(kr => (kr.progressPercent ?? 0) > 0));
 
+  const currentNormalized: NormalizedSnapshot = useMemo(() => ({
+    objectives: snapshotObjectives.map(obj => ({
+      id: obj.id,
+      label: obj.label,
+      description: obj.description,
+      comment: obj.comment,
+      keyResults: obj.keyResults.map(kr => ({
+        id: kr.id,
+        label: kr.label,
+        description: kr.description,
+        progressPercent: kr.progressPercent,
+      })),
+    })),
+  }), [snapshotObjectives]);
+
+  const yearlyNormalized = useMemo(() => (yearlySnapshots ?? []).map(s => ({
+    year: s.year,
+    data: {
+      objectives: s.payload.objectives.map((o, i) => ({
+        id: `y-${s.year}-o-${i}`,
+        label: o.label,
+        description: o.description,
+        comment: o.comment ?? "",
+        keyResults: o.keyResults.map((kr, j) => ({
+          id: `y-${s.year}-kr-${i}-${j}`,
+          label: kr.label,
+          description: kr.description,
+          progressPercent: kr.progressPercent,
+        })),
+      })),
+    },
+  })), [yearlySnapshots]);
+
+  const showSnapshotSection = hasSnapshot || yearlyNormalized.length > 0;
+  const defaultSnapshotTab = hasSnapshot ? "current" : (yearlyNormalized[0] ? `y-${yearlyNormalized[0].year}` : "current");
+
   return (
     <div className="space-y-6">
       {lastUpdated && (
@@ -1519,64 +1624,46 @@ function StrategicAdvancementTab() {
         </p>
       )}
 
-      {hasSnapshot && (
-        <Card data-testid="card-strategic-snapshot">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Target className="h-4 w-4" />
-              Current Progress Snapshot
-            </CardTitle>
-            <CardDescription className="text-xs">
-              The latest progress reported by leadership for each strategic objective and key result.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {snapshotObjectives.map(obj => {
-              const krs = obj.keyResults ?? [];
-              const scoredKrs = krs.filter(kr => kr.progressPercent !== null && kr.progressPercent !== undefined);
-              const avg = scoredKrs.length > 0
-                ? Math.round(scoredKrs.reduce((s, kr) => s + (kr.progressPercent as number), 0) / scoredKrs.length)
-                : 0;
-              return (
-                <div key={obj.id} className="space-y-3" data-testid={`snapshot-objective-${obj.id}`}>
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="flex items-start gap-2 flex-1 min-w-0">
-                      <Badge variant="outline" className="font-mono text-xs shrink-0 mt-0.5">{obj.label}</Badge>
-                      <span className="text-sm font-semibold">{obj.description}</span>
-                    </div>
-                    <Badge variant="secondary" className="font-mono shrink-0" data-testid={`snapshot-objective-avg-${obj.id}`}>
-                      {avg}%
-                    </Badge>
-                  </div>
-                  {krs.length > 0 && (
-                    <div className="space-y-2 pl-4 border-l-2 border-muted">
-                      {[...krs].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" })).map(kr => {
-                        const pct = kr.progressPercent ?? 0;
-                        return (
-                          <div key={kr.id} className="space-y-1" data-testid={`snapshot-kr-${kr.id}`}>
-                            <div className="flex items-start justify-between gap-2 text-xs">
-                              <span className="flex-1 min-w-0">
-                                <span className="font-mono text-muted-foreground mr-1">{kr.label}</span>
-                                {kr.description}
-                              </span>
-                              <span className="font-mono shrink-0 tabular-nums" data-testid={`snapshot-kr-pct-${kr.id}`}>{pct}%</span>
-                            </div>
-                            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                              <div
-                                className="h-full bg-primary transition-all"
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+      {showSnapshotSection && (
+        yearlyNormalized.length === 0 ? (
+          <SnapshotCardView
+            title="Current Progress Snapshot"
+            description="The latest progress reported by leadership for each strategic objective and key result."
+            data={currentNormalized}
+            testIdPrefix="snapshot"
+          />
+        ) : (
+          <Tabs key={defaultSnapshotTab} defaultValue={defaultSnapshotTab} className="space-y-3" data-testid="tabs-snapshot-years">
+            <TabsList className="flex-wrap h-auto">
+              {hasSnapshot && (
+                <TabsTrigger value="current" data-testid="tab-snapshot-current">Current</TabsTrigger>
+              )}
+              {yearlyNormalized.map(s => (
+                <TabsTrigger key={s.year} value={`y-${s.year}`} data-testid={`tab-snapshot-year-${s.year}`}>{s.year}</TabsTrigger>
+              ))}
+            </TabsList>
+            {hasSnapshot && (
+              <TabsContent value="current" className="mt-0">
+                <SnapshotCardView
+                  title="Current Progress Snapshot"
+                  description="The latest progress reported by leadership for each strategic objective and key result."
+                  data={currentNormalized}
+                  testIdPrefix="snapshot"
+                />
+              </TabsContent>
+            )}
+            {yearlyNormalized.map(s => (
+              <TabsContent key={s.year} value={`y-${s.year}`} className="mt-0">
+                <SnapshotCardView
+                  title={`${s.year} Progress Snapshot`}
+                  description={`Historical progress recorded for ${s.year}.`}
+                  data={s.data}
+                  testIdPrefix={`snapshot-${s.year}`}
+                />
+              </TabsContent>
+            ))}
+          </Tabs>
+        )
       )}
 
       {objectives.length === 0 ? (

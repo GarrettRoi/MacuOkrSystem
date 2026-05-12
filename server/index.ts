@@ -54,6 +54,11 @@ async function runStartupMigrations() {
       objective_id VARCHAR PRIMARY KEY REFERENCES university_objectives(id) ON DELETE CASCADE,
       comment TEXT NOT NULL DEFAULT ''
     )`,
+    `CREATE TABLE IF NOT EXISTS university_yearly_snapshots (
+      year INTEGER PRIMARY KEY,
+      payload JSONB NOT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
     `CREATE TABLE IF NOT EXISTS university_progress_datapoints (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       key_result_id VARCHAR NOT NULL REFERENCES university_key_results(id) ON DELETE CASCADE,

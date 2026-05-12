@@ -1285,6 +1285,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Strategic Advancement — Yearly Historical Snapshots ──────────────────
+  app.get("/api/strategic-advancement/snapshots", async (_req, res) => {
+    try {
+      const rows = await storage.listYearlySnapshots();
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch yearly snapshots" });
+    }
+  });
+
+  app.put("/api/strategic-advancement/snapshots/:year", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const year = parseInt(req.params.year, 10);
+      if (!Number.isFinite(year) || year < 2000 || year > 2100) {
+        return res.status(400).json({ error: "Invalid year" });
+      }
+      const { yearlySnapshotPayloadSchema } = await import("@shared/schema");
+      const parsed = yearlySnapshotPayloadSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid snapshot payload", details: parsed.error.issues });
+      const saved = await storage.upsertYearlySnapshot(year, parsed.data);
+      res.json(saved);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save yearly snapshot" });
+    }
+  });
+
+  app.delete("/api/strategic-advancement/snapshots/:year", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const year = parseInt(req.params.year, 10);
+      if (!Number.isFinite(year)) return res.status(400).json({ error: "Invalid year" });
+      await storage.deleteYearlySnapshot(year);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete yearly snapshot" });
+    }
+  });
+
   // ── Analytics ─────────────────────────────────────────────────────────────
 
   async function computeAnalyticsData(

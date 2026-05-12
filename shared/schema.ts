@@ -138,6 +138,38 @@ export const insertProgressDatapointSchema = createInsertSchema(universityProgre
 export type InsertProgressDatapoint = z.infer<typeof insertProgressDatapointSchema>;
 export type ProgressDatapoint = typeof universityProgressDatapoints.$inferSelect;
 
+export const universityYearlySnapshots = pgTable("university_yearly_snapshots", {
+  year: integer("year").primaryKey(),
+  payload: jsonb("payload").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const yearlySnapshotKeyResultSchema = z.object({
+  label: z.string().min(1).max(50),
+  description: z.string().min(1),
+  progressPercent: z.number().int().min(0).max(100),
+});
+
+export const yearlySnapshotObjectiveSchema = z.object({
+  label: z.string().min(1).max(50),
+  description: z.string().min(1),
+  comment: z.string().default(""),
+  keyResults: z.array(yearlySnapshotKeyResultSchema),
+});
+
+export const yearlySnapshotPayloadSchema = z.object({
+  objectives: z.array(yearlySnapshotObjectiveSchema),
+});
+
+export type YearlySnapshotKeyResult = z.infer<typeof yearlySnapshotKeyResultSchema>;
+export type YearlySnapshotObjective = z.infer<typeof yearlySnapshotObjectiveSchema>;
+export type YearlySnapshotPayload = z.infer<typeof yearlySnapshotPayloadSchema>;
+export type UniversityYearlySnapshot = {
+  year: number;
+  payload: YearlySnapshotPayload;
+  updatedAt: Date;
+};
+
 export const okrs = pgTable("okrs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").references(() => staff.id, { onDelete: "set null" }),

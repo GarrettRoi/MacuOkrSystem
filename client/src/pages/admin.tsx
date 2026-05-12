@@ -22,6 +22,7 @@ import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWi
 import { ALL_QUARTERS_LABEL, isLeaderRole, QUARTERS, getQuarterLabel } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
 import AnnouncementsPanel from "@/components/announcements-panel";
+import HistoricalSnapshotsEditor from "@/components/historical-snapshots-editor";
 import type { WidgetConfig } from "@/components/analytics-widget";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { compareNames, generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
@@ -4737,6 +4738,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 )}
               </CardContent>
             </Card>
+
+            {/* Historical Year Snapshots Editor */}
+            <HistoricalSnapshotsEditor currentSnapshot={advancementData} />
 
             {/* Time-Series Progress Chart Data Entry */}
             <Card className="mt-6">
