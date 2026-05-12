@@ -655,7 +655,7 @@ function DashboardTab() {
                                             )}
                                             {okrUpdates.length > 0 && (
                                               <div className="space-y-1">
-                                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Notes</p>
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Comments</p>
                                                 {okrUpdates.map((u) => (
                                                   <div
                                                     key={u.id}

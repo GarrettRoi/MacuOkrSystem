@@ -89,6 +89,13 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     }
   }, [availableYears.length]);
 
+  useEffect(() => {
+    if (staff.role === "basic" && staff.spuId) {
+      const desired = String(staff.spuId);
+      if (spuFilter !== desired) setSpuFilter(desired);
+    }
+  }, [staff.role, staff.spuId, spuFilter, setSpuFilter]);
+
   const filteredOkrs = useMemo(() => {
     const quarterOrder: Record<string, number> = { "Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4 };
     return mySpuOkrs
@@ -148,6 +155,20 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     const spuIds = new Set(mySpuOkrs.map((okr) => okr.spuId));
     return spus?.filter((spu) => spuIds.has(spu.id)) || [];
   }, [mySpuOkrs, spus]);
+
+  useEffect(() => {
+    if (
+      spuFilter !== "All" &&
+      uniqueSpusInMyOkrs.length > 0 &&
+      !uniqueSpusInMyOkrs.some((s) => String(s.id) === spuFilter)
+    ) {
+      if (staff.role === "basic" && staff.spuId) {
+        setSpuFilter(String(staff.spuId));
+      } else {
+        setSpuFilter("All");
+      }
+    }
+  }, [spuFilter, uniqueSpusInMyOkrs, staff.role, staff.spuId, setSpuFilter]);
 
   // Only count OKRs that actually have a recorded score (latest primary update with averageScore).
   const okrScores = filteredOkrs
