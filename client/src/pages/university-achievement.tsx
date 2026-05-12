@@ -1566,17 +1566,6 @@ function StrategicAdvancementTab() {
     });
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-64 mx-auto" />
-        <Skeleton className="h-72 w-full" />
-      </div>
-    );
-  }
-
-  const hasChartData = range && periods.length > 0 && objectives.length > 0;
-
   const snapshotObjectives = snapshotData?.objectives ?? [];
   const hasSnapshot = snapshotObjectives.some(o => o.keyResults.some(kr => (kr.progressPercent ?? 0) > 0));
 
@@ -1615,6 +1604,17 @@ function StrategicAdvancementTab() {
 
   const showSnapshotSection = hasSnapshot || yearlyNormalized.length > 0;
   const defaultSnapshotTab = hasSnapshot ? "current" : (yearlyNormalized[0] ? `y-${yearlyNormalized[0].year}` : "current");
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-64 mx-auto" />
+        <Skeleton className="h-72 w-full" />
+      </div>
+    );
+  }
+
+  const hasChartData = range && periods.length > 0 && objectives.length > 0;
 
   return (
     <div className="space-y-6">
