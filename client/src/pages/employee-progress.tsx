@@ -406,7 +406,9 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                             {record.okr.subUnit && (
                                               <span className="text-xs text-muted-foreground hidden sm:block pl-4">{record.okr.subUnit.name}</span>
                                             )}
-                                            {((record.okr.collaborationSpus && record.okr.collaborationSpus.length > 0) || record.okr.collaborationSpu) && (
+                                            {((record.okr.collaborationSpus && record.okr.collaborationSpus.length > 0)
+                                              || (record.okr.collaborationSubUnits && record.okr.collaborationSubUnits.length > 0)
+                                              || record.okr.collaborationSpu) && (
                                               <Badge variant="outline" className="text-xs w-fit px-1 py-0 ml-4">Collab</Badge>
                                             )}
                                           </div>
@@ -420,11 +422,17 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                             {collaborators.length > 0 && (
                                               <span className="text-xs text-muted-foreground">Collaborators: {collaborators.join(", ")}</span>
                                             )}
-                                            {(record.okr.collaborationSpus && record.okr.collaborationSpus.length > 0) ? (
-                                              <span className="text-xs text-muted-foreground">Collab SPU: {record.okr.collaborationSpus.map((s: Spu) => s.name).join(", ")}</span>
-                                            ) : record.okr.collaborationSpu ? (
-                                              <span className="text-xs text-muted-foreground">Collab SPU: {record.okr.collaborationSpu.name}</span>
-                                            ) : null}
+                                            {(() => {
+                                              const parts: string[] = [];
+                                              if (record.okr.collaborationSpus?.length) parts.push(...record.okr.collaborationSpus.map((s: Spu) => s.name));
+                                              if (record.okr.collaborationSubUnits?.length) parts.push(...record.okr.collaborationSubUnits.map((su) => su.spuName ? `${su.spuName} — ${su.name}` : su.name));
+                                              if (parts.length === 0 && record.okr.collaborationSpu) parts.push(record.okr.collaborationSpu.name);
+                                              const orphanCount = record.okr.orphanCollaboratorIds?.length || 0;
+                                              if (orphanCount > 0) parts.push(`(${orphanCount} deleted)`);
+                                              return parts.length > 0 ? (
+                                                <span className="text-xs text-muted-foreground">Collab: {parts.join(", ")}</span>
+                                              ) : null;
+                                            })()}
                                             {record.latestUpdate && (
                                               <span className="text-xs text-muted-foreground">
                                                 Updated {new Date(record.latestUpdate.submittedAt).toLocaleDateString()}

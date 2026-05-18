@@ -163,6 +163,14 @@ export default function Export() {
         okr.collaborationSpus && okr.collaborationSpus.length > 0
           ? okr.collaborationSpus.map((s: Spu) => s.name).join(", ")
           : (okr.collaborationSpu?.name || ""),
+      "Collaboration Sub-Unit":
+        okr.collaborationSubUnits && okr.collaborationSubUnits.length > 0
+          ? okr.collaborationSubUnits.map((su) => su.spuName ? `${su.spuName} — ${su.name}` : su.name).join(", ")
+          : "",
+      "Collaboration Orphan IDs":
+        okr.orphanCollaboratorIds && okr.orphanCollaboratorIds.length > 0
+          ? okr.orphanCollaboratorIds.join(", ")
+          : "",
       "Quarter": okr.quarter,
       "Year": okr.year,
       "OKR Number": okr.okrNumber,

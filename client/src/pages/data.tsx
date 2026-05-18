@@ -38,6 +38,7 @@ const editOkrSchema = z.object({
   universityKeyResult: z.string(),
   keyResults: z.string(),
   collaborationSpuIds: z.array(z.string()),
+  collaborationSubUnitIds: z.array(z.string()).optional(),
 });
 
 const editQuarterlyUpdateSchema = z.object({
@@ -906,11 +907,25 @@ export default function Data() {
       universityKeyResult: okr.universityKeyResult,
       keyResults: okr.keyResults,
       collaborationSpuIds: (() => {
-        const arr = (okr.collaborationSpuIds as string[] | null) || [];
-        if (arr.length > 0) return arr;
-        // Legacy fallback: if array is empty but legacy FK exists, seed it
-        return okr.collaborationSpuId ? [okr.collaborationSpuId] : [];
+        // Encode each existing collaborator as "spu:UUID" or "sub:UUID" so the
+        // shared picker can render both kinds and the submit handler can split
+        // them back into the right server arrays.
+        const ids: string[] = [];
+        const spuList: any[] = (okr as any).collaborationSpus || [];
+        const subUnitList: any[] = (okr as any).collaborationSubUnits || [];
+        for (const s of spuList) ids.push(`spu:${s.id}`);
+        for (const su of subUnitList) ids.push(`sub:${su.id}`);
+        if (ids.length === 0) {
+          const legacyArr = (okr.collaborationSpuIds as string[] | null) || [];
+          if (legacyArr.length > 0) {
+            for (const id of legacyArr) ids.push(`spu:${id}`);
+          } else if (okr.collaborationSpuId) {
+            ids.push(`spu:${okr.collaborationSpuId}`);
+          }
+        }
+        return ids;
       })(),
+      collaborationSubUnitIds: [],
     });
   };
 
@@ -925,8 +940,20 @@ export default function Data() {
 
   const onSubmitOkr = (data: EditOkrFormValues) => {
     if (!editingOkr) return;
+    // Split the prefixed picker values ("spu:UUID" / "sub:UUID") into the two
+    // server-side arrays so SPU collaborators and sub-unit collaborators land
+    // in the correct columns / join-table rows.
+    const prefixed = data.collaborationSpuIds || [];
+    const collaborationSpuIds = prefixed
+      .filter((v) => v.startsWith("spu:"))
+      .map((v) => v.slice(4));
+    const collaborationSubUnitIds = prefixed
+      .filter((v) => v.startsWith("sub:"))
+      .map((v) => v.slice(4));
     const updates = {
       ...data,
+      collaborationSpuIds,
+      collaborationSubUnitIds,
       keyResults: JSON.stringify(editKeyResults),
     };
     setPendingOkrEdit({ id: editingOkr.id, updates });
@@ -2358,10 +2385,27 @@ export default function Data() {
                   name="collaborationSpuIds"
                   render={({ field }) => {
                     const primarySpuId = okrForm.watch("spuId");
-                    const collaborationOptions = (spus || []).filter((s) => s.id !== primarySpuId);
+                    const primarySubUnitId = okrForm.watch("subUnitId");
+                    const allSpus = spus || [];
+                    const allSubUnits = subUnits || [];
+                    const spuNameById = new Map(allSpus.map((s) => [s.id, s.name]));
+                    // Encode option ids as "spu:UUID" / "sub:UUID" so the submit
+                    // handler can split them into the right server arrays.
+                    const spuOptions = allSpus
+                      .filter((s) => s.id !== primarySpuId)
+                      .map((s) => ({ id: `spu:${s.id}`, name: s.name }));
+                    const subUnitOptions = allSubUnits
+                      .filter((su) => su.id !== primarySubUnitId)
+                      .map((su) => ({
+                        id: `sub:${su.id}`,
+                        name: `${spuNameById.get(su.spuId) ?? "SPU"} — ${su.name}`,
+                      }));
+                    const collaborationOptions = [...spuOptions, ...subUnitOptions].sort((a, b) =>
+                      a.name.localeCompare(b.name)
+                    );
                     return (
                       <FormItem>
-                        <FormLabel>Collaboration SPU(s) (Optional)</FormLabel>
+                        <FormLabel>Collaboration SPU(s) or Sub-Unit(s) (Optional)</FormLabel>
                         <FormControl>
                           <MultiSelectSpus
                             options={collaborationOptions}

@@ -234,11 +234,20 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       });
       return;
     }
-    const payload =
+    // Split the prefixed picker values ("spu:UUID" / "sub:UUID") into two arrays
+    // so the server can route them to the correct FK column / join-table row type.
+    const prefixed = data.collaborationSpuIds || [];
+    const collaborationSpuIds = prefixed
+      .filter((v) => v.startsWith("spu:"))
+      .map((v) => v.slice(4));
+    const collaborationSubUnitIds = prefixed
+      .filter((v) => v.startsWith("sub:"))
+      .map((v) => v.slice(4));
+    const base =
       data.subUnitId === WHOLE_SPU_SENTINEL
         ? { ...data, subUnitId: undefined }
         : data;
-    mutation.mutate(payload);
+    mutation.mutate({ ...base, collaborationSpuIds, collaborationSubUnitIds } as any);
   };
 
 
@@ -634,13 +643,16 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                   const allSpus = spus || [];
                   const allSubUnits = subUnits || [];
                   const spuNameById = new Map(allSpus.map((s) => [s.id, s.name]));
+                  // Encode each option as "spu:UUID" or "sub:UUID" so the submit
+                  // handler can split them into the right server-side arrays.
+                  // (Mixing them was the cause of the FK violation crash.)
                   const spuOptions = allSpus
                     .filter((s) => s.id !== selectedSpuId)
-                    .map((s) => ({ id: s.id, name: s.name }));
+                    .map((s) => ({ id: `spu:${s.id}`, name: s.name }));
                   const subUnitOptions = allSubUnits
                     .filter((su) => su.id !== selectedSubUnitId)
                     .map((su) => ({
-                      id: su.id,
+                      id: `sub:${su.id}`,
                       name: `${spuNameById.get(su.spuId) ?? "SPU"} — ${su.name}`,
                     }));
                   const collaborationOptions = [...spuOptions, ...subUnitOptions].sort((a, b) =>

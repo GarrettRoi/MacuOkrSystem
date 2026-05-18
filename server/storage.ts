@@ -50,6 +50,7 @@ import {
   years,
   staff,
   okrs,
+  okrCollaborators,
   quarterlyUpdates,
   okrResponsibilities,
   staffSpuAssignments,
@@ -77,6 +78,7 @@ import type {
   PushSubscriptionRow,
   InsertPushSubscription,
   Announcement,
+  InsertOkrCollaborator,
 } from "@shared/schema";
 import type { ActivityLogEntry, InsertActivityLog, InactiveStaffEntry } from "@shared/schema";
 import { db } from "./db";
@@ -602,6 +604,66 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(okrs);
   }
 
+  // Fetches collaborator data for a batch of OKR ids. Returns a per-okr map of
+  // { spuIds, subUnitIds }. Prefers the okr_collaborators join table (cascade-safe);
+  // falls back to the legacy collaboration_spu_ids text array for OKRs that have
+  // no join-table rows yet (pre-backfill historical data).
+  private async fetchCollaboratorsForOkrs(
+    okrRows: Array<{ id: string; collaborationSpuIds: unknown }>
+  ): Promise<Map<string, { spuIds: string[]; subUnitIds: string[]; rawIds: string[] }>> {
+    const result = new Map<string, { spuIds: string[]; subUnitIds: string[]; rawIds: string[] }>();
+    if (okrRows.length === 0) return result;
+    const ids = okrRows.map(r => r.id);
+    const joinRows = await db
+      .select()
+      .from(okrCollaborators)
+      .where(inArray(okrCollaborators.okrId, ids));
+    const byOkr = new Map<string, { spuIds: Set<string>; subUnitIds: Set<string> }>();
+    for (const row of joinRows) {
+      if (!byOkr.has(row.okrId)) byOkr.set(row.okrId, { spuIds: new Set(), subUnitIds: new Set() });
+      const entry = byOkr.get(row.okrId)!;
+      if (row.spuId) entry.spuIds.add(row.spuId);
+      if (row.subUnitId) entry.subUnitIds.add(row.subUnitId);
+    }
+    for (const okr of okrRows) {
+      const joined = byOkr.get(okr.id);
+      const legacyArr = (okr.collaborationSpuIds as string[] | null) || [];
+      if (joined) {
+        result.set(okr.id, {
+          spuIds: Array.from(joined.spuIds),
+          subUnitIds: Array.from(joined.subUnitIds),
+          rawIds: legacyArr,
+        });
+      } else {
+        // Legacy fallback: text array may contain a mix of spu and sub-unit ids.
+        // Classification happens at the consumer (using the spu/sub-unit maps).
+        result.set(okr.id, { spuIds: [], subUnitIds: [], rawIds: legacyArr });
+      }
+    }
+    return result;
+  }
+
+  // Replaces all collaborator rows for an OKR with the given lists.
+  // Assumes IDs are pre-validated against spus/sub_units by the caller (route).
+  async setOkrCollaborators(okrId: string, spuIds: string[], subUnitIds: string[]): Promise<void> {
+    await db.delete(okrCollaborators).where(eq(okrCollaborators.okrId, okrId));
+    const rows: InsertOkrCollaborator[] = [
+      ...Array.from(new Set(spuIds)).map(id => ({ okrId, spuId: id, subUnitId: null })),
+      ...Array.from(new Set(subUnitIds)).map(id => ({ okrId, spuId: null, subUnitId: id })),
+    ];
+    if (rows.length > 0) {
+      await db.insert(okrCollaborators).values(rows);
+    }
+  }
+
+  async getOkrCollaborators(okrId: string): Promise<{ spuIds: string[]; subUnitIds: string[] }> {
+    const rows = await db.select().from(okrCollaborators).where(eq(okrCollaborators.okrId, okrId));
+    return {
+      spuIds: rows.filter(r => r.spuId).map(r => r.spuId!),
+      subUnitIds: rows.filter(r => r.subUnitId).map(r => r.subUnitId!),
+    };
+  }
+
   async getAllOkrsWithDetails(): Promise<OkrWithDetails[]> {
     const okrSpu = alias(spus, 'okrSpu');
     const okrSubUnit = alias(subUnits, 'okrSubUnit');
@@ -609,7 +671,7 @@ export class DatabaseStorage implements IStorage {
     const staffSubUnit = alias(subUnits, 'staffSubUnit');
     const collaborationSpu = alias(spus, 'collaborationSpu');
     
-    const [result, allSpus] = await Promise.all([
+    const [result, allSpus, allSubUnits] = await Promise.all([
       db
         .select({
           okr: okrs,
@@ -628,13 +690,48 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(staffSubUnit, eq(staff.subUnitId, staffSubUnit.id))
         .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id)),
       db.select().from(spus),
+      db.select().from(subUnits),
     ]);
 
+    const collabMap = await this.fetchCollaboratorsForOkrs(result.map(r => r.okr));
+    const enriched = this.enrichRowsWithCollaborators(result, allSpus, allSubUnits, collabMap);
+    return enriched;
+  }
+
+  // Shared post-processing for the 3 getOkrsWithDetails* methods.
+  private enrichRowsWithCollaborators(
+    result: Array<any>,
+    allSpus: Spu[],
+    allSubUnits: SubUnit[],
+    collabMap: Map<string, { spuIds: string[]; subUnitIds: string[]; rawIds: string[] }>
+  ): OkrWithDetails[] {
     const spuMap = new Map(allSpus.map(s => [s.id, s]));
+    const subUnitMap = new Map(allSubUnits.map(su => [su.id, su]));
 
     return result.map((row) => {
-      const collabIds: string[] = (row.okr.collaborationSpuIds as string[] | null) || [];
-      const collaborationSpus = collabIds.map(id => spuMap.get(id)).filter(Boolean) as typeof allSpus;
+      const collab = collabMap.get(row.okr.id) || { spuIds: [], subUnitIds: [], rawIds: [] };
+      // If we have join-table data, prefer it. Otherwise classify the legacy text array.
+      const hasJoinData = collab.spuIds.length > 0 || collab.subUnitIds.length > 0;
+      let spuIds: string[] = [...collab.spuIds];
+      let subUnitIds: string[] = [...collab.subUnitIds];
+      const orphanIds: string[] = [];
+      // Merge any legacy raw IDs not yet represented in the join data so partial
+      // migrations don't silently hide collaborators. Classify each by lookup.
+      for (const id of collab.rawIds) {
+        if (spuIds.includes(id) || subUnitIds.includes(id)) continue;
+        if (spuMap.has(id)) spuIds.push(id);
+        else if (subUnitMap.has(id)) subUnitIds.push(id);
+        else orphanIds.push(id);
+      }
+      const collaborationSpus = spuIds.map(id => spuMap.get(id)).filter(Boolean) as Spu[];
+      const collaborationSubUnits = subUnitIds
+        .map(id => {
+          const su = subUnitMap.get(id);
+          if (!su) return null;
+          return { ...su, spuName: spuMap.get(su.spuId)?.name ?? null };
+        })
+        .filter(Boolean) as (SubUnit & { spuName?: string | null })[];
+
       return {
         ...row.okr,
         staff: row.staff ? {
@@ -656,6 +753,8 @@ export class DatabaseStorage implements IStorage {
         subUnit: row.okrSubUnit || null,
         collaborationSpu: row.collaborationSpu || null,
         collaborationSpus,
+        collaborationSubUnits,
+        orphanCollaboratorIds: orphanIds,
       };
     });
   }
@@ -686,7 +785,7 @@ export class DatabaseStorage implements IStorage {
     if (conditions.length === 0) return [];
     const whereClause = conditions.length > 1 ? or(...conditions) : conditions[0];
 
-    const [result, allSpus] = await Promise.all([
+    const [result, allSpus, allSubUnits] = await Promise.all([
       db
         .select({
           okr: okrs,
@@ -706,36 +805,11 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id))
         .where(whereClause),
       db.select().from(spus),
+      db.select().from(subUnits),
     ]);
 
-    const spuMap = new Map(allSpus.map(s => [s.id, s]));
-
-    return result.map((row) => {
-      const collabIds: string[] = (row.okr.collaborationSpuIds as string[] | null) || [];
-      const collaborationSpus = collabIds.map(id => spuMap.get(id)).filter(Boolean) as typeof allSpus;
-      return {
-        ...row.okr,
-        staff: row.staff ? {
-          ...safeStaff(row.staff),
-          spu: row.staffSpu!,
-          subUnit: row.staffSubUnit || null,
-        } : {
-          id: row.okr.staffId || "deleted",
-          name: row.okr.submitterName || "Unknown",
-          email: "",
-          spuId: row.okr.spuId,
-          subUnitId: null,
-          isAdmin: false,
-          role: "basic" as const,
-          spu: row.okrSpu!,
-          subUnit: null,
-        },
-        spu: row.okrSpu || null,
-        subUnit: row.okrSubUnit || null,
-        collaborationSpu: row.collaborationSpu || null,
-        collaborationSpus,
-      };
-    });
+    const collabMap = await this.fetchCollaboratorsForOkrs(result.map(r => r.okr));
+    return this.enrichRowsWithCollaborators(result, allSpus, allSubUnits, collabMap);
   }
 
   async countOkrsBySpu(spuId: string, year: number): Promise<number> {
@@ -750,7 +824,7 @@ export class DatabaseStorage implements IStorage {
     const staffSubUnit = alias(subUnits, 'staffSubUnit');
     const collaborationSpu = alias(spus, 'collaborationSpu');
     
-    const [result, allSpus] = await Promise.all([
+    const [result, allSpus, allSubUnits] = await Promise.all([
       db
         .select({
           okr: okrs,
@@ -770,53 +844,150 @@ export class DatabaseStorage implements IStorage {
         .leftJoin(collaborationSpu, eq(okrs.collaborationSpuId, collaborationSpu.id))
         .where(eq(okrs.spuId, spuId)),
       db.select().from(spus),
+      db.select().from(subUnits),
     ]);
 
-    const spuMap = new Map(allSpus.map(s => [s.id, s]));
-
-    return result.map((row) => {
-      const collabIds: string[] = (row.okr.collaborationSpuIds as string[] | null) || [];
-      const collaborationSpus = collabIds.map(id => spuMap.get(id)).filter(Boolean) as typeof allSpus;
-      return {
-        ...row.okr,
-        staff: row.staff ? {
-          ...safeStaff(row.staff),
-          spu: row.staffSpu!,
-          subUnit: row.staffSubUnit || null,
-        } : {
-          id: row.okr.staffId || "deleted",
-          name: row.okr.submitterName || "Unknown",
-          email: "",
-          spuId: row.okr.spuId,
-          subUnitId: null,
-          isAdmin: false,
-          role: "basic" as const,
-          spu: row.okrSpu!,
-          subUnit: null,
-        },
-        spu: row.okrSpu || null,
-        subUnit: row.okrSubUnit || null,
-        collaborationSpu: row.collaborationSpu || null,
-        collaborationSpus,
-      };
-    });
+    const collabMap = await this.fetchCollaboratorsForOkrs(result.map(r => r.okr));
+    return this.enrichRowsWithCollaborators(result, allSpus, allSubUnits, collabMap);
   }
 
-  async createOkr(insertOkr: InsertOkr & { okrNumber: string }): Promise<Okr> {
+  async createOkr(
+    insertOkr: InsertOkr & {
+      okrNumber: string;
+      collaborationSpuIds?: string[] | null;
+      collaborationSubUnitIds?: string[];
+    }
+  ): Promise<Okr> {
+    const { collaborationSubUnitIds, ...okrCols } = insertOkr as any;
     const [okr] = await db
       .insert(okrs)
-      .values(insertOkr)
+      .values(okrCols)
       .returning();
+    const spuIds = (insertOkr.collaborationSpuIds as string[] | null) || [];
+    const subUnitIds = collaborationSubUnitIds || [];
+    if (spuIds.length > 0 || subUnitIds.length > 0) {
+      await this.setOkrCollaborators(okr.id, spuIds, subUnitIds);
+    }
     return okr;
   }
 
-  async updateOkr(id: string, updates: Partial<Okr>): Promise<Okr> {
+  async updateOkr(
+    id: string,
+    updates: Partial<Okr> & { collaborationSubUnitIds?: string[] }
+  ): Promise<Okr> {
+    const { collaborationSubUnitIds, ...okrCols } = updates as any;
     const [okr] = await db
       .update(okrs)
-      .set(updates)
+      .set(okrCols)
       .where(eq(okrs.id, id))
       .returning();
+    // Sync collaborators if either array was provided in the update
+    const spuIdsProvided = okrCols.collaborationSpuIds !== undefined;
+    const subUnitIdsProvided = collaborationSubUnitIds !== undefined;
+    if (spuIdsProvided || subUnitIdsProvided) {
+      const current = await this.getOkrCollaborators(id);
+      const spuIds = spuIdsProvided ? (okrCols.collaborationSpuIds || []) : current.spuIds;
+      const subUnitIds = subUnitIdsProvided ? (collaborationSubUnitIds || []) : current.subUnitIds;
+      await this.setOkrCollaborators(id, spuIds, subUnitIds);
+    }
     return okr;
+  }
+
+  // Returns OKRs that have IDs in their legacy collaboration_spu_ids text
+  // array referencing entities that no longer exist (or are sub-units when the
+  // legacy column expected SPUs). Used for super_admin audit + backfill flows.
+  async getCollaboratorAuditReport(): Promise<Array<{
+    okrId: string;
+    okrNumber: string;
+    quarter: string;
+    year: number;
+    spuName: string | null;
+    submitterName: string | null;
+    validSpuIds: string[];
+    validSubUnitIds: string[];
+    orphanIds: string[];
+    legacyIds: string[];
+  }>> {
+    const [allOkrs, allSpus, allSubUnits] = await Promise.all([
+      db.select().from(okrs),
+      db.select().from(spus),
+      db.select().from(subUnits),
+    ]);
+    const spuMap = new Map(allSpus.map(s => [s.id, s]));
+    const subUnitMap = new Map(allSubUnits.map(su => [su.id, su]));
+    const collabMap = await this.fetchCollaboratorsForOkrs(allOkrs);
+    const report: Array<any> = [];
+    for (const okr of allOkrs) {
+      const legacy = (okr.collaborationSpuIds as string[] | null) || [];
+      const joined = collabMap.get(okr.id) || { spuIds: [], subUnitIds: [], rawIds: legacy };
+      const validSpuIds: string[] = [...joined.spuIds];
+      const validSubUnitIds: string[] = [...joined.subUnitIds];
+      const orphanIds: string[] = [];
+      const hasJoinData = joined.spuIds.length > 0 || joined.subUnitIds.length > 0;
+      if (!hasJoinData) {
+        for (const id of legacy) {
+          if (spuMap.has(id)) validSpuIds.push(id);
+          else if (subUnitMap.has(id)) validSubUnitIds.push(id);
+          else orphanIds.push(id);
+        }
+      } else {
+        for (const id of legacy) {
+          if (!spuMap.has(id) && !subUnitMap.has(id) && !validSpuIds.includes(id) && !validSubUnitIds.includes(id)) {
+            orphanIds.push(id);
+          }
+        }
+      }
+      if (legacy.length === 0 && validSpuIds.length === 0 && validSubUnitIds.length === 0) continue;
+      report.push({
+        okrId: okr.id,
+        okrNumber: okr.okrNumber,
+        quarter: okr.quarter,
+        year: okr.year,
+        spuName: spuMap.get(okr.spuId)?.name ?? null,
+        submitterName: okr.submitterName,
+        validSpuIds,
+        validSubUnitIds,
+        orphanIds,
+        legacyIds: legacy,
+      });
+    }
+    return report;
+  }
+
+  // Idempotent: walks every OKR with a non-empty legacy text array and writes
+  // the classified valid IDs into the join table. Orphans are left alone in
+  // the text array (preserved as historical record). Safe to run multiple times.
+  async backfillOkrCollaborators(): Promise<{
+    processed: number;
+    okrsWithOrphans: number;
+    totalOrphans: number;
+    orphanSamples: string[];
+  }> {
+    const report = await this.getCollaboratorAuditReport();
+    let processed = 0;
+    let okrsWithOrphans = 0;
+    let totalOrphans = 0;
+    const orphanSamples = new Set<string>();
+    for (const row of report) {
+      const existing = await this.getOkrCollaborators(row.okrId);
+      // Only seed the join table when it's still empty for this OKR.
+      if (existing.spuIds.length === 0 && existing.subUnitIds.length === 0 &&
+          (row.validSpuIds.length > 0 || row.validSubUnitIds.length > 0)) {
+        await this.setOkrCollaborators(row.okrId, row.validSpuIds, row.validSubUnitIds);
+        processed++;
+      }
+      if (row.orphanIds.length > 0) {
+        okrsWithOrphans++;
+        totalOrphans += row.orphanIds.length;
+        for (const id of row.orphanIds) orphanSamples.add(id);
+      }
+    }
+    return {
+      processed,
+      okrsWithOrphans,
+      totalOrphans,
+      orphanSamples: Array.from(orphanSamples).slice(0, 20),
+    };
   }
 
   async deleteOkr(id: string): Promise<void> {
@@ -927,6 +1098,13 @@ export class DatabaseStorage implements IStorage {
 
     const spuMap = new Map(allSpus.map(s => [s.id, s]));
     const okrIds = okrResults.map(row => row.okrs.id);
+    const allSubUnits = await db.select().from(subUnits);
+    const subUnitMap = new Map(allSubUnits.map(su => [su.id, su]));
+    // Reuse the shared collaborator fetch so employee-progress sees the join
+    // table (SPUs + sub-units + orphans), not just the legacy text array.
+    const collabMap = await this.fetchCollaboratorsForOkrs(
+      okrResults.map(row => row.okrs)
+    );
 
     const [allUpdates, allResponsibilities] = await Promise.all([
       db
@@ -973,8 +1151,24 @@ export class DatabaseStorage implements IStorage {
       const primaryUpdates = updates.filter(u => u.isPrimaryScore !== false);
       const latestUpdate = primaryUpdates.length > 0 ? primaryUpdates[0] : (updates.length > 0 ? updates[0] : null);
       const responsibilities = responsibilitiesMap.get(okrId) || [];
-      const collabIds: string[] = (row.okrs.collaborationSpuIds as string[] | null) || [];
-      const collaborationSpus = collabIds.map(id => spuMap.get(id)).filter(Boolean) as typeof allSpus;
+      const collab = collabMap.get(okrId) || { spuIds: [], subUnitIds: [], rawIds: [] };
+      const spuIds: string[] = [...collab.spuIds];
+      const subUnitIds: string[] = [...collab.subUnitIds];
+      const orphanIds: string[] = [];
+      for (const id of collab.rawIds) {
+        if (spuIds.includes(id) || subUnitIds.includes(id)) continue;
+        if (spuMap.has(id)) spuIds.push(id);
+        else if (subUnitMap.has(id)) subUnitIds.push(id);
+        else orphanIds.push(id);
+      }
+      const collaborationSpus = spuIds.map(id => spuMap.get(id)).filter(Boolean) as typeof allSpus;
+      const collaborationSubUnits = subUnitIds
+        .map(id => {
+          const su = subUnitMap.get(id);
+          if (!su) return null;
+          return { ...su, spuName: spuMap.get(su.spuId)?.name ?? null };
+        })
+        .filter(Boolean) as Array<SubUnit & { spuName?: string | null }>;
 
       return {
         okr: {
@@ -998,6 +1192,8 @@ export class DatabaseStorage implements IStorage {
           subUnit: row.sub_units,
           collaborationSpu: row.collaboration_spu,
           collaborationSpus,
+          collaborationSubUnits,
+          orphanCollaboratorIds: orphanIds,
         },
         latestUpdate,
         responsibilities: responsibilities.map(r => ({

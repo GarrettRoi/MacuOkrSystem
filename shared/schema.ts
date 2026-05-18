@@ -194,6 +194,13 @@ export const okrs = pgTable("okrs", {
   targetValue: integer("target_value"),
 });
 
+export const okrCollaborators = pgTable("okr_collaborators", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  okrId: varchar("okr_id").notNull().references(() => okrs.id, { onDelete: "cascade" }),
+  spuId: varchar("spu_id").references(() => spus.id, { onDelete: "cascade" }),
+  subUnitId: varchar("sub_unit_id").references(() => subUnits.id, { onDelete: "cascade" }),
+});
+
 export const quarterlyUpdates = pgTable("quarterly_updates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   okrId: varchar("okr_id").notNull().references(() => okrs.id, { onDelete: "cascade" }),
@@ -355,6 +362,7 @@ export const updateOkrSchema = z.object({
   keyResults: z.string().optional(),
   collaborationSpuId: z.string().nullable().optional(),
   collaborationSpuIds: z.array(z.string()).optional(),
+  collaborationSubUnitIds: z.array(z.string()).optional(),
   status: z.enum(["not_started", "in_progress", "completed"]).optional(),
 });
 
@@ -524,7 +532,12 @@ export type OkrWithDetails = Okr & {
   subUnit?: SubUnit | null;
   collaborationSpu?: Spu | null;
   collaborationSpus?: Spu[];
+  collaborationSubUnits?: (SubUnit & { spuName?: string | null })[];
+  orphanCollaboratorIds?: string[];
 };
+
+export type OkrCollaborator = typeof okrCollaborators.$inferSelect;
+export type InsertOkrCollaborator = typeof okrCollaborators.$inferInsert;
 
 export type QuarterUpdateWithDetails = QuarterlyUpdate & {
   okr: OkrWithDetails;

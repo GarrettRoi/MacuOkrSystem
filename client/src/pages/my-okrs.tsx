@@ -599,23 +599,32 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                       </div>
                     )}
 
-                    {((okr.collaborationSpus && okr.collaborationSpus.length > 0) || okr.collaborationSpu) && (
+                    {((okr.collaborationSpus && okr.collaborationSpus.length > 0)
+                        || (okr.collaborationSubUnits && okr.collaborationSubUnits.length > 0)
+                        || (okr.orphanCollaboratorIds && okr.orphanCollaboratorIds.length > 0)
+                        || okr.collaborationSpu) && (
                       <div className="border-t pt-4">
-                        {okr.collaborationSpus && okr.collaborationSpus.length > 0 ? (
-                          <>
-                            <h4 className="text-sm font-medium text-muted-foreground mb-1">Collaborating SPU{okr.collaborationSpus.length > 1 ? "s" : ""}</h4>
-                            <div className="flex flex-wrap gap-1">
-                              {okr.collaborationSpus.map((collabSpu) => (
-                                <Badge key={collabSpu.id} variant="outline">{collabSpu.name}</Badge>
-                              ))}
-                            </div>
-                          </>
-                        ) : okr.collaborationSpu ? (
-                          <>
-                            <h4 className="text-sm font-medium text-muted-foreground mb-1">Collaborating SPU</h4>
+                        <h4 className="text-sm font-medium text-muted-foreground mb-1">Collaborators</h4>
+                        <div className="flex flex-wrap gap-1">
+                          {okr.collaborationSpus?.map((collabSpu) => (
+                            <Badge key={`spu-${collabSpu.id}`} variant="outline">{collabSpu.name}</Badge>
+                          ))}
+                          {okr.collaborationSubUnits?.map((su) => (
+                            <Badge key={`sub-${su.id}`} variant="outline">
+                              {su.spuName ? `${su.spuName} — ${su.name}` : su.name}
+                            </Badge>
+                          ))}
+                          {(!okr.collaborationSpus || okr.collaborationSpus.length === 0)
+                            && (!okr.collaborationSubUnits || okr.collaborationSubUnits.length === 0)
+                            && okr.collaborationSpu && (
                             <Badge variant="outline">{okr.collaborationSpu.name}</Badge>
-                          </>
-                        ) : null}
+                          )}
+                          {okr.orphanCollaboratorIds?.map((id) => (
+                            <Badge key={`orphan-${id}`} variant="outline" className="text-muted-foreground italic">
+                              (deleted)
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
                     )}
 

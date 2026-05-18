@@ -266,6 +266,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Super-admin audit: lists every OKR with collaborator IDs in the legacy
+  // text array, classifying them as valid SPU / valid sub-unit / orphan so the
+  // admin can manually re-link or accept the historical orphan.
+  app.get("/api/admin/collaborator-audit", requireAuth, async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      const report = await storage.getCollaboratorAuditReport();
+      const orphanOnly = report.filter((r) => r.orphanIds.length > 0);
+      res.json({
+        totalOkrs: report.length,
+        okrsWithOrphans: orphanOnly.length,
+        totalOrphanRefs: orphanOnly.reduce((sum, r) => sum + r.orphanIds.length, 0),
+        report,
+      });
+    } catch (error) {
+      console.error("[collaborator-audit] failed:", error);
+      res.status(500).json({ error: "Failed to run audit" });
+    }
+  });
+
+  // One-shot (idempotent) backfill: walks the legacy collaboration_spu_ids
+  // text array on each OKR, writes the classified valid IDs into the new
+  // okr_collaborators join table. Orphans are left untouched in the legacy
+  // text array (preserved as historical reference) and returned in the response.
+  app.post("/api/admin/backfill-collaborators", requireAuth, async (req, res) => {
+    try {
+      if (!(await requireRole(req, res, ["super_admin"]))) return;
+      const summary = await storage.backfillOkrCollaborators();
+      res.json(summary);
+    } catch (error) {
+      console.error("[backfill-collaborators] failed:", error);
+      res.status(500).json({ error: "Failed to backfill collaborators" });
+    }
+  });
+
   app.get("/api/admin/activity/inactive", requireAuth, async (req, res) => {
     try {
       if (!(await requireRole(req, res, ["super_admin"]))) return;
@@ -2657,12 +2692,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const okrNumber = `OKR ${existingCount + 1}`;
       
       console.log("[POST /api/okrs] Parsed data:", JSON.stringify(parsed.data, null, 2));
-      // Sync legacy collaborationSpuId from array when collaborationSpuIds is provided
-      const collaborationSpuIds: string[] = parsed.data.collaborationSpuIds || [];
-      const collaborationSpuId = parsed.data.collaborationSpuId !== undefined
-        ? parsed.data.collaborationSpuId
-        : (collaborationSpuIds.length > 0 ? collaborationSpuIds[0] : null);
-      const createData = { ...parsed.data, okrNumber, submitterName, collaborationSpuId, collaborationSpuIds };
+      // Collaboration: separate SPU vs sub-unit arrays. Validate each id exists
+      // to prevent FK violations (legacy bug: a sub-unit id in the spu array
+      // would crash on insert). The legacy collaborationSpuId column receives
+      // only a real SPU id.
+      const rawCollabSpuIds: string[] = (parsed.data.collaborationSpuIds || []).filter(Boolean);
+      const rawCollabSubUnitIds: string[] = ((parsed.data as any).collaborationSubUnitIds || []).filter(Boolean);
+      if (rawCollabSpuIds.length > 0) {
+        const found = await Promise.all(rawCollabSpuIds.map(id => storage.getSpu(id)));
+        const missing = rawCollabSpuIds.filter((_, i) => !found[i]);
+        if (missing.length > 0) {
+          return res.status(400).json({
+            error: "Invalid collaboration SPU id(s).",
+            details: { missingSpuIds: missing },
+          });
+        }
+      }
+      if (rawCollabSubUnitIds.length > 0) {
+        const found = await Promise.all(rawCollabSubUnitIds.map(id => storage.getSubUnit(id)));
+        const missing = rawCollabSubUnitIds.filter((_, i) => !found[i]);
+        if (missing.length > 0) {
+          return res.status(400).json({
+            error: "Invalid collaboration sub-unit id(s).",
+            details: { missingSubUnitIds: missing },
+          });
+        }
+      }
+      // Always derive the legacy scalar FK from the *validated* array so a
+      // client cannot bypass validation by sending a bogus collaborationSpuId.
+      const collaborationSpuId = rawCollabSpuIds.length > 0 ? rawCollabSpuIds[0] : null;
+      const createData = {
+        ...parsed.data,
+        okrNumber,
+        submitterName,
+        collaborationSpuId,
+        collaborationSpuIds: rawCollabSpuIds,
+        collaborationSubUnitIds: rawCollabSubUnitIds,
+      };
       const okr = await storage.createOkr(createData);
       console.log("[POST /api/okrs] Created OKR:", JSON.stringify(okr, null, 2));
       res.status(201).json(okr);
@@ -2729,10 +2795,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No valid fields to update" });
       }
       
-      // Sync legacy collaborationSpuId from array when collaborationSpuIds is updated
+      // Validate any collaboration ids being set so FK constraints can't crash.
       if (updates.collaborationSpuIds !== undefined) {
-        const ids: string[] = updates.collaborationSpuIds || [];
+        const ids: string[] = (updates.collaborationSpuIds || []).filter(Boolean);
+        if (ids.length > 0) {
+          const found = await Promise.all(ids.map((id: string) => storage.getSpu(id)));
+          const missing = ids.filter((_: string, i: number) => !found[i]);
+          if (missing.length > 0) {
+            return res.status(400).json({
+              error: "Invalid collaboration SPU id(s).",
+              details: { missingSpuIds: missing },
+            });
+          }
+        }
+        updates.collaborationSpuIds = ids;
+        // Always derive the legacy scalar from the validated array (ignore any
+        // client-supplied scalar in the same payload).
         updates.collaborationSpuId = ids.length > 0 ? ids[0] : null;
+      } else if (updates.collaborationSpuId !== undefined && updates.collaborationSpuId !== null) {
+        // Client sent only the legacy scalar — validate it to prevent FK crash.
+        const found = await storage.getSpu(updates.collaborationSpuId);
+        if (!found) {
+          return res.status(400).json({
+            error: "Invalid collaboration SPU id.",
+            details: { missingSpuIds: [updates.collaborationSpuId] },
+          });
+        }
+      }
+      if (updates.collaborationSubUnitIds !== undefined) {
+        const ids: string[] = (updates.collaborationSubUnitIds || []).filter(Boolean);
+        if (ids.length > 0) {
+          const found = await Promise.all(ids.map((id: string) => storage.getSubUnit(id)));
+          const missing = ids.filter((_: string, i: number) => !found[i]);
+          if (missing.length > 0) {
+            return res.status(400).json({
+              error: "Invalid collaboration sub-unit id(s).",
+              details: { missingSubUnitIds: missing },
+            });
+          }
+        }
+        updates.collaborationSubUnitIds = ids;
       }
       
       const updatedOkr = await storage.updateOkr(req.params.id, updates);
