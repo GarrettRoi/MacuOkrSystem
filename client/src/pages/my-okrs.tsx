@@ -97,7 +97,9 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   }, [staff.role, staff.spuId, spuFilter, setSpuFilter]);
 
   const filteredOkrs = useMemo(() => {
-    const quarterOrder: Record<string, number> = { "Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4 };
+    // Fiscal year runs Q3 -> Q4 -> Q1 -> Q2, so Q2 is the latest quarter of
+    // the year and Q3 is the earliest. Sort descending using fiscal order.
+    const quarterOrder: Record<string, number> = { "Q3": 1, "Q4": 2, "Q1": 3, "Q2": 4 };
     return mySpuOkrs
       .filter((okr) => {
         const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
