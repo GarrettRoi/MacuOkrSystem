@@ -1893,7 +1893,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Staff SPU Assignments
   app.get("/api/staff/:staffId/assignments", async (req, res) => {
     try {
-      const assignments = await storage.getStaffSpuAssignments(req.params.staffId);
+      const targetStaffId = req.params.staffId;
+      const sessionStaffId = req.session.selectedStaffId;
+      const isAdmin = req.session.isAdmin;
+
+      // Allow: full platform admins, the staff member viewing their own
+      // assignments, super_admins, or a leader who manages this basic user.
+      if (!isAdmin) {
+        if (!sessionStaffId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        if (sessionStaffId !== targetStaffId) {
+          const sessionStaff = await storage.getStaff(sessionStaffId);
+          if (!sessionStaff) {
+            return res.status(401).json({ error: "Invalid session" });
+          }
+          if (sessionStaff.role !== "super_admin") {
+            if (!isLeaderRole(sessionStaff.role)) {
+              return res.status(403).json({ error: "Forbidden" });
+            }
+            const managed = await storage.getBasicUsersForLeader(sessionStaffId);
+            if (!managed.find(u => u.id === targetStaffId)) {
+              return res.status(403).json({ error: "Forbidden" });
+            }
+          }
+        }
+      }
+
+      const assignments = await storage.getStaffSpuAssignments(targetStaffId);
       res.json(assignments);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch SPU assignments" });
@@ -2628,11 +2655,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid staff session" });
       }
       
+      // Allow the staff member's primary SPU, plus any additional SPUs they
+      // are assigned to via staff_spu_assignments (works for basic users
+      // who have been granted multiple SPUs/sub-units as well as leaders).
+      const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
       if (staffMember.spuId !== requestedSpuId) {
-        return res.status(403).json({ error: "Access denied: You can only view OKRs for your own SPU" });
+        const allowedSpuIds = new Set<string>([
+          staffMember.spuId,
+          ...assignments.map((a: any) => a.spuId).filter(Boolean),
+        ]);
+        if (!allowedSpuIds.has(requestedSpuId)) {
+          return res.status(403).json({ error: "Access denied: You can only view OKRs for your own SPU" });
+        }
       }
-      
-      const okrs = await storage.getOkrsWithDetailsBySpu(requestedSpuId);
+
+      let okrs = await storage.getOkrsWithDetailsBySpu(requestedSpuId);
+
+      // For basic users, narrow the result set to OKRs that match an
+      // allowed (spuId, subUnitId|null) pair. Leaders and super_admins
+      // see the full SPU.
+      if (staffMember.role === "basic") {
+        const allowedPairs = new Set<string>();
+        const keyFor = (spu: string, sub: string | null | undefined) =>
+          `${spu}::${sub ?? ""}`;
+        allowedPairs.add(keyFor(staffMember.spuId, staffMember.subUnitId));
+        for (const a of assignments as any[]) {
+          if (a.spuId) allowedPairs.add(keyFor(a.spuId, a.subUnitId ?? null));
+        }
+        okrs = okrs.filter(o => allowedPairs.has(keyFor(o.spuId, o.subUnitId ?? null)));
+      }
+
       res.json(okrs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch SPU OKRs" });
@@ -2658,15 +2710,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const spuIds = new Set<string>();
       if (staffMember.spuId) spuIds.add(staffMember.spuId);
 
-      // Leaders/cabinet/super_admin see OKRs across every SPU they manage.
-      if (isLeaderRole(staffMember.role) || staffMember.role === "super_admin") {
-        const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
-        for (const a of assignments) {
-          if (a.spuId) spuIds.add(a.spuId);
-        }
+      // Every role sees OKRs across every SPU they're associated with via
+      // staff_spu_assignments. This now includes basic users with additional
+      // SPU/sub-unit grants — without this they'd be missing OKRs they're
+      // expected to score.
+      const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+      for (const a of assignments) {
+        if (a.spuId) spuIds.add(a.spuId);
       }
 
-      const okrs = await storage.getOkrsWithDetailsForStaff(null, Array.from(spuIds));
+      let okrs = await storage.getOkrsWithDetailsForStaff(null, Array.from(spuIds));
+
+      // Basic users only see OKRs that match an allowed (spuId, subUnitId|null)
+      // pair from their primary + staff_spu_assignments. Leaders/super_admins
+      // see everything in their SPUs.
+      if (staffMember.role === "basic") {
+        const allowedPairs = new Set<string>();
+        const keyFor = (spu: string, sub: string | null | undefined) =>
+          `${spu}::${sub ?? ""}`;
+        allowedPairs.add(keyFor(staffMember.spuId, staffMember.subUnitId));
+        for (const a of assignments as any[]) {
+          if (a.spuId) allowedPairs.add(keyFor(a.spuId, a.subUnitId ?? null));
+        }
+        okrs = okrs.filter(o => allowedPairs.has(keyFor(o.spuId, o.subUnitId ?? null)));
+      }
+
       res.json(okrs);
     } catch (error) {
       console.error("GET /api/my-okrs - Error:", error);
@@ -2707,11 +2775,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (sessionStaffId && !req.session.isAdmin) {
         const sessionStaff = await storage.getStaff(sessionStaffId);
         if (sessionStaff?.role === "basic") {
-          if (parsed.data.spuId !== sessionStaff.spuId) {
-            return res.status(403).json({ error: "Forbidden: You can only submit OKRs for your assigned SPU." });
+          // Build the set of (spuId, subUnitId-or-null) combinations this
+          // basic user is allowed to submit for: their primary pair plus any
+          // entry from staff_spu_assignments. An assignment with a null
+          // subUnitId means "whole SPU".
+          const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+          const allowedPairs = new Set<string>();
+          const keyFor = (spu: string, sub: string | null | undefined) =>
+            `${spu}::${sub ?? ""}`;
+          allowedPairs.add(keyFor(sessionStaff.spuId, sessionStaff.subUnitId));
+          for (const a of assignments as any[]) {
+            if (a.spuId) allowedPairs.add(keyFor(a.spuId, a.subUnitId ?? null));
           }
-          if (sessionStaff.subUnitId && parsed.data.subUnitId !== sessionStaff.subUnitId) {
-            return res.status(403).json({ error: "Forbidden: You can only submit OKRs for your assigned sub-unit." });
+          const requested = keyFor(parsed.data.spuId, parsed.data.subUnitId ?? null);
+          if (!allowedPairs.has(requested)) {
+            return res.status(403).json({
+              error: "Forbidden: You can only submit OKRs for SPUs and sub-units you are assigned to.",
+            });
           }
         } else if (sessionStaff && isLeaderRole(sessionStaff.role)) {
           const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
@@ -3051,11 +3131,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ error: "OKR not found" });
         }
         if (sessionStaff?.role === "basic") {
-          if (okr.spuId !== sessionStaff.spuId) {
-            return res.status(403).json({ error: "Forbidden: You can only score OKRs in your assigned SPU." });
+          // Build allowed (spuId, subUnitId-or-null) pairs from primary plus
+          // staff_spu_assignments. A pair with subUnitId === null acts as
+          // "whole SPU" and matches OKRs that have no sub-unit set.
+          const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+          const allowedPairs = new Set<string>();
+          const keyFor = (spu: string, sub: string | null | undefined) =>
+            `${spu}::${sub ?? ""}`;
+          allowedPairs.add(keyFor(sessionStaff.spuId, sessionStaff.subUnitId));
+          for (const a of assignments as any[]) {
+            if (a.spuId) allowedPairs.add(keyFor(a.spuId, a.subUnitId ?? null));
           }
-          if (sessionStaff.subUnitId && okr.subUnitId !== sessionStaff.subUnitId) {
-            return res.status(403).json({ error: "Forbidden: You can only score OKRs in your assigned sub-unit." });
+          const requested = keyFor(okr.spuId, okr.subUnitId ?? null);
+          if (!allowedPairs.has(requested)) {
+            return res.status(403).json({
+              error: "Forbidden: You can only score OKRs in SPUs and sub-units you are assigned to.",
+            });
           }
         } else if (sessionStaff && isLeaderRole(sessionStaff.role)) {
           const assignments = await storage.getStaffSpuAssignments(sessionStaffId);

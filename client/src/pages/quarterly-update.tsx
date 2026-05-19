@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -61,33 +61,58 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   const [selectedQuarter, setSelectedQuarter] = useState(deepQuarter);
   const [selectedYear, setSelectedYear] = useState(deepQuarter ? deepYear : currentYear);
 
-  // SPU-centric model: Fetch OKRs scoped to user's SPU directly from server
-  // Server validates session-based staff belongs to requested SPU
+  // Fetch every OKR the current staff session is allowed to score across
+  // every SPU they're associated with (primary + staff_spu_assignments).
+  // The server enforces the same scoping.
   const { data: spuOkrs, isLoading } = useQuery<OkrWithDetails[]>({
-    queryKey: ["/api/okrs/by-spu", staff.spuId],
+    queryKey: ["/api/my-okrs", staff.id],
     queryFn: async () => {
-      const response = await fetch(`/api/okrs/by-spu/${staff.spuId}`, {
-        credentials: "include", // Include session cookies
-      });
-      if (!response.ok) throw new Error("Failed to fetch SPU OKRs");
+      const response = await fetch(`/api/my-okrs`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch OKRs");
       return response.json();
     },
-    enabled: !!staff.spuId,
+    enabled: !!staff.id,
   });
 
   const { data: years } = useQuery<Year[]>({
     queryKey: ["/api/years"],
   });
-  
-  // Basic users with a sub-unit only see OKRs for that sub-unit.
-  // Leaders and super_admins see all OKRs in their SPU.
-  const restrictToSubUnit = staff.role === "basic" && !!staff.subUnitId;
 
-  // Filter OKRs by selected quarter and year, plus optional sub-unit restriction
+  // For basic users, also fetch their staff_spu_assignments so we can show
+  // OKRs from every sub-unit they're allowed to score, not just the primary.
+  const { data: spuAssignments } = useQuery<any[]>({
+    queryKey: ["/api/staff", staff.id, "assignments"],
+    queryFn: async () => {
+      const res = await fetch(`/api/staff/${staff.id}/assignments`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: staff.role === "basic",
+  });
+
+  // Allowed (spuId, subUnitId|null) pairs for basics. A pair with a null
+  // sub-unit matches OKRs that have no sub-unit set ("whole SPU").
+  const basicAllowedPairs = useMemo(() => {
+    if (staff.role !== "basic") return null;
+    const pairs = new Set<string>();
+    const keyFor = (spu: string, sub: string | null) => `${spu}::${sub ?? ""}`;
+    pairs.add(keyFor(staff.spuId, staff.subUnitId ?? null));
+    for (const a of (spuAssignments || []) as any[]) {
+      if (a?.spuId) pairs.add(keyFor(a.spuId, a.subUnitId ?? null));
+    }
+    return pairs;
+  }, [staff.role, staff.spuId, staff.subUnitId, spuAssignments]);
+
+  const isAllowedOkr = (okr: OkrWithDetails) => {
+    if (!basicAllowedPairs) return true;
+    return basicAllowedPairs.has(`${okr.spuId}::${okr.subUnitId ?? ""}`);
+  };
+
+  // Filter OKRs by selected quarter and year, plus role-scoped pair restriction
   const filteredOkrs = (spuOkrs || []).filter((okr) => {
     if (!selectedQuarter || !selectedYear) return false;
     if (okr.quarter !== selectedQuarter || okr.year !== selectedYear) return false;
-    if (restrictToSubUnit && okr.subUnitId !== staff.subUnitId) return false;
+    if (!isAllowedOkr(okr)) return false;
     return true;
   });
 
@@ -162,9 +187,10 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     const target = spuOkrs.find((o) => o.id === deepOkrId);
     if (!target) return;
 
-    // Honor sub-unit restriction for basic users — do not auto-select an OKR
-    // outside their assigned sub-unit even if they were given the deep link.
-    if (restrictToSubUnit && target.subUnitId !== staff.subUnitId) return;
+    // Honor role-scoped restriction for basic users — do not auto-select an
+    // OKR outside their allowed (SPU, sub-unit) pairs even if they were given
+    // a deep link to it.
+    if (!isAllowedOkr(target)) return;
 
     // Set quarter/year so filteredOkrs includes this OKR, then select it
     setSelectedQuarter(target.quarter);
@@ -202,7 +228,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/okrs/by-spu", staff.spuId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-okrs", staff.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/quarterly-updates"] });
       setIsSubmitted(true);
       toast({

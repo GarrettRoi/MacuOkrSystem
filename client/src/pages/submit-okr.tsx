@@ -66,37 +66,75 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
 
   
 
-  // Fetch SPU assignments for leaders/super_admins
+  // Fetch SPU assignments for every role — basic users may also have
+  // additional SPU/sub-unit grants via staff_spu_assignments and we need
+  // to honor them when populating the pickers.
   const { data: spuAssignments } = useQuery<any[]>({
-    queryKey: ["/api/staff", staff.id, "spu-assignments"],
-    enabled: isLeaderRole(staff.role) || staff.role === "super_admin",
+    queryKey: ["/api/staff", staff.id, "assignments"],
+    queryFn: async () => {
+      const res = await fetch(`/api/staff/${staff.id}/assignments`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
   });
+
+  // For basic users, build the explicit list of (spuId, subUnitId|null)
+  // pairs they are allowed to submit OKRs for: primary + every entry in
+  // staff_spu_assignments. A null subUnitId means "whole SPU" is allowed.
+  const basicAllowedPairs = useMemo(() => {
+    if (staff.role !== "basic") return [] as { spuId: string; subUnitId: string | null }[];
+    const pairs: { spuId: string; subUnitId: string | null }[] = [
+      { spuId: staff.spuId, subUnitId: staff.subUnitId ?? null },
+    ];
+    for (const a of (spuAssignments || []) as any[]) {
+      if (!a?.spuId) continue;
+      pairs.push({ spuId: a.spuId, subUnitId: a.subUnitId ?? null });
+    }
+    return pairs;
+  }, [staff.role, staff.spuId, staff.subUnitId, spuAssignments]);
 
   // Get available SPUs for this user
   const getAvailableSpus = () => {
     if (!spus) return [];
-    
+
     // Super admins can see all SPUs
     if (staff.role === "super_admin") {
       return spus;
     }
-    
+
     // Leaders can see their primary SPU plus assigned SPUs
     if (isLeaderRole(staff.role)) {
       const assignedSpuIds = (spuAssignments || []).map((a: any) => a.spuId);
-      return spus.filter(spu => 
+      return spus.filter(spu =>
         spu.id === staff.spuId || assignedSpuIds.includes(spu.id)
       );
     }
-    
-    // Basic users can only see their primary SPU
-    return spus.filter(spu => spu.id === staff.spuId);
+
+    // Basic users see every SPU they're tied to via primary or assignments
+    const basicSpuIds = new Set(basicAllowedPairs.map(p => p.spuId));
+    return spus.filter(spu => basicSpuIds.has(spu.id));
   };
 
   const availableSpus = getAvailableSpus();
 
-  // Basic users with a sub-unit are locked to their SPU and sub-unit
-  const lockedToSubUnit = staff.role === "basic" && !!staff.subUnitId;
+  // For basics: compute what's allowed inside a given SPU.
+  // Returns the set of explicit sub-unit ids, plus whether "whole SPU"
+  // is granted for that SPU (i.e. a pair with null subUnitId).
+  const getBasicAllowedForSpu = (spuId: string) => {
+    const subUnitIds = new Set<string>();
+    let allowsWholeSpu = false;
+    for (const p of basicAllowedPairs) {
+      if (p.spuId !== spuId) continue;
+      if (p.subUnitId) subUnitIds.add(p.subUnitId);
+      else allowsWholeSpu = true;
+    }
+    return { subUnitIds, allowsWholeSpu };
+  };
+
+  // Lock the SPU+sub-unit pickers only when the basic user has no choice
+  // at all: a single SPU and a single sub-unit (their original primary).
+  const lockedToSubUnit =
+    staff.role === "basic" && basicAllowedPairs.length === 1 && !!staff.subUnitId;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -230,7 +268,19 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     const subUnitsForSpu = (subUnits || []).filter(
       (su) => su.spuId === data.spuId && availableSpuIds.includes(su.spuId)
     );
-    if (subUnitsForSpu.length > 0 && !data.subUnitId) {
+    // For basics, force a sub-unit pick unless the SPU is granted "whole SPU".
+    if (staff.role === "basic") {
+      const { subUnitIds, allowsWholeSpu } = getBasicAllowedForSpu(data.spuId);
+      if (subUnitIds.size > 0 && !allowsWholeSpu) {
+        if (!data.subUnitId || data.subUnitId === WHOLE_SPU_SENTINEL) {
+          form.setError("subUnitId", {
+            type: "manual",
+            message: "Please select one of your assigned sub-units.",
+          });
+          return;
+        }
+      }
+    } else if (subUnitsForSpu.length > 0 && !data.subUnitId) {
       form.setError("subUnitId", {
         type: "manual",
         message: "Please select a sub-unit, or choose \"Apply to whole SPU\"",
@@ -584,7 +634,22 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                   render={({ field }) => {
                     const selectedSpuId = form.watch("spuId");
                     const availableSpuIds = availableSpus.map(s => s.id);
-                    const filteredSubUnits = subUnits?.filter(su => su.spuId === selectedSpuId && availableSpuIds.includes(su.spuId)) || [];
+                    const allSubUnitsForSpu = subUnits?.filter(
+                      su => su.spuId === selectedSpuId && availableSpuIds.includes(su.spuId)
+                    ) || [];
+
+                    // For basics, narrow the list of sub-units to those they
+                    // have an explicit grant for. Also decide if "whole SPU"
+                    // is allowed for the chosen SPU.
+                    const basicAllowed = staff.role === "basic"
+                      ? getBasicAllowedForSpu(selectedSpuId)
+                      : null;
+                    const filteredSubUnits = basicAllowed
+                      ? allSubUnitsForSpu.filter(su => basicAllowed.subUnitIds.has(su.id))
+                      : allSubUnitsForSpu;
+                    const showWholeSpuOption = basicAllowed
+                      ? basicAllowed.allowsWholeSpu
+                      : true;
                     const hasSubUnits = filteredSubUnits.length > 0;
                     const isRequired = hasSubUnits && !lockedToSubUnit;
 
@@ -593,26 +658,30 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         <FormLabel>
                           Sub-Unit or Division {isRequired ? "*" : "(Optional)"}
                         </FormLabel>
-                        <Select 
-                          onValueChange={(value) => field.onChange(value)} 
+                        <Select
+                          onValueChange={(value) => field.onChange(value)}
                           value={field.value || ""}
-                          disabled={lockedToSubUnit || !selectedSpuId || !hasSubUnits}
+                          disabled={lockedToSubUnit || !selectedSpuId || (!hasSubUnits && !showWholeSpuOption)}
                         >
                           <FormControl>
                             <SelectTrigger data-testid="select-sub-unit">
                               <SelectValue placeholder={
                                 !selectedSpuId
                                   ? "Select an SPU first"
-                                  : !hasSubUnits
+                                  : !hasSubUnits && !showWholeSpuOption
                                     ? "No sub-units available"
-                                    : "Select sub-unit or whole SPU"
+                                    : !hasSubUnits
+                                      ? "Apply to whole SPU"
+                                      : "Select sub-unit"
                               } />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value={WHOLE_SPU_SENTINEL} data-testid="select-sub-unit-none">
-                              Apply to whole SPU
-                            </SelectItem>
+                            {showWholeSpuOption && (
+                              <SelectItem value={WHOLE_SPU_SENTINEL} data-testid="select-sub-unit-none">
+                                Apply to whole SPU
+                              </SelectItem>
+                            )}
                             {filteredSubUnits.map((subUnit) => (
                               <SelectItem key={subUnit.id} value={subUnit.id}>
                                 {subUnit.name}
@@ -625,9 +694,11 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                             ? "Locked to your assigned sub-unit."
                             : !selectedSpuId
                               ? "Select an SPU above to choose a sub-unit."
-                              : !hasSubUnits
-                                ? "This SPU has no sub-units."
-                                : "Pick a specific sub-unit, or choose \"Apply to whole SPU\""}
+                              : basicAllowed && !showWholeSpuOption && hasSubUnits
+                                ? "Pick one of your assigned sub-units."
+                                : !hasSubUnits && !showWholeSpuOption
+                                  ? "This SPU has no sub-units available to you."
+                                  : "Pick a specific sub-unit, or choose \"Apply to whole SPU\""}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
