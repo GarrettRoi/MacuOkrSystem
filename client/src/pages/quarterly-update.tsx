@@ -425,9 +425,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                             ))}
                           </SelectContent>
                         </Select>
-                        <FormDescription>
-                          Choose the quarter you are scoring
-                        </FormDescription>
+                        <FormDescription>Choose which OKR you wish to score.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
