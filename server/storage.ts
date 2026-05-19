@@ -1847,6 +1847,9 @@ export class DatabaseStorage implements IStorage {
       await tx.update(okrs).set({ spuId: targetId }).where(eq(okrs.spuId, sourceId));
       await tx.update(okrs).set({ collaborationSpuId: targetId }).where(eq(okrs.collaborationSpuId, sourceId));
       await tx.execute(sql`UPDATE okrs SET collaboration_spu_ids = array_replace(collaboration_spu_ids, ${sourceId}::text, ${targetId}::text) WHERE ${sourceId}::text = ANY(collaboration_spu_ids)`);
+      // Also remap the new join table so the ON DELETE CASCADE on spus
+      // doesn't silently drop collaborator rows when sourceId is deleted below.
+      await tx.update(okrCollaborators).set({ spuId: targetId }).where(eq(okrCollaborators.spuId, sourceId));
 
       const movedSubUnits = await tx.select().from(subUnits).where(eq(subUnits.spuId, sourceId));
       await tx.update(subUnits).set({ spuId: targetId }).where(eq(subUnits.spuId, sourceId));
@@ -1888,6 +1891,12 @@ export class DatabaseStorage implements IStorage {
         .where(eq(okrs.spuId, sourceSpuId));
       await tx.update(okrs).set({ collaborationSpuId: targetSpuId }).where(eq(okrs.collaborationSpuId, sourceSpuId));
       await tx.execute(sql`UPDATE okrs SET collaboration_spu_ids = array_replace(collaboration_spu_ids, ${sourceSpuId}::text, ${targetSpuId}::text) WHERE ${sourceSpuId}::text = ANY(collaboration_spu_ids)`);
+      // Remap join-table collaborator rows: the deleted SPU becomes a sub-unit
+      // under targetSpuId, so any OKR that "collaborated with" the old SPU
+      // should now collaborate with the new sub-unit instead.
+      await tx.update(okrCollaborators)
+        .set({ spuId: null, subUnitId: newSubUnit.id })
+        .where(eq(okrCollaborators.spuId, sourceSpuId));
 
       await tx.update(staffSpuAssignments).set({ spuId: targetSpuId, subUnitId: newSubUnit.id })
         .where(and(eq(staffSpuAssignments.spuId, sourceSpuId), isNull(staffSpuAssignments.subUnitId)));
