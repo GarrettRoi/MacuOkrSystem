@@ -139,6 +139,17 @@ async function runStartupMigrations() {
       failure_count INTEGER NOT NULL DEFAULT 0,
       sent_at TIMESTAMP NOT NULL DEFAULT NOW()
     )`,
+    // Join table for OKR collaborators (SPU or sub-unit). Nullable FKs so a
+    // row represents either an SPU collaborator or a sub-unit collaborator.
+    `CREATE TABLE IF NOT EXISTS okr_collaborators (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      okr_id VARCHAR NOT NULL REFERENCES okrs(id) ON DELETE CASCADE,
+      spu_id VARCHAR REFERENCES spus(id) ON DELETE CASCADE,
+      sub_unit_id VARCHAR REFERENCES sub_units(id) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS "IDX_okr_collaborators_okr" ON okr_collaborators(okr_id)`,
+    `CREATE INDEX IF NOT EXISTS "IDX_okr_collaborators_spu" ON okr_collaborators(spu_id)`,
+    `CREATE INDEX IF NOT EXISTS "IDX_okr_collaborators_sub_unit" ON okr_collaborators(sub_unit_id)`,
   ];
   let failed = 0;
   for (const sql of migrations) {
