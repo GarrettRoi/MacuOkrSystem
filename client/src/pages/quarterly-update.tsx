@@ -15,7 +15,7 @@ import { CheckCircle2, AlertCircle, Sparkles, Star, PartyPopper } from "lucide-r
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StaffWithDetails, OkrWithDetails, Year } from "@shared/schema";
 import { insertQuarterlyUpdateSchema, QUARTERS, getQuarterLabel } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 
 // Schema for individual key result score (for internal form use)
 const keyResultScoreSchema = z.object({
@@ -210,10 +210,12 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
         description: "Your quarterly update has been recorded.",
       });
     },
-    onError: () => {
+    onError: (error: unknown) => {
+      const message = getErrorMessage(error);
+      logClientError("quarterly-update:create", error);
       toast({
         title: "Submission Failed",
-        description: "There was an error submitting your update. Please try again.",
+        description: `${message}. Please try again or contact your admin.`,
         variant: "destructive",
       });
     },

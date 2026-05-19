@@ -15,7 +15,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText, Shuffle, CheckCircle, Clock, HardDriveDownload, RotateCcw, Shield } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog, UnmatchedScore, DataBackupMeta, StaffWithDetails } from "@shared/schema";
 import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
@@ -469,10 +469,12 @@ export default function Data() {
         description: "The OKR has been successfully updated.",
       });
     },
-    onError: () => {
+    onError: (error: unknown) => {
+      const message = getErrorMessage(error);
+      logClientError("data:okr-update", error);
       toast({
         title: "Update Failed",
-        description: "Failed to update the OKR. Please try again.",
+        description: `${message}. Please try again or contact your admin.`,
         variant: "destructive",
       });
     },
@@ -494,10 +496,12 @@ export default function Data() {
         description: "The quarterly update has been successfully saved.",
       });
     },
-    onError: () => {
+    onError: (error: unknown) => {
+      const message = getErrorMessage(error);
+      logClientError("data:quarterly-update-save", error);
       toast({
         title: "Save Failed",
-        description: "Failed to save the quarterly update. Please try again.",
+        description: `${message}. Please try again or contact your admin.`,
         variant: "destructive",
       });
     },
@@ -512,10 +516,12 @@ export default function Data() {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/edit-logs"] });
     },
-    onError: () => {
+    onError: (error: unknown) => {
+      const message = getErrorMessage(error);
+      logClientError("data:okr-delete", error);
       toast({
         title: "Delete Failed",
-        description: "Failed to delete the OKR. Please try again.",
+        description: `${message}. Please try again or contact your admin.`,
         variant: "destructive",
       });
     },

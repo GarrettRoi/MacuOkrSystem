@@ -5082,7 +5082,8 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                       Recent Activity
                     </CardTitle>
                     <CardDescription>
-                      Page visits by staff. Newest first. Filter by user to see one person's history.
+                      Page visits and submission errors by staff. Newest first.
+                      Rows highlighted in red are errors with the server's diagnostic detail attached.
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
@@ -5128,24 +5129,49 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {activityList.map((entry) => (
-                          <TableRow key={entry.id} data-testid={`row-activity-${entry.id}`}>
-                            <TableCell className="font-medium text-sm" data-testid={`text-activity-staff-${entry.id}`}>
-                              {entry.staffName}
-                              {!entry.staffId && (
-                                <Badge variant="secondary" className="ml-2 no-default-active-elevate">deleted</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-xs font-mono text-muted-foreground" data-testid={`text-activity-path-${entry.id}`}>
-                              <span className="break-all">{entry.path}</span>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`text-activity-when-${entry.id}`}>
-                              {new Date(entry.occurredAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                              {" "}
-                              {new Date(entry.occurredAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {activityList.map((entry) => {
+                          const isError = entry.kind === "error";
+                          return (
+                            <TableRow
+                              key={entry.id}
+                              data-testid={`row-activity-${entry.id}`}
+                              className={isError ? "bg-red-50 dark:bg-red-950/40" : undefined}
+                            >
+                              <TableCell className="font-medium text-sm align-top" data-testid={`text-activity-staff-${entry.id}`}>
+                                {isError && (
+                                  <Badge variant="destructive" className="mr-2 no-default-active-elevate">Error</Badge>
+                                )}
+                                {entry.staffName}
+                                {!entry.staffId && (
+                                  <Badge variant="secondary" className="ml-2 no-default-active-elevate">deleted</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono text-muted-foreground align-top" data-testid={`text-activity-path-${entry.id}`}>
+                                <span className="break-all">{entry.path}</span>
+                                {isError && entry.errorMessage && (
+                                  <div className="mt-1 text-sm font-sans font-medium text-red-700 dark:text-red-300 break-words" data-testid={`text-activity-error-${entry.id}`}>
+                                    {entry.errorMessage}
+                                  </div>
+                                )}
+                                {isError && entry.errorDetail && (
+                                  <details className="mt-1">
+                                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                                      Diagnostic detail
+                                    </summary>
+                                    <pre className="mt-1 whitespace-pre-wrap break-words text-[11px] bg-background/60 dark:bg-background/30 p-2 rounded border" data-testid={`text-activity-detail-${entry.id}`}>
+                                      {entry.errorDetail}
+                                    </pre>
+                                  </details>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground whitespace-nowrap align-top" data-testid={`text-activity-when-${entry.id}`}>
+                                {new Date(entry.occurredAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                                {" "}
+                                {new Date(entry.occurredAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>

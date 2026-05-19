@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Target, Calendar, Building2, TrendingUp, Filter, X, User, Users, Pencil, Plus, Minus } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
 import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, isLeaderRole } from "@shared/schema";
 
@@ -237,10 +237,12 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
         description: "The OKR has been successfully updated.",
       });
     },
-    onError: () => {
+    onError: (error: unknown) => {
+      const message = getErrorMessage(error);
+      logClientError("my-okrs:update", error);
       toast({
         title: "Update Failed",
-        description: "Failed to update the OKR. Please try again.",
+        description: `${message}. Please try again or contact your admin.`,
         variant: "destructive",
       });
     },

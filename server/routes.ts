@@ -252,6 +252,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Client-side error reporting. Any authenticated user can post here when a
+  // mutation fails so the failure shows up in the admin Activity Log with the
+  // server response / stack trace, instead of vanishing into the browser
+  // console where the admin can't see it.
+  app.post("/api/activity/error", requireAuth, async (req, res) => {
+    try {
+      const staffId = req.session.selectedStaffId;
+      if (!staffId) {
+        return res.status(401).json({ error: "Please select a staff profile first" });
+      }
+      const staffMember = await storage.getStaff(staffId);
+      if (!staffMember) {
+        return res.status(401).json({ error: "Invalid staff session" });
+      }
+      const path = typeof req.body?.path === "string" ? req.body.path.slice(0, 500) : "";
+      const errorMessage = typeof req.body?.errorMessage === "string"
+        ? req.body.errorMessage.slice(0, 500) : "";
+      const rawDetail = typeof req.body?.errorDetail === "string"
+        ? req.body.errorDetail.slice(0, 4000) : null;
+      if (!path || !errorMessage) {
+        return res.status(400).json({ error: "path and errorMessage required" });
+      }
+      // Mask anything that smells like a credential before we persist it.
+      // Diagnostics are super-admin-only, but this is cheap insurance.
+      const redact = (s: string) => s
+        .replace(/("?(?:password|pwd|token|secret|api[_-]?key|session|authorization|bearer)"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/gi,
+          (_m, k) => `${k}"[REDACTED]"`)
+        .replace(/\bBearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [REDACTED]");
+      const errorDetail = rawDetail ? redact(rawDetail) : null;
+      await storage.createActivityLog({
+        staffId: staffMember.id,
+        staffName: staffMember.name,
+        staffEmail: staffMember.email,
+        path,
+        kind: "error",
+        errorMessage: redact(errorMessage),
+        errorDetail,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[activity] error log failed:", error);
+      res.status(500).json({ error: "Failed to log error" });
+    }
+  });
+
   app.get("/api/admin/activity", requireAuth, async (req, res) => {
     try {
       if (!(await requireRole(req, res, ["super_admin"]))) return;

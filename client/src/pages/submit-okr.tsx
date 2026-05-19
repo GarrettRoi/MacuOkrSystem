@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2, Sparkles, Smile, Frown } from "lucide-react";
 import type { StaffWithDetails, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { QUARTERS, isLeaderRole } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
 
@@ -181,9 +181,10 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       onSuccess: () => {
         toast({ title: "Thanks for the feedback!" });
       },
-      onError: () => {
+      onError: (error: unknown) => {
         setRatingSubmitted(null);
-        toast({ title: "Failed to submit rating", variant: "destructive" });
+        logClientError("submit-okr:rating", error);
+        toast({ title: "Failed to submit rating", description: getErrorMessage(error), variant: "destructive" });
       },
     });
   };
@@ -213,10 +214,12 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
         description: "Your OKR has been recorded in the system.",
       });
     },
-    onError: () => {
+    onError: (error: unknown) => {
+      const message = getErrorMessage(error);
+      logClientError("submit-okr:create", error);
       toast({
         title: "Submission Failed",
-        description: "There was an error submitting your OKR. Please try again.",
+        description: `${message}. Please try again or contact your admin.`,
         variant: "destructive",
       });
     },

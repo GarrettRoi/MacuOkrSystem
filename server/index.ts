@@ -113,6 +113,10 @@ async function runStartupMigrations() {
     )`,
     `CREATE INDEX IF NOT EXISTS "IDX_activity_log_staff" ON activity_log(staff_id)`,
     `CREATE INDEX IF NOT EXISTS "IDX_activity_log_occurred" ON activity_log(occurred_at)`,
+    `ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'page_view'`,
+    `ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS error_message TEXT`,
+    `ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS error_detail TEXT`,
+    `CREATE INDEX IF NOT EXISTS "IDX_activity_log_kind" ON activity_log(kind)`,
     `CREATE TABLE IF NOT EXISTS push_subscriptions (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       staff_id VARCHAR NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

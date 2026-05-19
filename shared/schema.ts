@@ -594,10 +594,18 @@ export const activityLog = pgTable("activity_log", {
   staffName: text("staff_name").notNull(),
   staffEmail: text("staff_email"),
   path: text("path").notNull(),
+  // 'page_view' for normal navigation, 'error' for client-side error reports.
+  kind: text("kind").notNull().default("page_view"),
+  // Populated when kind = 'error'. errorMessage is the short summary shown to
+  // the user; errorDetail holds the full server response / stack trace for
+  // diagnosis.
+  errorMessage: text("error_message"),
+  errorDetail: text("error_detail"),
   occurredAt: timestamp("occurred_at").notNull().defaultNow(),
 }, (table) => ({
   staffIdx: index("IDX_activity_log_staff").on(table.staffId),
   occurredIdx: index("IDX_activity_log_occurred").on(table.occurredAt),
+  kindIdx: index("IDX_activity_log_kind").on(table.kind),
 }));
 
 export const insertActivityLogSchema = createInsertSchema(activityLog).omit({ id: true, occurredAt: true });
