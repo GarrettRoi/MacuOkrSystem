@@ -2304,7 +2304,26 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         )).sort((a, b) => a.localeCompare(b));
                         return (
                         <TableRow key={member.id} data-testid={`row-team-${member.id}`}>
-                          <TableCell className="font-medium">{member.name}</TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span>{member.name}</span>
+                              {member.role !== "basic" && (
+                                <Badge
+                                  variant="outline"
+                                  className="no-default-active-elevate"
+                                  data-testid={`badge-team-role-${member.id}`}
+                                >
+                                  {member.role === "super_admin"
+                                    ? "Super Admin"
+                                    : member.role === "cabinet"
+                                    ? "Cabinet"
+                                    : member.role === "leader"
+                                    ? "Leader"
+                                    : member.role}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>{member.email}</TableCell>
                           <TableCell data-testid={`cell-team-spus-${member.id}`}>
                             <div className="flex flex-wrap gap-1 items-center">
@@ -2348,39 +2367,48 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                             )}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-1 flex-wrap">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingTeamMember({
-                                    id: member.id,
-                                    name: member.name,
-                                    email: member.email,
-                                    spuId: member.spuId,
-                                    subUnitId: member.subUnitId ?? null,
-                                  });
-                                  setEditTeamMemberOpen(true);
-                                }}
-                                data-testid={`button-edit-team-member-${member.id}`}
+                            {isLeaderRole(staff.role) && member.role !== "basic" ? (
+                              <span
+                                className="text-xs text-muted-foreground"
+                                data-testid={`text-team-readonly-${member.id}`}
                               >
-                                <Pencil className="h-3 w-3 mr-1" />
-                                Edit
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setManagingSubUnitsMember(member);
-                                  setNewMemberSubUnitId("");
-                                  setManageSubUnitsDialogOpen(true);
-                                }}
-                                data-testid={`button-manage-subunits-${member.id}`}
-                              >
-                                <Settings className="h-3 w-3 mr-1" />
-                                Sub-Units
-                              </Button>
-                            </div>
+                                Read-only
+                              </span>
+                            ) : (
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingTeamMember({
+                                      id: member.id,
+                                      name: member.name,
+                                      email: member.email,
+                                      spuId: member.spuId,
+                                      subUnitId: member.subUnitId ?? null,
+                                    });
+                                    setEditTeamMemberOpen(true);
+                                  }}
+                                  data-testid={`button-edit-team-member-${member.id}`}
+                                >
+                                  <Pencil className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setManagingSubUnitsMember(member);
+                                    setNewMemberSubUnitId("");
+                                    setManageSubUnitsDialogOpen(true);
+                                  }}
+                                  data-testid={`button-manage-subunits-${member.id}`}
+                                >
+                                  <Settings className="h-3 w-3 mr-1" />
+                                  Sub-Units
+                                </Button>
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                         );
