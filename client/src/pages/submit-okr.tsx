@@ -500,12 +500,63 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     <p className="text-sm font-medium">Primary SPU (School, Department, Unit)</p>
                     <p className="text-sm text-muted-foreground" data-testid="text-staff-spu">{staff.spu.name}</p>
                   </div>
-                  {staff.subUnit && (
-                    <div>
-                      <p className="text-sm font-medium">Sub-Unit or Division</p>
-                      <p className="text-sm text-muted-foreground" data-testid="text-staff-subunit">{staff.subUnit.name}</p>
-                    </div>
-                  )}
+                  {(() => {
+                    const spuNameById = new Map((spus || []).map((s) => [s.id, s.name]));
+                    const subUnitById = new Map((subUnits || []).map((su) => [su.id, su]));
+                    const entries: { key: string; label: string }[] = [];
+                    const seen = new Set<string>();
+                    const pushEntry = (key: string, label: string) => {
+                      if (seen.has(key)) return;
+                      seen.add(key);
+                      entries.push({ key, label });
+                    };
+                    if (staff.subUnit) {
+                      pushEntry(`primary:${staff.subUnit.id}`, staff.subUnit.name);
+                    }
+                    for (const a of (spuAssignments || []) as any[]) {
+                      if (!a?.spuId) continue;
+                      if (a.subUnitId) {
+                        const su = subUnitById.get(a.subUnitId);
+                        if (!su) continue;
+                        const spuName = spuNameById.get(su.spuId);
+                        const label = spuName && su.spuId !== staff.spuId
+                          ? `${spuName} \u2014 ${su.name}`
+                          : su.name;
+                        pushEntry(`sub:${a.subUnitId}`, label);
+                      } else if (a.spuId !== staff.spuId) {
+                        const spuName = spuNameById.get(a.spuId);
+                        if (!spuName) continue;
+                        pushEntry(`spu:${a.spuId}`, `${spuName} (entire SPU)`);
+                      }
+                    }
+                    if (entries.length === 0) return null;
+                    return (
+                      <div>
+                        <p className="text-sm font-medium">
+                          {entries.length > 1 ? "Sub-Units or Divisions" : "Sub-Unit or Division"}
+                        </p>
+                        {entries.length === 1 ? (
+                          <p
+                            className="text-sm text-muted-foreground"
+                            data-testid="text-staff-subunit"
+                          >
+                            {entries[0].label}
+                          </p>
+                        ) : (
+                          <ul
+                            className="text-sm text-muted-foreground list-disc pl-5 space-y-0.5"
+                            data-testid="list-staff-subunits"
+                          >
+                            {entries.map((e) => (
+                              <li key={e.key} data-testid={`text-staff-subunit-${e.key}`}>
+                                {e.label}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
