@@ -6,7 +6,7 @@ import { eq, sql, asc, and as drizzleAnd } from "drizzle-orm";
 import * as oidcClient from "openid-client";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { sendInviteEmail } from "./email";
+import { sendInviteEmail, sendFeedbackNotificationEmail } from "./email";
 import {
   insertStaffSchema,
   insertSpuSchema,
@@ -1004,6 +1004,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: parsed.data.message,
         pageUrl: parsed.data.pageUrl ?? null,
       });
+      // Fire-and-forget notification to all super_admins.
+      (async () => {
+        try {
+          const submitter = await storage.getStaff(staffId);
+          if (!submitter) return;
+          const allStaff = await storage.getAllStaff();
+          const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          const recipients = Array.from(
+            new Set(
+              allStaff
+                .filter(
+                  (s) =>
+                    s.role === "super_admin" &&
+                    !!s.email &&
+                    emailPattern.test(s.email),
+                )
+                .map((s) => (s.email as string).toLowerCase()),
+            ),
+          );
+          if (!recipients.length) return;
+          await sendFeedbackNotificationEmail({
+            to: recipients,
+            submitterName: submitter.name,
+            submitterEmail: submitter.email,
+            message: parsed.data.message,
+            pageUrl: parsed.data.pageUrl ?? null,
+          });
+        } catch (e) {
+          console.error("[feedback] failed to send notification email", e);
+        }
+      })();
       res.status(201).json(entry);
     } catch (error) {
       res.status(500).json({ error: "Failed to submit feedback" });
