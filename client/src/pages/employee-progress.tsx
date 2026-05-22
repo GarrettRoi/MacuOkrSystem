@@ -144,12 +144,12 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     return [];
   };
 
-  const scoredStaffProgress = (progressSummaries ?? [])
-    .map(s => s.overallProgress)
-    .filter((p): p is number => p !== null);
-  const totalProgress = scoredStaffProgress.length > 0
-    ? Math.round(scoredStaffProgress.reduce((sum, p) => sum + p, 0) / scoredStaffProgress.length)
-    : 0;
+  // ── Headline "Overall Progress" ────────────────────────────────────────
+  // Match the University Achievement page: average every scored OKR
+  // equally (each OKR's latest primary averageScore) instead of taking
+  // an average of per-staff averages, which over-weighted staff with
+  // few OKRs. Computed below from spuGroups so it respects the same
+  // planning-year filter that drives the visible breakdown.
 
   const spuGroups: SpuGroup[] = useMemo(() => {
     if (!progressSummaries) return [];
@@ -195,6 +195,14 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   };
 
   const totalOkrCount = spuGroups.reduce((sum, g) => sum + g.allOkrs.length, 0);
+
+  const allScoredOkrScores = spuGroups
+    .flatMap(g => g.allOkrs)
+    .map(r => r.latestUpdate?.averageScore)
+    .filter((v): v is number => v !== null && v !== undefined && !isNaN(v));
+  const totalProgress = allScoredOkrScores.length > 0
+    ? Math.round(allScoredOkrScores.reduce((sum, v) => sum + v, 0) / allScoredOkrScores.length)
+    : 0;
 
   // ── University Dashboard logic ──────────────────────────────────────────
   const activeObjectives = useMemo(
