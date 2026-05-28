@@ -2924,7 +2924,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!reason || !reason.trim()) {
         return res.status(400).json({ error: "A reason for editing is required" });
       }
-      
+
+      // Defense-in-depth: coerce legacy / stale-client status values
+      // (e.g. "on_track" from older builds or imported data) to a value
+      // the current enum accepts before validation.
+      if (typeof updateFields.status === "string" &&
+          !["not_started", "in_progress", "completed"].includes(updateFields.status)) {
+        updateFields.status = "in_progress";
+      }
+
       const parsed = updateOkrSchema.safeParse(updateFields);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });

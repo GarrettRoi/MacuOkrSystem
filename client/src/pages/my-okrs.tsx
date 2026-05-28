@@ -188,7 +188,14 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     setEditKeyResults(parseKeyResults(okr.keyResults));
     setEditQuarter(okr.quarter);
     setEditYear(okr.year);
-    setEditStatus(okr.status || "not_started");
+    // Normalize legacy / unknown status values (e.g. "on_track" from older
+    // data imports) to a value the server enum accepts, so the Select shows
+    // a real option and the update payload validates.
+    const allowedStatuses = ["not_started", "in_progress", "completed"] as const;
+    const normalizedStatus = allowedStatuses.includes(okr.status as typeof allowedStatuses[number])
+      ? okr.status
+      : "in_progress";
+    setEditStatus(normalizedStatus || "not_started");
     setEditReason("");
   };
 
