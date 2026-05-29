@@ -2843,8 +2843,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         submitterName = staffMember?.name;
       }
       
-      // Auto-generate OKR number based on existing count for this SPU and year
-      const existingCount = await storage.countOkrsBySpu(parsed.data.spuId, parsed.data.year);
+      // Auto-generate OKR number based on existing count for this SPU,
+      // year, and quarter. The count resets each quarter.
+      const existingCount = await storage.countOkrsBySpu(parsed.data.spuId, parsed.data.year, parsed.data.quarter);
       const okrNumber = `OKR ${existingCount + 1}`;
       
       console.log("[POST /api/okrs] Parsed data:", JSON.stringify(parsed.data, null, 2));

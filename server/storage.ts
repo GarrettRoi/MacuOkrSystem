@@ -152,7 +152,7 @@ export interface IStorage {
   getOkr(id: string): Promise<Okr | undefined>;
   getOkrsByStaff(staffId: string): Promise<Okr[]>;
   getOkrsBySpu(spuId: string): Promise<Okr[]>;
-  countOkrsBySpu(spuId: string, year: number): Promise<number>;
+  countOkrsBySpu(spuId: string, year: number, quarter: string): Promise<number>;
   getOkrsWithDetailsBySpu(spuId: string): Promise<OkrWithDetails[]>;
   getOkrsWithDetailsForStaff(staffId: string | null, spuIds: string[]): Promise<OkrWithDetails[]>;
   createOkr(okr: InsertOkr & { okrNumber: string }): Promise<Okr>;
@@ -812,8 +812,8 @@ export class DatabaseStorage implements IStorage {
     return this.enrichRowsWithCollaborators(result, allSpus, allSubUnits, collabMap);
   }
 
-  async countOkrsBySpu(spuId: string, year: number): Promise<number> {
-    const result = await db.select().from(okrs).where(and(eq(okrs.spuId, spuId), eq(okrs.year, year)));
+  async countOkrsBySpu(spuId: string, year: number, quarter: string): Promise<number> {
+    const result = await db.select().from(okrs).where(and(eq(okrs.spuId, spuId), eq(okrs.year, year), eq(okrs.quarter, quarter)));
     return result.length;
   }
 
