@@ -2362,7 +2362,7 @@ const SEED_SUPER_ADMINS: Array<{
   spuName: string;
 }> = [
   { name: "Amanda Harris",   email: "amanda.harris@macu.edu",  spuName: "Strategic Initiatives"   },
-  { name: "Phil Greenwald",  email: "president@macu.edu",      spuName: "Office of the President" },
+  { name: "Phil Greenwald",  email: "phil@macu.edu",          spuName: "Office of the President" },
   { name: "Garrett Finnell", email: "garrett.finnell@macu.edu", spuName: "Information Technology"  },
 ];
 
