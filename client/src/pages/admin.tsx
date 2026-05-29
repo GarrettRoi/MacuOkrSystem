@@ -2234,23 +2234,6 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <Button
-                      variant="outline"
-                      onClick={() => {
-                        const defaultSpu = isLeaderRole(staff.role)
-                          ? (staff.spuId || addStaffSpus[0]?.id || "")
-                          : (addStaffSpus[0]?.id || "");
-                        setAddSubUnitForSpuId(defaultSpu);
-                        setNewSubUnitParent(defaultSpu);
-                        setNewSubUnitName("");
-                        setSubUnitDialogOpen(true);
-                      }}
-                      disabled={addStaffSpus.length === 0}
-                      data-testid="button-add-subunit-myteam"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Sub-Unit
-                    </Button>
-                    <Button
                       onClick={() => {
                         setAddTeamMemberName("");
                         setAddTeamMemberEmail("");
