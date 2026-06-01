@@ -42,6 +42,12 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   const [editCollaborationIds, setEditCollaborationIds] = useState<string[]>([]);
   const [editReason, setEditReason] = useState("");
 
+  const [editingScoreUpdate, setEditingScoreUpdate] = useState<QuarterlyUpdate | null>(null);
+  const [editingScoreOkr, setEditingScoreOkr] = useState<OkrWithDetails | null>(null);
+  const [editScores, setEditScores] = useState<Array<{ keyResultNumber: number; description: string; score: number }>>([]);
+  const [editScoreNotes, setEditScoreNotes] = useState("");
+  const [editScoreReason, setEditScoreReason] = useState("");
+
   const isAdmin = staff.role === "super_admin" || isLeaderRole(staff.role);
 
   const { data: planStartYearData } = useQuery<{ startYear: number }>({
@@ -386,6 +392,99 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
       id: editingOkr.id,
       updates,
       reason: editReason,
+      editedBy: staff.id,
+      editedByName: staff.name,
+    });
+  };
+
+  const updateScoreMutation = useMutation({
+    mutationFn: async (data: { id: string; keyResultScores: string; notes: string; reason: string; editedBy: string; editedByName: string }) => {
+      return await apiRequest("PUT", `/api/quarterly-updates/${data.id}`, {
+        keyResultScores: data.keyResultScores,
+        notes: data.notes,
+        reason: data.reason,
+        editedBy: data.editedBy,
+        editedByName: data.editedByName,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quarterly-updates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-okrs", staff.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/edit-logs"] });
+      closeEditScoreDialog();
+      toast({
+        title: "Score Updated",
+        description: "The score has been successfully updated.",
+      });
+    },
+    onError: (error: unknown) => {
+      const message = getErrorMessage(error);
+      logClientError("my-okrs:score-update", error);
+      toast({
+        title: "Update Failed",
+        description: `${message}. Please try again or contact your admin.`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const openEditScoreDialog = (okr: OkrWithDetails, update: QuarterlyUpdate) => {
+    const keyResults = parseKeyResults(okr.keyResults);
+    let parsedScores: Array<{ keyResultNumber: number; description: string; score: number }> = [];
+    if (update.keyResultScores) {
+      if (Array.isArray(update.keyResultScores)) {
+        parsedScores = update.keyResultScores as any;
+      } else if (typeof update.keyResultScores === "string") {
+        try { parsedScores = JSON.parse(update.keyResultScores); } catch {}
+      }
+    }
+    // Seed one editable row per key result, preferring any existing score.
+    const seeded = keyResults.map((kr, idx) => {
+      const existing = parsedScores.find((s) => s.keyResultNumber === idx + 1);
+      return {
+        keyResultNumber: idx + 1,
+        description: kr.description,
+        score: existing ? existing.score : 0,
+      };
+    });
+    setEditingScoreOkr(okr);
+    setEditingScoreUpdate(update);
+    setEditScores(seeded.length > 0 ? seeded : parsedScores);
+    setEditScoreNotes(update.notes || "");
+    setEditScoreReason("");
+  };
+
+  const closeEditScoreDialog = () => {
+    setEditingScoreUpdate(null);
+    setEditingScoreOkr(null);
+    setEditScores([]);
+    setEditScoreNotes("");
+    setEditScoreReason("");
+  };
+
+  const updateEditScore = (idx: number, score: number) => {
+    setEditScores((prev) => prev.map((s, i) => (i === idx ? { ...s, score } : s)));
+  };
+
+  const handleEditScoreSubmit = () => {
+    if (!editingScoreUpdate) return;
+    if (!editScoreReason.trim()) {
+      toast({ title: "Reason Required", description: "Please provide a reason for this score change.", variant: "destructive" });
+      return;
+    }
+    if (editScoreNotes.trim().length < 10) {
+      toast({ title: "Validation Error", description: "Notes must be at least 10 characters.", variant: "destructive" });
+      return;
+    }
+    if (editScores.some((s) => s.score < 0 || s.score > 100 || Number.isNaN(s.score))) {
+      toast({ title: "Validation Error", description: "Each score must be between 0 and 100.", variant: "destructive" });
+      return;
+    }
+    updateScoreMutation.mutate({
+      id: editingScoreUpdate.id,
+      keyResultScores: JSON.stringify(editScores),
+      notes: editScoreNotes,
+      reason: editScoreReason,
       editedBy: staff.id,
       editedByName: staff.name,
     });
@@ -750,7 +849,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                           Update Progress
                         </Button>
                       </Link>
-                      {isAdmin && okr.staffId === staff.id && (
+                      {isAdmin && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -759,6 +858,17 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                         >
                           <Pencil className="h-4 w-4 mr-1" />
                           Edit
+                        </Button>
+                      )}
+                      {isAdmin && latestUpdate && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditScoreDialog(okr, latestUpdate)}
+                          data-testid={`button-edit-score-${okr.id}`}
+                        >
+                          <Pencil className="h-4 w-4 mr-1" />
+                          Edit Score
                         </Button>
                       )}
                     </div>
@@ -958,6 +1068,85 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
               data-testid="button-confirm-edit"
             >
               {updateOkrMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingScoreUpdate} onOpenChange={(open) => { if (!open) closeEditScoreDialog(); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Score</DialogTitle>
+            <DialogDescription>
+              Correct the submitted score for {editingScoreOkr?.okrNumber} - {editingScoreUpdate?.quarter} {editingScoreUpdate?.year}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-3">
+              <Label>Key Result Scores</Label>
+              {editScores.map((s, idx) => (
+                <div key={idx} className="flex items-start gap-3 p-3 bg-muted/50 rounded-md">
+                  <div className="flex-1 space-y-1">
+                    <Badge variant="outline" className="text-xs no-default-active-elevate">KR {s.keyResultNumber}</Badge>
+                    <p className="text-sm">{s.description}</p>
+                  </div>
+                  <div className="w-24 space-y-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={s.score}
+                      onChange={(e) => updateEditScore(idx, parseInt(e.target.value) || 0)}
+                      data-testid={`input-edit-score-${idx}`}
+                    />
+                    <p className="text-xs text-muted-foreground text-center">0-100%</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-score-notes">Notes</Label>
+              <Textarea
+                id="edit-score-notes"
+                value={editScoreNotes}
+                onChange={(e) => setEditScoreNotes(e.target.value)}
+                rows={3}
+                placeholder="Progress notes for this update..."
+                data-testid="input-edit-score-notes"
+              />
+              {editScoreNotes.trim().length > 0 && editScoreNotes.trim().length < 10 && (
+                <p className="text-xs text-destructive">Must be at least 10 characters</p>
+              )}
+            </div>
+
+            <div className="border-t pt-4 space-y-2">
+              <Label htmlFor="edit-score-reason" className="text-destructive font-semibold">
+                Reason for editing *
+              </Label>
+              <Textarea
+                id="edit-score-reason"
+                value={editScoreReason}
+                onChange={(e) => setEditScoreReason(e.target.value)}
+                placeholder="Please explain why this score is being corrected..."
+                rows={3}
+                data-testid="input-edit-score-reason"
+              />
+              {editScoreReason.length === 0 && (
+                <p className="text-xs text-muted-foreground">A reason is required to save changes</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEditScoreDialog} data-testid="button-cancel-edit-score">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEditScoreSubmit}
+              disabled={!editScoreReason.trim() || updateScoreMutation.isPending}
+              data-testid="button-confirm-edit-score"
+            >
+              {updateScoreMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

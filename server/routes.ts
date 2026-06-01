@@ -2916,8 +2916,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "OKR not found" });
       }
 
-      if (isLeaderOnly && existingOkr.staffId !== sessionStaffId) {
-        return res.status(403).json({ error: "Forbidden: You can only edit your own OKRs" });
+      if (isLeaderOnly) {
+        // Leaders may edit any OKR in the SPUs they manage (primary SPU plus
+        // any SPU assigned via staff_spu_assignments), regardless of who
+        // originally submitted it.
+        const sessionStaff = await storage.getStaff(sessionStaffId!);
+        const assignments = await storage.getStaffSpuAssignments(sessionStaffId!);
+        const managedSpuIds = new Set<string>([
+          sessionStaff!.spuId,
+          ...assignments.map((a: any) => a.spuId),
+        ]);
+        if (!managedSpuIds.has(existingOkr.spuId)) {
+          return res.status(403).json({ error: "Forbidden: You can only edit OKRs in SPUs you manage." });
+        }
       }
       
       const { reason, editedBy, editedByName, ...updateFields } = req.body;
@@ -2938,7 +2949,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid data", details: parsed.error });
       }
-      
+
+      // For leaders, also enforce that the OKR cannot be moved OUT of the SPUs
+      // they manage, and that any destination sub-unit belongs to the
+      // destination SPU. (The source-SPU check above prevents editing OKRs
+      // outside scope; this check prevents pivoting one into another scope.)
+      if (isLeaderOnly) {
+        const sessionStaff = await storage.getStaff(sessionStaffId!);
+        const assignments = await storage.getStaffSpuAssignments(sessionStaffId!);
+        const managedSpuIds = new Set<string>([
+          sessionStaff!.spuId,
+          ...assignments.map((a: any) => a.spuId),
+        ]);
+        const nextSpuId = parsed.data.spuId ?? existingOkr.spuId;
+        if (!managedSpuIds.has(nextSpuId)) {
+          return res.status(403).json({ error: "Forbidden: You can only assign OKRs to SPUs you manage." });
+        }
+        const nextSubUnitId = parsed.data.subUnitId !== undefined ? parsed.data.subUnitId : existingOkr.subUnitId;
+        if (nextSubUnitId) {
+          const targetSubUnit = await storage.getSubUnit(nextSubUnitId);
+          if (!targetSubUnit || targetSubUnit.spuId !== nextSpuId) {
+            return res.status(400).json({ error: "Sub-unit does not belong to the selected SPU." });
+          }
+        }
+      }
+
       const updates: Record<string, any> = {};
       const changedFields: string[] = [];
       const previousValues: Record<string, any> = {};
@@ -3214,14 +3249,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/quarterly-updates/:id", requireAdmin, async (req, res) => {
+  app.put("/api/quarterly-updates/:id", async (req, res) => {
     try {
       const existingUpdate = await storage.getQuarterlyUpdate(req.params.id);
       if (!existingUpdate) {
         return res.status(404).json({ error: "Quarterly update not found" });
       }
-      
+
+      // Authorization: admin sessions (incl. super_admins) are unrestricted.
+      // Leaders may correct an already-submitted score for any OKR in the SPUs
+      // they manage (primary SPU plus staff_spu_assignments).
+      let leaderEditor: { id: string; name: string } | null = null;
+      if (!req.session.isAdmin) {
+        const sessionStaffId = req.session.selectedStaffId;
+        if (!sessionStaffId) {
+          return res.status(403).json({ error: "Forbidden: Admin or Leader access required" });
+        }
+        const sessionStaff = await storage.getStaff(sessionStaffId);
+        if (!sessionStaff || !isLeaderRole(sessionStaff.role)) {
+          return res.status(403).json({ error: "Forbidden: Admin or Leader access required" });
+        }
+        const okr = await storage.getOkr(existingUpdate.okrId);
+        if (!okr) {
+          return res.status(404).json({ error: "OKR not found" });
+        }
+        const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+        const managedSpuIds = new Set<string>([
+          sessionStaff.spuId,
+          ...assignments.map((a: any) => a.spuId),
+        ]);
+        if (!managedSpuIds.has(okr.spuId)) {
+          return res.status(403).json({ error: "Forbidden: You can only edit scores for OKRs in SPUs you manage." });
+        }
+        leaderEditor = { id: sessionStaff.id, name: sessionStaff.name };
+      }
+
       const { reason, editedBy, editedByName, ...updateFields } = req.body;
+
+      // Leaders must always provide a reason so their corrections are audited,
+      // and the editor identity is taken from their session (not the client).
+      if (leaderEditor && (!reason || !reason.trim())) {
+        return res.status(400).json({ error: "A reason for editing is required" });
+      }
+      const effectiveEditedBy = leaderEditor ? leaderEditor.id : editedBy;
+      const effectiveEditedByName = leaderEditor ? leaderEditor.name : editedByName;
       
       const parsed = updateQuarterlyUpdateSchema.safeParse(updateFields);
       if (!parsed.success) {
@@ -3279,8 +3350,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (changedFields.length > 0 && reason) {
         await storage.createEditLog({
           okrId: existingUpdate.okrId,
-          editedBy: editedBy || null,
-          editedByName: editedByName || null,
+          editedBy: effectiveEditedBy || null,
+          editedByName: effectiveEditedByName || null,
           reason,
           changedFields: JSON.stringify(changedFields),
           previousValues: JSON.stringify(previousValues),
