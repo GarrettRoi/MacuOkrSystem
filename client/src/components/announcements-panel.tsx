@@ -8,13 +8,37 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Send, Megaphone } from "lucide-react";
+import { Loader2, Send, Megaphone, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Spu, Year, Announcement } from "@shared/schema";
 import { QUARTERS } from "@shared/schema";
 
 type AudienceType = "all" | "spu_ids" | "spus_missing_score";
+
+type PushSubscriber = {
+  staffId: string;
+  name: string;
+  email: string;
+  role: string;
+  deviceCount: number;
+  lastSubscribedAt: string;
+};
+
+function roleLabel(role: string): string {
+  switch (role) {
+    case "super_admin":
+      return "Super Admin";
+    case "leader":
+      return "Leader";
+    case "cabinet":
+      return "Cabinet";
+    case "basic":
+      return "Staff";
+    default:
+      return role;
+  }
+}
 
 function currentQuarter(): string {
   const m = new Date().getMonth(); // 0-11
@@ -38,6 +62,9 @@ export default function AnnouncementsPanel() {
   const { data: years = [] } = useQuery<Year[]>({ queryKey: ["/api/years"] });
   const { data: history = [], isLoading: historyLoading } = useQuery<Announcement[]>({
     queryKey: ["/api/announcements"],
+  });
+  const { data: subscribers = [], isLoading: subscribersLoading } = useQuery<PushSubscriber[]>({
+    queryKey: ["/api/push/subscribers"],
   });
 
   const yearOptions = useMemo(() => {
@@ -288,6 +315,57 @@ export default function AnnouncementsPanel() {
               Send Announcement
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Notification Subscribers
+          </CardTitle>
+          <CardDescription>
+            Staff who have turned on announcement notifications. These people will receive your pushes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {subscribersLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : subscribers.length === 0 ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-no-subscribers">
+              No one has enabled notifications yet. Staff can turn them on with the bell icon in the app header.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground" data-testid="text-subscriber-count">
+                {subscribers.length} subscriber{subscribers.length === 1 ? "" : "s"}
+              </p>
+              <div className="space-y-2">
+                {subscribers.map((sub) => (
+                  <div
+                    key={sub.staffId}
+                    className="flex items-center justify-between gap-3 flex-wrap p-3 border rounded-md"
+                    data-testid={`row-subscriber-${sub.staffId}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate" data-testid={`text-subscriber-name-${sub.staffId}`}>
+                        {sub.name}
+                      </div>
+                      <div className="text-sm text-muted-foreground truncate">{sub.email}</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline">{roleLabel(sub.role)}</Badge>
+                      {sub.deviceCount > 1 && (
+                        <Badge variant="secondary">{sub.deviceCount} devices</Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

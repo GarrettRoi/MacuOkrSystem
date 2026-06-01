@@ -20,6 +20,9 @@ self.addEventListener("push", (event) => {
     icon: "/logo.png",
     badge: "/favicon.png",
     data: { url: data.url || "/" },
+    requireInteraction: true,
+    tag: data.tag || undefined,
+    renotify: false,
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });

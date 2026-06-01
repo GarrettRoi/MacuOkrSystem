@@ -105,6 +105,15 @@ type BackupSnapshot = {
   appSettings: { key: string; value: string }[];
 };
 
+export type PushSubscriber = {
+  staffId: string;
+  name: string;
+  email: string;
+  role: string;
+  deviceCount: number;
+  lastSubscribedAt: Date;
+};
+
 function safeStaff<T extends { hashedPassword?: string | null }>(s: T): Omit<T, "hashedPassword"> {
   const { hashedPassword: _h, ...rest } = s;
   return rest as Omit<T, "hashedPassword">;
@@ -293,6 +302,7 @@ export interface IStorage {
   deletePushSubscriptionByEndpoint(endpoint: string): Promise<void>;
   getAllPushSubscriptions(): Promise<PushSubscriptionRow[]>;
   getPushSubscriptionsForStaff(staffIds: string[]): Promise<PushSubscriptionRow[]>;
+  getPushSubscribers(): Promise<PushSubscriber[]>;
 
   // Announcements
   createAnnouncement(data: Omit<Announcement, "id" | "sentAt">): Promise<Announcement>;
@@ -1566,6 +1576,38 @@ export class DatabaseStorage implements IStorage {
   async getPushSubscriptionsForStaff(staffIds: string[]): Promise<PushSubscriptionRow[]> {
     if (staffIds.length === 0) return [];
     return await db.select().from(pushSubscriptions).where(inArray(pushSubscriptions.staffId, staffIds));
+  }
+
+  async getPushSubscribers(): Promise<PushSubscriber[]> {
+    const rows = await db
+      .select({
+        staffId: pushSubscriptions.staffId,
+        name: staff.name,
+        email: staff.email,
+        role: staff.role,
+        createdAt: pushSubscriptions.createdAt,
+      })
+      .from(pushSubscriptions)
+      .innerJoin(staff, eq(pushSubscriptions.staffId, staff.id));
+
+    const byStaff = new Map<string, PushSubscriber>();
+    for (const r of rows) {
+      const existing = byStaff.get(r.staffId);
+      if (existing) {
+        existing.deviceCount += 1;
+        if (r.createdAt > existing.lastSubscribedAt) existing.lastSubscribedAt = r.createdAt;
+      } else {
+        byStaff.set(r.staffId, {
+          staffId: r.staffId,
+          name: r.name,
+          email: r.email,
+          role: r.role,
+          deviceCount: 1,
+          lastSubscribedAt: r.createdAt,
+        });
+      }
+    }
+    return Array.from(byStaff.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async createAnnouncement(data: Omit<Announcement, "id" | "sentAt">): Promise<Announcement> {

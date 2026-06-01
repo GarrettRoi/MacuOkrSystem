@@ -5395,6 +5395,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/push/subscribers", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const subscribers = await storage.getPushSubscribers();
+      res.json(subscribers);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to load subscribers" });
+    }
+  });
+
   // SPUs that have at least one OKR for the given quarter+year but zero
   // quarterly_updates for that same quarter+year.
   async function spusMissingScore(quarter: string, year: number): Promise<string[]> {
