@@ -16,7 +16,9 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Target, Calendar, Building2, TrendingUp, Filter, X, User, Users, Pencil, Plus, Minus } from "lucide-react";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
-import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
+import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
+import { MultiSelectSpus } from "@/components/multi-select-spus";
+import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu, SubUnit, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, isLeaderRole } from "@shared/schema";
 
 interface MyOkrsProps {
@@ -35,6 +37,9 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   const [editQuarter, setEditQuarter] = useState("");
   const [editYear, setEditYear] = useState<number>(2024);
   const [editStatus, setEditStatus] = useState("not_started");
+  const [editUniversityObjectives, setEditUniversityObjectives] = useState<string[]>([]);
+  const [editUniversityKeyResults, setEditUniversityKeyResults] = useState<string[]>([]);
+  const [editCollaborationIds, setEditCollaborationIds] = useState<string[]>([]);
   const [editReason, setEditReason] = useState("");
 
   const isAdmin = staff.role === "super_admin" || isLeaderRole(staff.role);
@@ -62,6 +67,14 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
 
   const { data: spus } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
+  });
+
+  const { data: subUnits } = useQuery<SubUnit[]>({
+    queryKey: ["/api/sub-units"],
+  });
+
+  const { data: universityObjectivesData } = useQuery<UniversityObjectiveWithKeyResults[]>({
+    queryKey: ["/api/university-objectives"],
   });
 
   const { data: leaders } = useQuery<StaffWithDetails[]>({
@@ -139,6 +152,64 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     );
   };
 
+  const editObjectiveOptions = useMemo(() => {
+    if (!universityObjectivesData) return [];
+    return universityObjectivesData
+      .filter(obj => obj.isActive !== false)
+      .filter(obj => {
+        if (!obj.applicableYears || obj.applicableYears.length === 0) return true;
+        return obj.applicableYears.includes(editYear);
+      })
+      .map(obj => `${obj.label}: ${obj.description}`);
+  }, [universityObjectivesData, editYear]);
+
+  const editKeyResultOptions = useMemo(() => {
+    if (!universityObjectivesData || editUniversityObjectives.length === 0) return [];
+    const selectedLabels = editUniversityObjectives.map((opt) => opt.split(":")[0].trim());
+    return universityObjectivesData
+      .filter(obj => selectedLabels.includes(obj.label))
+      .flatMap(obj => obj.keyResults.map(kr => `${kr.label} : ${kr.description}`));
+  }, [universityObjectivesData, editUniversityObjectives]);
+
+  // Mirror submit-okr: when the year changes (altering applicable objectives)
+  // or objectives are deselected (altering valid key results), prune any now-
+  // invalid selections so the saved payload never carries stale alignment data.
+  useEffect(() => {
+    // Don't prune until the source data has loaded, or we'd wipe the values
+    // seeded from the existing OKR before options are available.
+    if (!universityObjectivesData) return;
+    if (editUniversityObjectives.length === 0) return;
+    const valid = editUniversityObjectives.filter((obj) => editObjectiveOptions.includes(obj));
+    if (valid.length !== editUniversityObjectives.length) {
+      setEditUniversityObjectives(valid);
+    }
+  }, [editObjectiveOptions]);
+
+  useEffect(() => {
+    if (!universityObjectivesData) return;
+    if (editUniversityKeyResults.length === 0) return;
+    const valid = editUniversityKeyResults.filter((kr) => editKeyResultOptions.includes(kr));
+    if (valid.length !== editUniversityKeyResults.length) {
+      setEditUniversityKeyResults(valid);
+    }
+  }, [editKeyResultOptions]);
+
+  const editCollaborationOptions = useMemo(() => {
+    const allSpus = spus || [];
+    const allSubUnits = subUnits || [];
+    const spuNameById = new Map(allSpus.map((s) => [s.id, s.name]));
+    const spuOptions = allSpus
+      .filter((s) => s.id !== editingOkr?.spuId)
+      .map((s) => ({ id: `spu:${s.id}`, name: s.name }));
+    const subUnitOptions = allSubUnits
+      .filter((su) => su.id !== editingOkr?.subUnitId)
+      .map((su) => ({
+        id: `sub:${su.id}`,
+        name: `${spuNameById.get(su.spuId) ?? "SPU"} — ${su.name}`,
+      }));
+    return [...spuOptions, ...subUnitOptions].sort((a, b) => a.name.localeCompare(b.name));
+  }, [spus, subUnits, editingOkr?.spuId, editingOkr?.subUnitId]);
+
   const clearFilters = () => {
     setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
@@ -196,6 +267,15 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
       ? okr.status
       : "in_progress";
     setEditStatus(normalizedStatus || "not_started");
+    setEditUniversityObjectives(parseMultiSelectField(okr.universityObjective));
+    setEditUniversityKeyResults(parseMultiSelectField(okr.universityKeyResult));
+    // Seed collaborators from the OKR's joined SPUs / sub-units, encoded with
+    // the same "spu:" / "sub:" prefixes the picker and submit handler use.
+    const collabIds = [
+      ...(okr.collaborationSpus || []).map((s) => `spu:${s.id}`),
+      ...(okr.collaborationSubUnits || []).map((su) => `sub:${su.id}`),
+    ];
+    setEditCollaborationIds(collabIds);
     setEditReason("");
   };
 
@@ -206,6 +286,9 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     setEditQuarter("");
     setEditYear(2024);
     setEditStatus("not_started");
+    setEditUniversityObjectives([]);
+    setEditUniversityKeyResults([]);
+    setEditCollaborationIds([]);
     setEditReason("");
   };
 
@@ -269,6 +352,23 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
       toast({ title: "Validation Error", description: "Each key result description must be at least 10 characters.", variant: "destructive" });
       return;
     }
+    if (editUniversityObjectives.length === 0) {
+      toast({ title: "Validation Error", description: "Please select at least one university objective.", variant: "destructive" });
+      return;
+    }
+    if (editUniversityKeyResults.length === 0) {
+      toast({ title: "Validation Error", description: "Please select at least one university key result.", variant: "destructive" });
+      return;
+    }
+
+    // Split the prefixed picker values ("spu:UUID" / "sub:UUID") into the two
+    // server-side arrays, mirroring the submit-OKR handler.
+    const collaborationSpuIds = editCollaborationIds
+      .filter((v) => v.startsWith("spu:"))
+      .map((v) => v.slice(4));
+    const collaborationSubUnitIds = editCollaborationIds
+      .filter((v) => v.startsWith("sub:"))
+      .map((v) => v.slice(4));
 
     const updates = {
       objectiveStatement: editObjectiveStatement,
@@ -276,6 +376,10 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
       quarter: editQuarter,
       year: editYear,
       status: editStatus,
+      universityObjective: JSON.stringify(editUniversityObjectives),
+      universityKeyResult: JSON.stringify(editUniversityKeyResults),
+      collaborationSpuIds,
+      collaborationSubUnitIds,
     };
 
     updateOkrMutation.mutate({
@@ -773,6 +877,58 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Collaboration SPU(s) or Sub-Unit(s) (Optional)</Label>
+              <MultiSelectSpus
+                options={editCollaborationOptions}
+                selectedIds={editCollaborationIds}
+                onChange={setEditCollaborationIds}
+                placeholder="Not Applicable"
+                testIdPrefix="select-edit-collaboration-spu"
+              />
+              <p className="text-xs text-muted-foreground">
+                If you are collaborating with one or more other SPUs or sub-units, select them here.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>University Level Strategic Objective(s) *</Label>
+              <MultiSelectCheckboxes
+                options={editObjectiveOptions}
+                selected={editUniversityObjectives}
+                onChange={setEditUniversityObjectives}
+                placeholder="Select strategic objective(s)..."
+                testIdPrefix="select-edit-university-objective"
+              />
+              {editUniversityObjectives.length > 0 && (
+                <div className="rounded-md border border-input bg-muted/30 p-3 space-y-2" data-testid="edit-selected-objectives-display">
+                  <p className="text-xs font-medium text-muted-foreground">Selected Objective(s):</p>
+                  {editUniversityObjectives.map((item, idx) => (
+                    <p key={idx} className="text-sm leading-relaxed" data-testid={`edit-selected-objective-text-${idx}`}>{item}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>University-Level Key Result(s) *</Label>
+              <MultiSelectCheckboxes
+                options={editKeyResultOptions}
+                selected={editUniversityKeyResults}
+                onChange={setEditUniversityKeyResults}
+                placeholder="Select key result(s)..."
+                testIdPrefix="select-edit-university-key-result"
+              />
+              {editUniversityKeyResults.length > 0 && (
+                <div className="rounded-md border border-input bg-muted/30 p-3 space-y-2" data-testid="edit-selected-key-results-display">
+                  <p className="text-xs font-medium text-muted-foreground">Selected Key Result(s):</p>
+                  {editUniversityKeyResults.map((item, idx) => (
+                    <p key={idx} className="text-sm leading-relaxed" data-testid={`edit-selected-key-result-text-${idx}`}>{item}</p>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="border-t pt-4 space-y-2">
