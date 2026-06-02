@@ -983,6 +983,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Notification onboarding popup X/Y offsets
+  app.get("/api/settings/onboarding-popup-offset", async (_req, res) => {
+    try {
+      const x = await storage.getSetting("onboarding_popup_offset_x");
+      const y = await storage.getSetting("onboarding_popup_offset_y");
+      res.json({
+        offsetX: x ? parseInt(x, 10) : 0,
+        offsetY: y ? parseInt(y, 10) : 0,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch setting" });
+    }
+  });
+
+  app.put("/api/settings/onboarding-popup-offset", async (req, res) => {
+    try {
+      if (!req.session.selectedStaffId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+      const staffMember = await storage.getStaff(req.session.selectedStaffId);
+      if (!staffMember || staffMember.role !== "super_admin") {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const schema = z.object({ offsetX: z.number().int(), offsetY: z.number().int() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request body" });
+      }
+      await storage.setSetting("onboarding_popup_offset_x", String(parsed.data.offsetX));
+      await storage.setSetting("onboarding_popup_offset_y", String(parsed.data.offsetY));
+      res.json({ success: true, offsetX: parsed.data.offsetX, offsetY: parsed.data.offsetY });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update setting" });
+    }
+  });
+
   // Feedback widget enabled setting
   app.get("/api/settings/feedback-widget-enabled", async (_req, res) => {
     try {

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUp, Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
 
 const PREVIEW_KEY = "notifOnboardingPreview";
 const MAX_LOGINS = 5;
@@ -34,6 +35,12 @@ export default function NotificationOnboarding({
   const [preview, setPreview] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [pos, setPos] = useState<{ top: number; right: number; arrowRight: number } | null>(null);
+
+  const { data: offsetData } = useQuery<{ offsetX: number; offsetY: number }>({
+    queryKey: ["/api/settings/onboarding-popup-offset"],
+  });
+  const offsetX = offsetData?.offsetX ?? 0;
+  const offsetY = offsetData?.offsetY ?? 0;
 
   // Key the manual dismissal per user AND per login count so it only suppresses
   // the popup for the current login: the next genuine login increments
@@ -115,61 +122,75 @@ export default function NotificationOnboarding({
   };
 
   return (
-    <div
-      className="fixed z-[90] w-[280px]"
-      style={{ top: pos.top, right: pos.right }}
-      data-testid="overlay-notification-onboarding"
-    >
-      <div className="relative flex justify-end" style={{ marginBottom: 2 }}>
-        <ArrowUp
-          className="h-7 w-7 text-primary animate-bounce drop-shadow"
-          style={{ marginRight: pos.arrowRight }}
-          aria-hidden="true"
-        />
-      </div>
-      <div className="rounded-md border bg-popover text-popover-foreground shadow-lg p-4 space-y-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Bell className="h-4 w-4 text-primary" />
-            <p className="text-sm font-semibold" data-testid="text-onboarding-title">
-              Turn on notifications
-            </p>
+    <>
+      {/* Backdrop — grays out the rest of the page */}
+      <div
+        className="fixed inset-0 z-[89] bg-black/40"
+        onClick={close}
+        aria-hidden="true"
+        data-testid="overlay-notification-onboarding-backdrop"
+      />
+
+      {/* Popup card */}
+      <div
+        className="fixed z-[90] w-[280px]"
+        style={{
+          top: pos.top + offsetY,
+          right: pos.right - offsetX,
+        }}
+        data-testid="overlay-notification-onboarding"
+      >
+        <div className="relative flex justify-end" style={{ marginBottom: 2 }}>
+          <ArrowUp
+            className="h-7 w-7 text-primary animate-bounce drop-shadow"
+            style={{ marginRight: pos.arrowRight }}
+            aria-hidden="true"
+          />
+        </div>
+        <div className="rounded-md border bg-popover text-popover-foreground shadow-lg p-4 space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Bell className="h-4 w-4 text-primary" />
+              <p className="text-sm font-semibold" data-testid="text-onboarding-title">
+                Turn on notifications
+              </p>
+            </div>
+            <button
+              onClick={close}
+              className="text-muted-foreground hover-elevate rounded-sm p-0.5"
+              aria-label="Dismiss"
+              data-testid="button-onboarding-dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            onClick={close}
-            className="text-muted-foreground hover-elevate rounded-sm p-0.5"
-            aria-label="Dismiss"
-            data-testid="button-onboarding-dismiss"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Click the bell above to get announcements, then choose{" "}
-          <span className="font-medium text-foreground">Allow notifications</span> in your browser.
-        </p>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            size="sm"
-            onClick={() => {
-              onSubscribe();
-              if (preview) close();
-            }}
-            data-testid="button-onboarding-enable"
-          >
-            <Bell className="h-4 w-4 mr-2" />
-            Enable notifications
-          </Button>
-          <Button size="sm" variant="ghost" onClick={close} data-testid="button-onboarding-later">
-            Maybe later
-          </Button>
-        </div>
-        {preview && (
-          <p className="text-xs text-muted-foreground" data-testid="text-onboarding-preview-note">
-            Preview mode — this is how the tutorial appears to new staff on their first {MAX_LOGINS} logins.
+          <p className="text-sm text-muted-foreground">
+            Click the bell above to get announcements, then choose{" "}
+            <span className="font-medium text-foreground">Allow notifications</span> in your browser.
           </p>
-        )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={() => {
+                onSubscribe();
+                if (preview) close();
+              }}
+              data-testid="button-onboarding-enable"
+            >
+              <Bell className="h-4 w-4 mr-2" />
+              Enable notifications
+            </Button>
+            <Button size="sm" variant="ghost" onClick={close} data-testid="button-onboarding-later">
+              Maybe later
+            </Button>
+          </div>
+          {preview && (
+            <p className="text-xs text-muted-foreground" data-testid="text-onboarding-preview-note">
+              Preview mode — this is how the tutorial appears to new staff on their first {MAX_LOGINS} logins.
+            </p>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

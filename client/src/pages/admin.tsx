@@ -1510,6 +1510,28 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
   });
 
+  const { data: onboardingOffsetData } = useQuery<{ offsetX: number; offsetY: number }>({
+    queryKey: ["/api/settings/onboarding-popup-offset"],
+    enabled: staff.role === "super_admin",
+  });
+  const [onboardingOffsetX, setOnboardingOffsetX] = useState(0);
+  const [onboardingOffsetY, setOnboardingOffsetY] = useState(0);
+  useEffect(() => {
+    if (onboardingOffsetData) {
+      setOnboardingOffsetX(onboardingOffsetData.offsetX);
+      setOnboardingOffsetY(onboardingOffsetData.offsetY);
+    }
+  }, [onboardingOffsetData]);
+
+  const updateOnboardingOffsetMutation = useMutation({
+    mutationFn: async (values: { offsetX: number; offsetY: number }) =>
+      apiRequest("PUT", "/api/settings/onboarding-popup-offset", values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/onboarding-popup-offset"] });
+      toast({ title: "Position saved", description: "The pop-up position has been updated." });
+    },
+  });
+
   const { data: feedbackWidgetEnabledData } = useQuery<{ enabled: boolean }>({
     queryKey: ["/api/settings/feedback-widget-enabled"],
     enabled: staff.role === "super_admin",
@@ -5481,7 +5503,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                 )}
 
                 {staff.role === "super_admin" && (
-                  <div className="p-4 border rounded-md space-y-3">
+                  <div className="p-4 border rounded-md space-y-4">
                     <div className="flex items-center justify-between gap-4 flex-wrap">
                       <div className="space-y-1">
                         <Label className="text-base font-medium">Notification Onboarding Tutorial</Label>
@@ -5497,6 +5519,50 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         <Bell className="h-4 w-4 mr-2" />
                         Preview Tutorial
                       </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Pop-up Position Adjustment</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Nudge the pop-up left/right (X) or up/down (Y) if it doesn't line up perfectly with the bell on your screen. Positive X moves it left; positive Y moves it down.
+                      </p>
+                      <div className="flex items-end gap-4 flex-wrap">
+                        <div className="space-y-1">
+                          <Label htmlFor="input-onboarding-offset-x" className="text-xs text-muted-foreground">X offset (px)</Label>
+                          <Input
+                            id="input-onboarding-offset-x"
+                            type="number"
+                            className="w-24"
+                            value={onboardingOffsetX}
+                            onChange={(e) => setOnboardingOffsetX(parseInt(e.target.value) || 0)}
+                            data-testid="input-onboarding-offset-x"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="input-onboarding-offset-y" className="text-xs text-muted-foreground">Y offset (px)</Label>
+                          <Input
+                            id="input-onboarding-offset-y"
+                            type="number"
+                            className="w-24"
+                            value={onboardingOffsetY}
+                            onChange={(e) => setOnboardingOffsetY(parseInt(e.target.value) || 0)}
+                            data-testid="input-onboarding-offset-y"
+                          />
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateOnboardingOffsetMutation.mutate({ offsetX: onboardingOffsetX, offsetY: onboardingOffsetY })}
+                          disabled={updateOnboardingOffsetMutation.isPending}
+                          data-testid="button-save-onboarding-offset"
+                        >
+                          {updateOnboardingOffsetMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Save className="h-4 w-4 mr-2" />
+                          )}
+                          Save Position
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
