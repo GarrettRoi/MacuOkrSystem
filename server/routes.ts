@@ -149,6 +149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isAdmin: req.session.isAdmin,
         selectedStaffId: req.session.selectedStaffId,
         selectedStaffName: req.session.selectedStaffName,
+        impersonating: req.session.impersonating === true,
       };
       
       if (req.session.selectedStaffId) {
@@ -198,6 +199,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       req.session.selectedStaffId = staff.id;
       req.session.selectedStaffName = staff.name;
+      // select-staff is reached from the shared password gate / no-password
+      // entry by BOTH regular staff (isAdmin=false, picking their own profile —
+      // a genuine login) AND admins (isAdmin=true, picking a profile to act as —
+      // impersonation). Only count genuine staff logins toward first-login
+      // onboarding, and flag admin selections as impersonation so the
+      // notification tutorial never fires while an admin is acting as someone.
+      const isImpersonation = req.session.isAdmin === true;
+      req.session.impersonating = isImpersonation;
+      if (!isImpersonation) {
+        try {
+          await storage.incrementLoginCount(staff.id);
+        } catch (e) {
+          console.error("[select-staff] incrementLoginCount failed:", e);
+        }
+      }
       
       req.session.save((err) => {
         if (err) {
@@ -680,6 +696,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const isAdmin = staffMember.role === "super_admin";
       console.log(`[SSO] Login success: ${email} (role=${staffMember.role}, isAdmin=${isAdmin})`);
+      // Genuine self-login: count it for first-login onboarding (the
+      // notification tutorial). Best-effort; never block login on this.
+      try {
+        await storage.incrementLoginCount(staffMember.id);
+      } catch (e) {
+        console.error("[SSO] incrementLoginCount failed:", e);
+      }
       req.session.regenerate((err) => {
         if (err) {
           console.error("[SSO] session.regenerate error:", err);
@@ -732,6 +755,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const isAdmin = staffMember.role === "super_admin";
+      // Genuine self-login: count it for first-login onboarding (the
+      // notification tutorial). Best-effort; never block login on this.
+      try {
+        await storage.incrementLoginCount(staffMember.id);
+      } catch (e) {
+        console.error("[login] incrementLoginCount failed:", e);
+      }
       req.session.regenerate((err) => {
         if (err) return res.status(500).json({ error: "Session error" });
         req.session.isAdmin = isAdmin;

@@ -47,6 +47,7 @@ export const staff = pgTable("staff", {
   isAdmin: boolean("is_admin").notNull().default(false),
   role: text("role").notNull().default("basic"),
   hashedPassword: text("hashed_password"),
+  loginCount: integer("login_count").notNull().default(0),
 });
 
 export const inviteTokens = pgTable("invite_tokens", {

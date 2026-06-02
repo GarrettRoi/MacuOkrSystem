@@ -63,9 +63,12 @@ function AppContent() {
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [location] = useLocation();
 
+  const [impersonating, setImpersonating] = useState(false);
+
   const { data: session, isLoading: sessionLoading } = useQuery<{
     authenticated: boolean;
     isAdmin?: boolean;
+    impersonating?: boolean;
     selectedStaff?: StaffWithDetails;
   }>({
     queryKey: ["/api/auth/session"],
@@ -109,6 +112,7 @@ function AppContent() {
       if (session.authenticated) {
         setIsAuthenticated(true);
         setIsAdmin(session.isAdmin || false);
+        setImpersonating(session.impersonating || false);
         if (session.selectedStaff) setSelectedStaff(session.selectedStaff);
       } else {
         setIsAuthenticated(false);
@@ -225,6 +229,7 @@ function AppContent() {
               role: "super_admin",
               spuId: "",
               subUnitId: null,
+              loginCount: 0,
               spu: { id: "", name: "Administration" },
               subUnit: null,
             };
@@ -239,7 +244,7 @@ function AppContent() {
   return (
     <>
       <div className="min-h-screen flex flex-col">
-        <AppHeader staff={selectedStaff} onLogout={handleLogout} isAdmin={isAdmin} />
+        <AppHeader staff={selectedStaff} onLogout={handleLogout} isAdmin={isAdmin} impersonating={impersonating} />
         <main className="flex-1 bg-background">
           <AuthenticatedRouter staff={selectedStaff} isAdmin={isAdmin} />
         </main>

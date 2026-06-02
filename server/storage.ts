@@ -277,6 +277,7 @@ export interface IStorage {
   // Staff credentials
   setStaffPassword(staffId: string, hashedPassword: string): Promise<void>;
   getStaffByEmailWithPassword(email: string): Promise<Staff | undefined>;
+  incrementLoginCount(staffId: string): Promise<void>;
 
   // Data Backups
   createBackup(label: string, backupType: "automatic" | "manual"): Promise<DataBackupMeta>;
@@ -336,6 +337,7 @@ export class DatabaseStorage implements IStorage {
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
+        loginCount: staff.loginCount,
         role: staff.role,
         spuId: staff.spuId,
         subUnitId: staff.subUnitId,
@@ -351,6 +353,7 @@ export class DatabaseStorage implements IStorage {
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
+      loginCount: row.loginCount,
       role: row.role,
       spuId: row.spuId,
       subUnitId: row.subUnitId,
@@ -371,6 +374,7 @@ export class DatabaseStorage implements IStorage {
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
+        loginCount: staff.loginCount,
         role: staff.role,
         spuId: staff.spuId,
         subUnitId: staff.subUnitId,
@@ -390,6 +394,7 @@ export class DatabaseStorage implements IStorage {
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
+      loginCount: row.loginCount,
       role: row.role,
       spuId: row.spuId,
       subUnitId: row.subUnitId,
@@ -755,6 +760,7 @@ export class DatabaseStorage implements IStorage {
           spuId: row.okr.spuId,
           subUnitId: null,
           isAdmin: false,
+          loginCount: 0,
           role: "basic" as const,
           spu: row.staffSpu || row.okrSpu!,
           subUnit: null,
@@ -1194,6 +1200,7 @@ export class DatabaseStorage implements IStorage {
             spuId: row.okrs.spuId,
             subUnitId: null,
             isAdmin: false,
+            loginCount: 0,
             role: "basic" as const,
             spu: row.spus!,
             subUnit: null,
@@ -1222,6 +1229,7 @@ export class DatabaseStorage implements IStorage {
             spuId: "",
             subUnitId: null,
             isAdmin: false,
+            loginCount: 0,
             role: "basic" as const,
             spu: r.spu!,
             subUnit: null,
@@ -1357,6 +1365,7 @@ export class DatabaseStorage implements IStorage {
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
+        loginCount: staff.loginCount,
         role: staff.role,
         spuId: staff.spuId,
         subUnitId: staff.subUnitId,
@@ -1374,6 +1383,7 @@ export class DatabaseStorage implements IStorage {
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
+      loginCount: row.loginCount,
       role: row.role,
       spuId: row.spuId,
       subUnitId: row.subUnitId,
@@ -1390,6 +1400,7 @@ export class DatabaseStorage implements IStorage {
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
+        loginCount: staff.loginCount,
         role: staff.role,
         spuId: staff.spuId,
         subUnitId: staff.subUnitId,
@@ -1407,6 +1418,7 @@ export class DatabaseStorage implements IStorage {
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
+      loginCount: row.loginCount,
       role: row.role,
       spuId: row.spuId,
       subUnitId: row.subUnitId,
@@ -1422,6 +1434,7 @@ export class DatabaseStorage implements IStorage {
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
+        loginCount: staff.loginCount,
         role: staff.role,
         spuId: staff.spuId,
         subUnitId: staff.subUnitId,
@@ -1439,6 +1452,7 @@ export class DatabaseStorage implements IStorage {
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
+      loginCount: row.loginCount,
       role: row.role,
       spuId: row.spuId,
       subUnitId: row.subUnitId,
@@ -1468,6 +1482,7 @@ export class DatabaseStorage implements IStorage {
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
+        loginCount: staff.loginCount,
         role: staff.role,
         spuId: staff.spuId,
         subUnitId: staff.subUnitId,
@@ -1489,6 +1504,7 @@ export class DatabaseStorage implements IStorage {
         name: staff.name,
         email: staff.email,
         isAdmin: staff.isAdmin,
+        loginCount: staff.loginCount,
         role: staff.role,
         spuId: staff.spuId,
         subUnitId: staff.subUnitId,
@@ -1519,6 +1535,7 @@ export class DatabaseStorage implements IStorage {
       name: row.name,
       email: row.email,
       isAdmin: row.isAdmin,
+      loginCount: row.loginCount,
       role: row.role,
       spuId: row.spuId,
       subUnitId: row.subUnitId,
@@ -2130,6 +2147,13 @@ export class DatabaseStorage implements IStorage {
       .from(staff)
       .where(eq(staff.email, email.toLowerCase().trim()));
     return result || undefined;
+  }
+
+  async incrementLoginCount(staffId: string): Promise<void> {
+    await db
+      .update(staff)
+      .set({ loginCount: sql`${staff.loginCount} + 1` })
+      .where(eq(staff.id, staffId));
   }
 
   async createBackup(label: string, backupType: "automatic" | "manual"): Promise<DataBackupMeta> {

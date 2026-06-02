@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -5,15 +6,18 @@ import { Home, FileText, TrendingUp, BarChart3, Settings, Download, LogOut, Awar
 import type { StaffWithDetails } from "@shared/schema";
 import { isLeaderRole } from "@shared/schema";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
+import NotificationOnboarding from "@/components/notification-onboarding";
 
 interface AppHeaderProps {
   staff: StaffWithDetails;
   onLogout: () => void;
   isAdmin: boolean;
+  impersonating?: boolean;
 }
 
-export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) {
+export default function AppHeader({ staff, onLogout, isAdmin, impersonating = false }: AppHeaderProps) {
   const [location] = useLocation();
+  const bellRef = useRef<HTMLButtonElement>(null);
 
   const allNavItems = [
     { path: "/", icon: Home, label: "Home", adminOnly: false },
@@ -75,6 +79,7 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
           </div>
           {push.supported && (
             <Button
+              ref={bellRef}
               variant="ghost"
               size="icon"
               onClick={() => (push.subscribed ? push.unsubscribe() : push.subscribe())}
@@ -96,6 +101,17 @@ export default function AppHeader({ staff, onLogout, isAdmin }: AppHeaderProps) 
           </Button>
         </div>
       </div>
+      {push.supported && (
+        <NotificationOnboarding
+          bellRef={bellRef}
+          staffId={staff.id}
+          loginCount={staff.loginCount ?? 0}
+          impersonating={impersonating}
+          subscribed={push.subscribed}
+          permission={push.permission}
+          onSubscribe={push.subscribe}
+        />
+      )}
     </header>
   );
 }

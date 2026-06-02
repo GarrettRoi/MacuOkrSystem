@@ -17,11 +17,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck, Smile, Frown, Activity, UserX, Megaphone, Send } from "lucide-react";
+import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck, Smile, Frown, Activity, UserX, Megaphone, Send, Bell } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff, AppRatingWithStaff, ActivityLogEntry, InactiveStaffEntry, Announcement } from "@shared/schema";
 import { ALL_QUARTERS_LABEL, isLeaderRole, QUARTERS, getQuarterLabel } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
 import AnnouncementsPanel from "@/components/announcements-panel";
+import { triggerNotificationOnboardingPreview } from "@/components/notification-onboarding";
 import HistoricalSnapshotsEditor from "@/components/historical-snapshots-editor";
 import type { WidgetConfig } from "@/components/analytics-widget";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -5475,6 +5476,27 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                         disabled={updateShowGeniusAnimationMutation.isPending}
                         data-testid="switch-show-genius-animation"
                       />
+                    </div>
+                  </div>
+                )}
+
+                {staff.role === "super_admin" && (
+                  <div className="p-4 border rounded-md space-y-3">
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <div className="space-y-1">
+                        <Label className="text-base font-medium">Notification Onboarding Tutorial</Label>
+                        <p className="text-sm text-muted-foreground">
+                          New staff see a one-time pop-up pointing at the notification bell during their first 5 logins, asking them to turn on announcements. Use the button to preview exactly what they see.
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => triggerNotificationOnboardingPreview()}
+                        data-testid="button-preview-notification-onboarding"
+                      >
+                        <Bell className="h-4 w-4 mr-2" />
+                        Preview Tutorial
+                      </Button>
                     </div>
                   </div>
                 )}

@@ -68,6 +68,7 @@ async function runStartupMigrations() {
     )`,
     // ── Column additions (IF NOT EXISTS guards against re-runs) ─────────────
     `ALTER TABLE staff ADD COLUMN IF NOT EXISTS hashed_password TEXT`,
+    `ALTER TABLE staff ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE invite_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP`,
     `ALTER TABLE okrs ADD COLUMN IF NOT EXISTS collaboration_spu_ids text[] DEFAULT ARRAY[]::text[]`,
     `UPDATE okrs SET collaboration_spu_ids = ARRAY[collaboration_spu_id]::text[] WHERE collaboration_spu_id IS NOT NULL AND (collaboration_spu_ids IS NULL OR collaboration_spu_ids = ARRAY[]::text[])`,
@@ -185,6 +186,7 @@ declare module 'express-session' {
     sessionVersion?: number;
     ssoState?: string;
     ssoCodeVerifier?: string;
+    impersonating?: boolean;
   }
 }
 
