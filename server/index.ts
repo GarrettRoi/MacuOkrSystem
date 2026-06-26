@@ -6,6 +6,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seedDatabase, storage } from "./storage";
 import { pool } from "./db";
+import { isProdSyncConfigured, syncFromProduction, syncFromProductionIfStale } from "./railwaySync";
 
 const PgSession = connectPgSimple(session);
 
@@ -260,6 +261,24 @@ app.use((req, res, next) => {
 
   // Seed core super-admin accounts on every startup
   await seedDatabase();
+
+  // Daily refresh of this preview environment with production data from Railway.
+  // Runs only outside production. The sync overwrites all editable-data tables,
+  // so it is intentionally gated to non-production environments.
+  if (isProdSyncConfigured() && app.get("env") !== "production") {
+    // Catch up on startup if the last sync was more than 24h ago.
+    void syncFromProductionIfStale();
+
+    // Then refresh daily at 1 AM server time.
+    cron.schedule("0 1 * * *", async () => {
+      try {
+        const result = await syncFromProduction();
+        log(`[prod-sync] Daily production sync complete (okrs=${result.counts.okrs ?? 0}, staff=${result.counts.staff ?? 0})`);
+      } catch (err) {
+        console.error("[prod-sync] Daily production sync failed:", err);
+      }
+    });
+  }
 
   // Schedule daily automatic backup at midnight server time
   cron.schedule("0 0 * * *", async () => {

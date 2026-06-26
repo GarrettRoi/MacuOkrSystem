@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { syncFromProduction, getLastSyncAt, isProdSyncConfigured } from "./railwaySync";
 import { db } from "./db";
 import { eq, sql, asc, and as drizzleAnd } from "drizzle-orm";
 import * as oidcClient from "openid-client";
@@ -5526,6 +5527,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const msg: string = error?.message ?? "Failed to restore backup";
       const status = msg.toLowerCase().includes("not found") || msg.toLowerCase().includes("malformed") ? 404 : 500;
       res.status(status).json({ error: msg });
+    }
+  });
+
+  // ── Production data sync (Railway -> this preview environment) ───────────────
+  app.get("/api/admin/sync-from-production/status", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      res.json({
+        configured: isProdSyncConfigured(),
+        environment: process.env.NODE_ENV === "production" ? "production" : "development",
+        lastSyncAt: await getLastSyncAt(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to read sync status" });
+    }
+  });
+
+  app.post("/api/admin/sync-from-production", async (req, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const result = await syncFromProduction();
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      const msg: string = error?.message ?? "Failed to sync from production";
+      res.status(500).json({ error: msg });
     }
   });
 

@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText, Shuffle, CheckCircle, Clock, HardDriveDownload, RotateCcw, Shield } from "lucide-react";
+import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText, Shuffle, CheckCircle, Clock, HardDriveDownload, RotateCcw, Shield, CloudDownload } from "lucide-react";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog, UnmatchedScore, DataBackupMeta, StaffWithDetails } from "@shared/schema";
 import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, formatQuarterTag } from "@shared/schema";
@@ -246,6 +246,37 @@ export default function Data() {
     },
     onError: (error: any) => {
       toast({ title: "Restore Failed", description: error?.message || "Failed to restore backup. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+
+  const { data: prodSyncStatus } = useQuery<{ configured: boolean; environment: string; lastSyncAt: string | null }>({
+    queryKey: ["/api/admin/sync-from-production/status"],
+    enabled: isSuperAdmin,
+  });
+
+  const syncFromProductionMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/admin/sync-from-production", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs-with-updates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/staff"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/spus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/sub-units"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/years"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/university-objectives"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/backups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/edit-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/unmatched-scores"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/sync-from-production/status"] });
+      setSyncDialogOpen(false);
+      toast({ title: "Sync Complete", description: "This preview now has the latest production data." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Sync Failed", description: error?.message || "Failed to sync from production. Please try again.", variant: "destructive" });
     },
   });
 
@@ -1906,6 +1937,37 @@ export default function Data() {
                 </Button>
               </div>
 
+              {prodSyncStatus?.configured && (
+                <div className="border rounded-md p-4 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-start gap-2">
+                    <CloudDownload className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div>
+                      <div className="text-sm font-medium">Refresh from Production</div>
+                      <p className="text-xs text-muted-foreground max-w-xl">
+                        Replaces all data in this preview with a fresh copy of the live production data.
+                        This runs automatically once a day. Your code is never affected.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1" data-testid="text-last-prod-sync">
+                        Last refreshed:{" "}
+                        {prodSyncStatus.lastSyncAt
+                          ? new Date(prodSyncStatus.lastSyncAt).toLocaleString()
+                          : "Never"}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSyncDialogOpen(true)}
+                    disabled={syncFromProductionMutation.isPending}
+                    data-testid="button-sync-from-production"
+                  >
+                    <CloudDownload className="h-4 w-4 mr-2" />
+                    {syncFromProductionMutation.isPending ? "Refreshing..." : "Refresh from Production Now"}
+                  </Button>
+                </div>
+              )}
+
               {backupsLoading ? (
                 <div className="py-8 text-center text-sm text-muted-foreground">Loading backups...</div>
               ) : !backups || backups.length === 0 ? (
@@ -2009,6 +2071,41 @@ export default function Data() {
               data-testid="button-confirm-restore"
             >
               {restoreBackupMutation.isPending ? "Restoring..." : "Yes, Restore This Backup"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Refresh from Production Confirmation */}
+      <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
+        <DialogContent data-testid="dialog-sync-from-production">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Refresh from Production?
+            </DialogTitle>
+            <DialogDescription>
+              This will erase all data in this preview environment and replace it with a fresh
+              copy of the live production data. This affects data only — your code and the
+              production system are never changed. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSyncDialogOpen(false)}
+              disabled={syncFromProductionMutation.isPending}
+              data-testid="button-cancel-sync"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => syncFromProductionMutation.mutate()}
+              disabled={syncFromProductionMutation.isPending}
+              data-testid="button-confirm-sync"
+            >
+              {syncFromProductionMutation.isPending ? "Refreshing..." : "Yes, Refresh Now"}
             </Button>
           </DialogFooter>
         </DialogContent>

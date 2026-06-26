@@ -85,7 +85,7 @@ import { db } from "./db";
 import { eq, and, or, asc, desc, inArray, ne, isNull, gt, sql, ilike } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
-type BackupSnapshot = {
+export type BackupSnapshot = {
   spus: Spu[];
   subUnits: SubUnit[];
   years: Year[];
@@ -284,6 +284,7 @@ export interface IStorage {
   listBackups(): Promise<DataBackupMeta[]>;
   deleteBackupsOlderThan(date: Date): Promise<number>;
   restoreBackup(id: string): Promise<void>;
+  replaceAllData(snapshot: BackupSnapshot): Promise<void>;
 
   // Feedback
   createFeedback(data: { staffId: string; message: string; pageUrl?: string | null }): Promise<import("@shared/schema").Feedback>;
@@ -2267,6 +2268,14 @@ export class DatabaseStorage implements IStorage {
     const snap = backup.snapshot as BackupSnapshot;
     if (!snap || typeof snap !== "object" || !Array.isArray(snap.spus)) {
       throw new Error("Backup snapshot is malformed or corrupted");
+    }
+
+    await this.replaceAllData(snap);
+  }
+
+  async replaceAllData(snap: BackupSnapshot): Promise<void> {
+    if (!snap || typeof snap !== "object" || !Array.isArray(snap.spus)) {
+      throw new Error("Snapshot is malformed or corrupted");
     }
 
     await db.transaction(async (tx) => {
