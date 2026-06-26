@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, MessageSquare } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, OkrResponsibilityWithDetails, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, getCalendarYearForQuarter, formatQuarterTagForPlanYear } from "@shared/schema";
 
 interface SpuGroup {
   spuName: string;
@@ -60,7 +60,6 @@ interface EmployeeProgressProps {
 
 export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   // ── All OKRs tab state ──────────────────────────────────────────────────
-  const [selectedYear, setSelectedYear] = usePersistedFilter("emp-progress:year", "");
   const [selectedQuarter, setSelectedQuarter] = usePersistedFilter("emp-progress:quarter", "");
   const [selectedPlanningYear, setSelectedPlanningYear] = usePersistedFilter("emp-progress:planningYear", "");
   const [selectedStaffId, setSelectedStaffId] = usePersistedFilter("emp-progress:staffId", "");
@@ -78,7 +77,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     setExpandedOkrIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
   // ── Shared data ─────────────────────────────────────────────────────────
-  const { data: years } = useQuery<Year[]>({ queryKey: ["/api/years"] });
   const { data: spus } = useQuery<Spu[]>({ queryKey: ["/api/spus"] });
   const { data: planStartYearData } = useQuery<{ startYear: number }>({
     queryKey: ["/api/settings/strategic-plan-start-year"],
@@ -95,8 +93,12 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
 
   // ── All OKRs tab data ───────────────────────────────────────────────────
   const queryParams = new URLSearchParams();
-  if (selectedYear && selectedYear !== "all") queryParams.append("year", selectedYear);
-  if (selectedQuarter && selectedQuarter !== "all") queryParams.append("quarter", selectedQuarter);
+  if (selectedQuarter && selectedQuarter !== "all") {
+    queryParams.append("quarter", selectedQuarter);
+    if (selectedPlanningYear && selectedPlanningYear !== "all") {
+      queryParams.append("year", String(getCalendarYearForQuarter(parseInt(selectedPlanningYear), selectedQuarter, planStartYear)));
+    }
+  }
   if (selectedStaffId && selectedStaffId !== "all") queryParams.append("staffId", selectedStaffId);
   if (selectedSpuId && selectedSpuId !== "all") queryParams.append("spuId", selectedSpuId);
 
@@ -110,14 +112,13 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   });
 
   const clearFilters = () => {
-    setSelectedYear("");
     setSelectedQuarter("");
     setSelectedPlanningYear("");
     setSelectedStaffId("");
     setSelectedSpuId("");
   };
 
-  const activeFiltersCount = [selectedYear, selectedQuarter, selectedPlanningYear, selectedStaffId, selectedSpuId]
+  const activeFiltersCount = [selectedQuarter, selectedPlanningYear, selectedStaffId, selectedSpuId]
     .filter(v => v && v !== "all").length;
 
   const getKeyResults = (keyResultsJson: any) => {
@@ -187,10 +188,11 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
   }, [progressSummaries, selectedPlanningYear, planStartYear]);
 
   const getPeriodLabel = () => {
-    if (selectedQuarter && selectedQuarter !== "all" && selectedYear && selectedYear !== "all")
-      return formatPeriodLabel(selectedQuarter, parseInt(selectedYear), planStartYear);
-    if (selectedYear && selectedYear !== "all") return selectedYear;
-    if (selectedQuarter && selectedQuarter !== "all") return getQuarterLabel(selectedQuarter);
+    const py = selectedPlanningYear && selectedPlanningYear !== "all" ? parseInt(selectedPlanningYear) : null;
+    const q = selectedQuarter && selectedQuarter !== "all" ? selectedQuarter : null;
+    if (py && q) return formatPeriodLabel(q, getCalendarYearForQuarter(py, q, planStartYear), planStartYear);
+    if (py) return formatPlanYearLabel(py, planStartYear);
+    if (q) return getQuarterLabel(q);
     return "All Periods";
   };
 
@@ -267,17 +269,6 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 pb-3">
-                <Select value={selectedYear || "all"} onValueChange={v => setSelectedYear(v === "all" ? "" : v)}>
-                  <SelectTrigger className="h-8 text-xs w-28" data-testid="select-filter-year">
-                    <SelectValue placeholder="Year" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All years</SelectItem>
-                    {years?.sort((a, b) => b.year - a.year).map(y => (
-                      <SelectItem key={y.id} value={String(y.year)}>{y.year}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <Select value={selectedQuarter || "all"} onValueChange={v => setSelectedQuarter(v === "all" ? "" : v)}>
                   <SelectTrigger className="h-8 text-xs w-28" data-testid="select-filter-quarter">
                     <SelectValue placeholder="Quarter" />
@@ -285,7 +276,11 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                   <SelectContent>
                     <SelectItem value="all">{ALL_QUARTERS_LABEL}</SelectItem>
                     {QUARTERS.map(q => (
-                      <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
+                      <SelectItem key={q.value} value={q.value}>
+                        {selectedPlanningYear && selectedPlanningYear !== "all"
+                          ? formatQuarterTagForPlanYear(q.value, parseInt(selectedPlanningYear), planStartYear)
+                          : q.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

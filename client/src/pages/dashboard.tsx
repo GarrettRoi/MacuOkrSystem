@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter, CalendarClock } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const QUARTER_LABELS: Record<string, string> = { All: ALL_QUARTERS_LABEL, Q1: "Q1", Q2: "Q2", Q3: "Q3", Q4: "Q4" };
@@ -20,7 +20,6 @@ const CHART_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--c
 
 export default function Dashboard() {
   const [quarterFilter, setQuarterFilter] = usePersistedFilter("dashboard:quarter", "All");
-  const [yearFilter, setYearFilter] = usePersistedFilter("dashboard:year", "All");
   const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("dashboard:planningYear", "All");
   const [spuFilter, setSpuFilter] = usePersistedFilter("dashboard:spu", "All");
   const [keywordSearch, setKeywordSearch] = usePersistedFilter("dashboard:keyword", "");
@@ -70,20 +69,8 @@ export default function Dashboard() {
 
   const isLoading = okrsLoading || updatesLoading || spusLoading;
 
-  const availableYears = okrs
-    ? Array.from(new Set(okrs.map(o => o.year))).sort((a, b) => b - a)
-    : [];
-  const YEARS = ["All", ...availableYears.map(String)];
-
-  useEffect(() => {
-    if (yearFilter === "All" && availableYears.length > 0) {
-      setYearFilter(String(availableYears[0]));
-    }
-  }, [availableYears.length]);
-
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
-    const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
     const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
     const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
     const keywordMatch = !keywordSearch || 
@@ -92,12 +79,11 @@ export default function Dashboard() {
       parseMultiSelectField(okr.universityKeyResult).some(kr => kr.toLowerCase().includes(keywordSearch.toLowerCase())) ||
       okr.okrNumber.toLowerCase().includes(keywordSearch.toLowerCase());
     
-    return quarterMatch && yearMatch && planningYearMatch && spuMatch && keywordMatch;
+    return quarterMatch && planningYearMatch && spuMatch && keywordMatch;
   }) || [];
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
-    setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
     setSpuFilter("All");
     setKeywordSearch("");
@@ -105,7 +91,6 @@ export default function Dashboard() {
 
   const activeFilterCount = [
     quarterFilter !== "All",
-    yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
     planningYearFilter !== "All",
     spuFilter !== "All",
     keywordSearch !== "",
@@ -135,7 +120,7 @@ export default function Dashboard() {
   const okrsNeedingUpdate = filteredOkrs.filter((okr) => {
     const hasRecentUpdate = updates?.some((update) => {
       const quarterMatch = update.quarter === quarterFilter;
-      const yearMatch = yearFilter === "All" || update.year === Number(yearFilter);
+      const yearMatch = update.year === okr.year;
       return update.okrId === okr.id && quarterMatch && yearMatch;
     });
     return !hasRecentUpdate && quarterFilter !== "All";
@@ -236,19 +221,9 @@ export default function Dashboard() {
               <SelectContent>
                 {QUARTERS.map((q) => (
                   <SelectItem key={q} value={q} data-testid={`option-filter-quarter-${q}`}>
-                    {QUARTER_LABELS[q]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={yearFilter} onValueChange={setYearFilter}>
-              <SelectTrigger className="w-32" data-testid="select-filter-year">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {YEARS.map((y) => (
-                  <SelectItem key={y} value={y} data-testid={`option-filter-year-${y}`}>
-                    {y}
+                    {q !== "All" && planningYearFilter !== "All"
+                      ? formatQuarterTagForPlanYear(q, parseInt(planningYearFilter), planStartYear)
+                      : QUARTER_LABELS[q]}
                   </SelectItem>
                 ))}
               </SelectContent>

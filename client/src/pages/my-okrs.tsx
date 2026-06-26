@@ -26,7 +26,6 @@ interface MyOkrsProps {
 }
 export default function MyOkrs({ staff }: MyOkrsProps) {
   const { toast } = useToast();
-  const [yearFilter, setYearFilter] = usePersistedFilter("my-okrs:year", "All");
   const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("my-okrs:planningYear", "All");
   const [quarterFilter, setQuarterFilter] = usePersistedFilter("my-okrs:quarter", "All");
   const [spuFilter, setSpuFilter] = usePersistedFilter("my-okrs:spu", "All");
@@ -98,17 +97,6 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
 
   const mySpuOkrs = spuOkrs || [];
 
-  const availableYears = mySpuOkrs.length > 0
-    ? Array.from(new Set(mySpuOkrs.map(o => o.year))).sort((a, b) => b - a)
-    : [];
-  const YEARS = ["All", ...availableYears.map(String)];
-
-  useEffect(() => {
-    if (yearFilter === "All" && availableYears.length > 0) {
-      setYearFilter(String(availableYears[0]));
-    }
-  }, [availableYears.length]);
-
   useEffect(() => {
     if (staff.role === "basic" && staff.spuId) {
       const desired = String(staff.spuId);
@@ -122,17 +110,16 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     const quarterOrder: Record<string, number> = { "Q3": 1, "Q4": 2, "Q1": 3, "Q2": 4 };
     return mySpuOkrs
       .filter((okr) => {
-        const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
         const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
         const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
         const spuMatch = spuFilter === "All" || String(okr.spuId) === spuFilter;
-        return yearMatch && planningYearMatch && quarterMatch && spuMatch;
+        return planningYearMatch && quarterMatch && spuMatch;
       })
       .sort((a, b) => {
         if (a.year !== b.year) return b.year - a.year;
         return (quarterOrder[b.quarter] || 0) - (quarterOrder[a.quarter] || 0);
       });
-  }, [mySpuOkrs, yearFilter, planningYearFilter, quarterFilter, spuFilter, planStartYear]);
+  }, [mySpuOkrs, planningYearFilter, quarterFilter, spuFilter, planStartYear]);
 
   // Keep the stored calendar year in sync with the plan year + fiscal quarter
   // chosen in the edit dialog (storage stays calendar-year based).
@@ -225,14 +212,12 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   }, [spus, subUnits, editingOkr?.spuId, editingOkr?.subUnitId]);
 
   const clearFilters = () => {
-    setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
     setQuarterFilter("All");
     setSpuFilter("All");
   };
 
   const activeFilterCount = [
-    yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
     planningYearFilter !== "All",
     quarterFilter !== "All",
     spuFilter !== "All",
@@ -560,17 +545,6 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
-              <Select value={yearFilter} onValueChange={setYearFilter}>
-                <SelectTrigger className="w-32" data-testid="select-year">
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {YEARS.map((y) => (
-                    <SelectItem key={y} value={y}>{y === "All" ? "All Years" : y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
               <Select value={planningYearFilter} onValueChange={setPlanningYearFilter}>
                 <SelectTrigger className="w-40" data-testid="select-planning-year">
                   <SelectValue placeholder="Plan Year" />
@@ -590,7 +564,11 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                 <SelectContent>
                   <SelectItem value="All">{ALL_QUARTERS_LABEL}</SelectItem>
                   {QUARTERS.map((q) => (
-                    <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
+                    <SelectItem key={q.value} value={q.value}>
+                      {planningYearFilter !== "All"
+                        ? formatQuarterTagForPlanYear(q.value, parseInt(planningYearFilter), planStartYear)
+                        : q.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
