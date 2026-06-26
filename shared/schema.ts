@@ -319,6 +319,74 @@ export function getCalendarYearsForPlanningYear(planningYear: number, planStartY
   return { q1q2Year, q3q4Year };
 }
 
+// The calendar year in which a plan year begins (its June).
+export function getPlanYearStartCalendarYear(planningYear: number, planStartYear: number): number {
+  return planStartYear + planningYear - 1;
+}
+
+// Derive the calendar year to STORE for a given plan-year + fiscal-quarter
+// selection. Q1/Q2 fall in the plan year's start calendar year; Q3/Q4 spill
+// into the next calendar year.
+export function getCalendarYearForQuarter(planningYear: number, quarter: string, planStartYear: number): number {
+  const startYear = getPlanYearStartCalendarYear(planningYear, planStartYear);
+  return quarter === "Q1" || quarter === "Q2" ? startYear : startYear + 1;
+}
+
+// Two-digit calendar year, e.g. 2024 -> "24".
+function twoDigitYear(year: number): string {
+  return String(((year % 100) + 100) % 100).padStart(2, "0");
+}
+
+// Primary year tag, e.g. "Year 1 (24)".
+export function formatPlanYearLabel(planningYear: number, planStartYear: number): string {
+  const startYear = getPlanYearStartCalendarYear(planningYear, planStartYear);
+  return `Year ${planningYear} (${twoDigitYear(startYear)})`;
+}
+
+// Quarter tag given the plan year it belongs to.
+// Q1/Q2 -> "Qx (YY)", Q3 -> "Q3 (YY/YY)" (crosses calendar years), Q4 -> "Q4 (YY)".
+export function formatQuarterTagForPlanYear(quarter: string, planningYear: number, planStartYear: number): string {
+  const startYear = getPlanYearStartCalendarYear(planningYear, planStartYear);
+  switch (quarter) {
+    case "Q1":
+      return `Q1 (${twoDigitYear(startYear)})`;
+    case "Q2":
+      return `Q2 (${twoDigitYear(startYear)})`;
+    case "Q3":
+      return `Q3 (${twoDigitYear(startYear)}/${twoDigitYear(startYear + 1)})`;
+    case "Q4":
+      return `Q4 (${twoDigitYear(startYear + 1)})`;
+    default:
+      return quarter;
+  }
+}
+
+// Quarter tag derived from the STORED (quarter, calendarYear) pair.
+export function formatQuarterTag(quarter: string, calendarYear: number, planStartYear: number): string {
+  const planningYear = getPlanningYear(quarter, calendarYear, planStartYear);
+  return formatQuarterTagForPlanYear(quarter, planningYear, planStartYear);
+}
+
+// Both tags + the derived plan year, computed from STORED values.
+export function formatPeriodTags(
+  quarter: string,
+  calendarYear: number,
+  planStartYear: number,
+): { yearTag: string; quarterTag: string; planningYear: number } {
+  const planningYear = getPlanningYear(quarter, calendarYear, planStartYear);
+  return {
+    planningYear,
+    yearTag: formatPlanYearLabel(planningYear, planStartYear),
+    quarterTag: formatQuarterTagForPlanYear(quarter, planningYear, planStartYear),
+  };
+}
+
+// One-line combined label, e.g. "Year 1 (24) · Q3 (24/25)".
+export function formatPeriodLabel(quarter: string, calendarYear: number, planStartYear: number): string {
+  const { yearTag, quarterTag } = formatPeriodTags(quarter, calendarYear, planStartYear);
+  return `${yearTag} · ${quarterTag}`;
+}
+
 export const RESPONSIBILITY_ROLES = ["owner", "collaborator"] as const;
 
 export function parseMultiSelectField(value: string): string[] {

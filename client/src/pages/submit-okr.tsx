@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2, Sparkles, Smile, Frown } from "lucide-react";
-import type { StaffWithDetails, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { QUARTERS, isLeaderRole } from "@shared/schema";
+import type { StaffWithDetails, Spu, SubUnit, UniversityObjectiveWithKeyResults } from "@shared/schema";
+import { QUARTERS, PLANNING_YEARS, isLeaderRole, getCalendarYearForQuarter, getCalendarYearsForPlanningYear, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
@@ -26,6 +26,7 @@ const formSchema = z.object({
   staffId: z.string(),
   spuId: z.string().min(1, "Please select a primary SPU"),
   subUnitId: z.string().optional(),
+  planYear: z.number().min(1, "Please select a plan year"),
   quarter: z.string().min(1, "Please select a quarter"),
   year: z.number(),
   collaborationSpuIds: z.array(z.string()).optional(),
@@ -56,13 +57,15 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     queryKey: ["/api/sub-units"],
   });
 
-  const { data: years } = useQuery<Year[]>({
-    queryKey: ["/api/years"],
-  });
-
   const { data: universityObjectivesData } = useQuery<UniversityObjectiveWithKeyResults[]>({
     queryKey: ["/api/university-objectives"],
   });
+
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+  });
+  const planStartYear = planStartYearData?.startYear || 2024;
+  const defaultPlanYear = Math.min(4, Math.max(1, currentYear - planStartYear + 1));
 
   
 
@@ -142,6 +145,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       staffId: staff.id,
       spuId: lockedToSubUnit ? staff.spuId : "",
       subUnitId: lockedToSubUnit ? (staff.subUnitId || undefined) : undefined,
+      planYear: defaultPlanYear,
       quarter: "",
       year: currentYear,
       collaborationSpuIds: [],
@@ -158,20 +162,31 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   });
 
   const watchedKeyResults = form.watch("keyResults");
-  const watchedYear = form.watch("year");
+  const watchedPlanYear = form.watch("planYear");
+  const watchedQuarter = form.watch("quarter");
   const watchedObjectives = form.watch("universityObjectives");
   const watchedUniversityKeyResults = form.watch("universityKeyResults");
 
+  // Keep the stored calendar year in sync with the (plan year, quarter) pick.
+  useEffect(() => {
+    if (!watchedPlanYear || !watchedQuarter) return;
+    const derived = getCalendarYearForQuarter(watchedPlanYear, watchedQuarter, planStartYear);
+    if (form.getValues("year") !== derived) {
+      form.setValue("year", derived);
+    }
+  }, [watchedPlanYear, watchedQuarter, planStartYear]);
+
   const objectiveOptions = useMemo(() => {
     if (!universityObjectivesData) return [];
+    const { q1q2Year, q3q4Year } = getCalendarYearsForPlanningYear(watchedPlanYear, planStartYear);
     return universityObjectivesData
       .filter(obj => obj.isActive !== false)
       .filter(obj => {
         if (!obj.applicableYears || obj.applicableYears.length === 0) return true;
-        return obj.applicableYears.includes(watchedYear);
+        return obj.applicableYears.includes(q1q2Year) || obj.applicableYears.includes(q3q4Year);
       })
       .map(obj => `${obj.label}: ${obj.description}`);
-  }, [universityObjectivesData, watchedYear]);
+  }, [universityObjectivesData, watchedPlanYear, planStartYear]);
 
   const keyResultOptions = useMemo(() => {
     if (!universityObjectivesData || watchedObjectives.length === 0) return [];
@@ -296,11 +311,15 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     const collaborationSubUnitIds = prefixed
       .filter((v) => v.startsWith("sub:"))
       .map((v) => v.slice(4));
+    // Storage keeps (quarter, year=calendarYear); derive the calendar year from
+    // the chosen plan year + quarter and drop the presentation-only planYear field.
+    const derivedYear = getCalendarYearForQuarter(data.planYear, data.quarter, planStartYear);
+    const { planYear: _planYear, ...rest } = data;
     const base =
-      data.subUnitId === WHOLE_SPU_SENTINEL
-        ? { ...data, subUnitId: undefined }
-        : data;
-    mutation.mutate({ ...base, collaborationSpuIds, collaborationSubUnitIds } as any);
+      rest.subUnitId === WHOLE_SPU_SENTINEL
+        ? { ...rest, subUnitId: undefined }
+        : rest;
+    mutation.mutate({ ...base, year: derivedYear, collaborationSpuIds, collaborationSubUnitIds } as any);
   };
 
 
@@ -310,6 +329,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       staffId: staff.id,
       spuId: lockedToSubUnit ? staff.spuId : "",
       subUnitId: lockedToSubUnit ? (staff.subUnitId || undefined) : undefined,
+      planYear: defaultPlanYear,
       quarter: "",
       year: currentYear,
       collaborationSpuIds: [],
@@ -567,10 +587,38 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
+                  name="planYear"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Plan Year *</FormLabel>
+                      <Select onValueChange={(val) => field.onChange(Number(val))} value={field.value ? String(field.value) : ""}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-plan-year">
+                            <SelectValue placeholder="Select plan year" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {PLANNING_YEARS.map((py) => (
+                            <SelectItem key={py} value={String(py)} data-testid={`option-plan-year-${py}`}>
+                              {formatPlanYearLabel(py, planStartYear)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription className="text-xs">
+                        Select the strategic plan year this OKR applies to
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
                   name="quarter"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Quarter *</FormLabel>
+                      <FormLabel>Fiscal Quarter *</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-quarter">
@@ -580,45 +628,15 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         <SelectContent>
                           {QUARTERS.map((q) => (
                             <SelectItem key={q.value} value={q.value} data-testid={`option-quarter-${q.value}`}>
-                              {q.label}
+                              {watchedPlanYear ? `${formatQuarterTagForPlanYear(q.value, watchedPlanYear, planStartYear)} — ${q.label.split(": ")[1]}` : q.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                       <FormDescription className="text-xs">
-                        Select the quarter to which this OKR will apply
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="year"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Year *</FormLabel>
-                      <Select onValueChange={(val) => field.onChange(Number(val))} value={String(field.value)}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-year">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {years && years.length > 0 ? (
-                            years.sort((a, b) => b.year - a.year).map((year) => (
-                              <SelectItem key={year.id} value={String(year.year)} data-testid={`option-year-${year.year}`}>
-                                {year.year}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <SelectItem value="no-years" disabled>No years available</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription className="text-xs">
-                        Select the year to which this OKR will apply
+                        {watchedPlanYear && watchedQuarter
+                          ? `This OKR will be tagged ${formatPlanYearLabel(watchedPlanYear, planStartYear)} · ${formatQuarterTagForPlanYear(watchedQuarter, watchedPlanYear, planStartYear)}`
+                          : "Select the fiscal quarter this OKR applies to"}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter, CalendarClock } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel } from "@shared/schema";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const QUARTER_LABELS: Record<string, string> = { All: ALL_QUARTERS_LABEL, Q1: "Q1", Q2: "Q2", Q3: "Q3", Q4: "Q4" };
@@ -261,7 +261,7 @@ export default function Dashboard() {
                 <SelectItem value="All">All Plan Years</SelectItem>
                 {PLANNING_YEARS.map((py) => (
                   <SelectItem key={py} value={String(py)} data-testid={`option-filter-planning-year-${py}`}>
-                    Year {py}
+                    {formatPlanYearLabel(py, planStartYear)}
                   </SelectItem>
                 ))}
               </SelectContent>

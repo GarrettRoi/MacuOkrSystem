@@ -1,1 +1,2 @@
 - [Auth login paths & impersonation](auth-login-paths.md) — select-staff serves BOTH genuine staff logins and admin impersonation; discriminate by session.isAdmin.
+- [Plan year period tagging](plan-year-tagging.md) — periods stored as (quarter, calendar year) but shown as Plan Year + Fiscal Quarter; derivation only, never migrate; getCalendarYearForQuarter/getPlanningYear must stay inverses.

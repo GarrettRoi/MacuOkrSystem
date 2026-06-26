@@ -19,7 +19,7 @@ import { Slider } from "@/components/ui/slider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus, Trash2, Settings, Pencil, Merge, Users, UserPlus, Lock, Target, ChevronDown, ChevronRight, ArrowUpFromLine, ArrowDownToLine, MoveHorizontal, TriangleAlert, Loader2, RefreshCw, BarChart2, BarChartHorizontal, LineChart, PieChart, Hash, Table2, Eye, EyeOff, LayoutDashboard, Upload, FileSpreadsheet, Check, ArrowRight, Save, TrendingUp, MessageSquarePlus, CheckCheck, Smile, Frown, Activity, UserX, Megaphone, Send, Bell } from "lucide-react";
 import type { Staff, Spu, SubUnit, Year, StaffWithDetails, UniversityObjectiveWithKeyResults, StrategicAdvancementData, StrategicChartData, StrategicChartRange, AnalyticsDashboardWithWidgets, AnalyticsWidget, FeedbackWithStaff, AppRatingWithStaff, ActivityLogEntry, InactiveStaffEntry, Announcement } from "@shared/schema";
-import { ALL_QUARTERS_LABEL, isLeaderRole, QUARTERS, getQuarterLabel } from "@shared/schema";
+import { ALL_QUARTERS_LABEL, isLeaderRole, QUARTERS, getQuarterLabel, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
 import { AnalyticsWidgetCard, parseConfig, FONT_SIZE_OPTIONS, LABEL_FONT_SIZE_OPTIONS, VALUE_COLOR_OPTIONS } from "@/components/analytics-widget";
 import AnnouncementsPanel from "@/components/announcements-panel";
 import { triggerNotificationOnboardingPreview } from "@/components/notification-onboarding";
@@ -5638,7 +5638,9 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Example: If start year is {planStartYear}, then Q3 {planStartYear} = Year 1 Q3, Q1 {planStartYear + 1} = Year 2 Q1.
+                    Example: With start year {planStartYear}, {formatPlanYearLabel(1, planStartYear)} runs June {planStartYear}–May {planStartYear + 1} and is tagged{" "}
+                    {formatQuarterTagForPlanYear("Q1", 1, planStartYear)}, {formatQuarterTagForPlanYear("Q2", 1, planStartYear)},{" "}
+                    {formatQuarterTagForPlanYear("Q3", 1, planStartYear)}, {formatQuarterTagForPlanYear("Q4", 1, planStartYear)}. {formatPlanYearLabel(2, planStartYear)} then begins the next June.
                   </p>
                 </div>
 

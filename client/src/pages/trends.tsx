@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { usePersistedFilter } from "@/hooks/use-persisted-filter";
 import type { OkrWithDetails, Year } from "@shared/schema";
-import { getPlanningYear, PLANNING_YEARS } from "@shared/schema";
+import { getPlanningYear, PLANNING_YEARS, formatPlanYearLabel } from "@shared/schema";
 
 export default function TrendsPage() {
   const currentYear = new Date().getFullYear();
@@ -199,7 +199,7 @@ export default function TrendsPage() {
                     <SelectItem value="All">All Plan Years</SelectItem>
                     {PLANNING_YEARS.map((py) => (
                       <SelectItem key={py} value={String(py)}>
-                        Year {py}
+                        {formatPlanYearLabel(py, planStartYear)}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, MessageSquare } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, OkrResponsibilityWithDetails, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel } from "@shared/schema";
 
 interface SpuGroup {
   spuName: string;
@@ -188,7 +188,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
 
   const getPeriodLabel = () => {
     if (selectedQuarter && selectedQuarter !== "all" && selectedYear && selectedYear !== "all")
-      return `${getQuarterLabel(selectedQuarter)} ${selectedYear}`;
+      return formatPeriodLabel(selectedQuarter, parseInt(selectedYear), planStartYear);
     if (selectedYear && selectedYear !== "all") return selectedYear;
     if (selectedQuarter && selectedQuarter !== "all") return getQuarterLabel(selectedQuarter);
     return "All Periods";
@@ -296,7 +296,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                   <SelectContent>
                     <SelectItem value="all">All plan years</SelectItem>
                     {PLANNING_YEARS.map(py => (
-                      <SelectItem key={py} value={String(py)}>Year {py}</SelectItem>
+                      <SelectItem key={py} value={String(py)}>{formatPlanYearLabel(py, planStartYear)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -463,7 +463,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                           )}
                                         </td>
                                         <td className="px-3 py-3 align-top hidden md:table-cell">
-                                          <span className="text-sm text-muted-foreground whitespace-nowrap">{record.okr.quarter} {record.okr.year}</span>
+                                          <span className="text-sm text-muted-foreground whitespace-nowrap">{formatPeriodLabel(record.okr.quarter, record.okr.year, planStartYear)}</span>
                                         </td>
                                         <td className="px-3 py-3 align-top text-right">
                                           {hasScore ? (

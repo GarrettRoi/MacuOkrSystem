@@ -19,7 +19,7 @@ import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/
 import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu, SubUnit, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, isLeaderRole } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, isLeaderRole, formatPlanYearLabel, formatQuarterTagForPlanYear, formatPeriodLabel, getCalendarYearForQuarter } from "@shared/schema";
 
 interface MyOkrsProps {
   staff: StaffWithDetails;
@@ -36,6 +36,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
   const [editKeyResults, setEditKeyResults] = useState<Array<{ description: string; percentage?: number }>>([]);
   const [editQuarter, setEditQuarter] = useState("");
   const [editYear, setEditYear] = useState<number>(2024);
+  const [editPlanYear, setEditPlanYear] = useState<number>(1);
   const [editStatus, setEditStatus] = useState("not_started");
   const [editUniversityObjectives, setEditUniversityObjectives] = useState<string[]>([]);
   const [editUniversityKeyResults, setEditUniversityKeyResults] = useState<string[]>([]);
@@ -132,6 +133,13 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
         return (quarterOrder[b.quarter] || 0) - (quarterOrder[a.quarter] || 0);
       });
   }, [mySpuOkrs, yearFilter, planningYearFilter, quarterFilter, spuFilter, planStartYear]);
+
+  // Keep the stored calendar year in sync with the plan year + fiscal quarter
+  // chosen in the edit dialog (storage stays calendar-year based).
+  useEffect(() => {
+    if (!editingOkr || !editQuarter) return;
+    setEditYear(getCalendarYearForQuarter(editPlanYear, editQuarter, planStartYear));
+  }, [editPlanYear, editQuarter, planStartYear, editingOkr]);
 
   const getLatestUpdate = (okrId: string) => {
     if (!updates) return null;
@@ -265,6 +273,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     setEditKeyResults(parseKeyResults(okr.keyResults));
     setEditQuarter(okr.quarter);
     setEditYear(okr.year);
+    setEditPlanYear(getPlanningYear(okr.quarter, okr.year, planStartYear));
     // Normalize legacy / unknown status values (e.g. "on_track" from older
     // data imports) to a value the server enum accepts, so the Select shows
     // a real option and the update payload validates.
@@ -291,6 +300,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     setEditKeyResults([]);
     setEditQuarter("");
     setEditYear(2024);
+    setEditPlanYear(1);
     setEditStatus("not_started");
     setEditUniversityObjectives([]);
     setEditUniversityKeyResults([]);
@@ -568,7 +578,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                 <SelectContent>
                   <SelectItem value="All">All Plan Years</SelectItem>
                   {PLANNING_YEARS.map((py) => (
-                    <SelectItem key={py} value={String(py)}>Year {py}</SelectItem>
+                    <SelectItem key={py} value={String(py)}>{formatPlanYearLabel(py, planStartYear)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -699,7 +709,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                     <div className="flex items-center gap-3 flex-wrap">
                       <Badge variant="secondary" className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {okr.quarter} {okr.year}
+                        {formatPeriodLabel(okr.quarter, okr.year, planStartYear)}
                       </Badge>
                       <Badge variant="secondary" className="flex items-center gap-1">
                         <Building2 className="h-3 w-3" />
@@ -787,7 +797,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                     {latestUpdate && (
                       <div className="border-t pt-4">
                         <h4 className="text-sm font-medium text-muted-foreground mb-2">
-                          Latest Update ({latestUpdate.quarter} {latestUpdate.year})
+                          Latest Update ({formatPeriodLabel(latestUpdate.quarter, latestUpdate.year, planStartYear)})
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
@@ -885,7 +895,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
           <DialogHeader>
             <DialogTitle>Edit OKR</DialogTitle>
             <DialogDescription>
-              Update details for {editingOkr?.okrNumber} - {editingOkr?.quarter} {editingOkr?.year}
+              Update details for {editingOkr?.okrNumber} - {editingOkr ? formatPeriodLabel(editingOkr.quarter, editingOkr.year, planStartYear) : ""}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -905,27 +915,30 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Quarter</Label>
+                <Label>Plan Year</Label>
+                <Select value={String(editPlanYear)} onValueChange={(v) => setEditPlanYear(Number(v))}>
+                  <SelectTrigger data-testid="select-edit-plan-year">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PLANNING_YEARS.map((py) => (
+                      <SelectItem key={py} value={String(py)}>{formatPlanYearLabel(py, planStartYear)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Fiscal Quarter</Label>
                 <Select value={editQuarter} onValueChange={setEditQuarter}>
                   <SelectTrigger data-testid="select-edit-quarter">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {QUARTERS.map((q) => (
-                      <SelectItem key={q.value} value={q.value}>{q.label}</SelectItem>
+                      <SelectItem key={q.value} value={q.value}>{`${formatQuarterTagForPlanYear(q.value, editPlanYear, planStartYear)} — ${q.label.split(": ")[1]}`}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-year">Year</Label>
-                <Input
-                  id="edit-year"
-                  type="number"
-                  value={editYear}
-                  onChange={(e) => setEditYear(parseInt(e.target.value) || 2024)}
-                  data-testid="input-edit-year"
-                />
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
@@ -1078,7 +1091,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
           <DialogHeader>
             <DialogTitle>Edit Score</DialogTitle>
             <DialogDescription>
-              Correct the submitted score for {editingScoreOkr?.okrNumber} - {editingScoreUpdate?.quarter} {editingScoreUpdate?.year}
+              Correct the submitted score for {editingScoreOkr?.okrNumber} - {editingScoreUpdate ? formatPeriodLabel(editingScoreUpdate.quarter, editingScoreUpdate.year, planStartYear) : ""}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">

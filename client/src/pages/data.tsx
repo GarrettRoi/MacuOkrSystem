@@ -17,7 +17,7 @@ import { z } from "zod";
 import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText, Shuffle, CheckCircle, Clock, HardDriveDownload, RotateCcw, Shield } from "lucide-react";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog, UnmatchedScore, DataBackupMeta, StaffWithDetails } from "@shared/schema";
-import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL } from "@shared/schema";
+import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, formatQuarterTag } from "@shared/schema";
 import { compareNames } from "@/lib/utils";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
 
@@ -1174,7 +1174,7 @@ export default function Data() {
                       <SelectItem value="all">All Plan Years</SelectItem>
                       {PLANNING_YEARS.map((py) => (
                         <SelectItem key={py} value={String(py)}>
-                          Year {py}
+                          {formatPlanYearLabel(py, planStartYear)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1383,7 +1383,7 @@ export default function Data() {
                           <TableCell>{okr.spu?.name || "N/A"}</TableCell>
                           <TableCell>{okr.okrNumber}</TableCell>
                           <TableCell>
-                            {getQuarterLabel(okr.quarter)} {okr.year}
+                            {formatPeriodLabel(okr.quarter, okr.year, planStartYear)}
                           </TableCell>
                           <TableCell className="max-w-xs truncate" title={okr.objectiveStatement}>{okr.objectiveStatement}</TableCell>
                           <TableCell>
@@ -1508,7 +1508,7 @@ export default function Data() {
                                                             <div key={update.id} className="space-y-2" data-testid={`kr-submission-${update.id}-${krIdx}`}>
                                                               <div className="flex items-center justify-between gap-3 flex-wrap">
                                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                                  <span className="text-sm font-semibold">{getQuarterLabel(update.quarter)} {update.year}</span>
+                                                                  <span className="text-sm font-semibold">{formatQuarterTag(update.quarter, update.year, planStartYear)}</span>
                                                                   <span className="text-sm font-bold text-foreground">— {krScore.score}%</span>
                                                                   {update.isPrimaryScore === false && (
                                                                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Secondary</Badge>
@@ -1553,7 +1553,7 @@ export default function Data() {
                                               data-testid={`card-update-${update.id}`}
                                             >
                                               <div className="flex items-center gap-2 flex-wrap text-sm">
-                                                <span className="font-medium">{getQuarterLabel(update.quarter)} {update.year}</span>
+                                                <span className="font-medium">{formatQuarterTag(update.quarter, update.year, planStartYear)}</span>
                                                 <span className="font-bold tabular-nums" data-testid={`text-avg-score-${update.id}`}>{update.averageScore ?? "—"}%</span>
                                                 {update.isPrimaryScore === false && (
                                                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Secondary</Badge>
@@ -1708,7 +1708,7 @@ export default function Data() {
                             <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
                               <Badge variant="outline" className="text-[10px] px-1.5 font-mono">{okr.okrNumber}</Badge>
                               <span>{okr.spu?.name || "—"}</span>
-                              <span>{okr.quarter} {okr.year}</span>
+                              <span>{formatPeriodLabel(okr.quarter, okr.year, planStartYear)}</span>
                             </div>
                             <p className="text-xs font-medium line-clamp-2">{okr.objectiveStatement}</p>
                             {okr.staff?.name && (
@@ -1822,7 +1822,7 @@ export default function Data() {
                               <div className="flex items-start justify-between gap-2 flex-wrap">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <Badge variant="outline" className="text-xs font-mono">{score.okrNumber || "?"}</Badge>
-                                  <span className="text-xs text-muted-foreground">{score.quarter} {score.year}</span>
+                                  <span className="text-xs text-muted-foreground">{formatQuarterTag(score.quarter, score.year, planStartYear)}</span>
                                   {score.isCollaborativeScore && <Badge variant="secondary" className="text-[10px] px-1">COLLAB</Badge>}
                                 </div>
                                 <Button
@@ -2242,7 +2242,7 @@ export default function Data() {
           <DialogHeader>
             <DialogTitle>Edit OKR</DialogTitle>
             <DialogDescription>
-              Update all details for {editingOkr?.okrNumber} - {editingOkr?.quarter} {editingOkr?.year}
+              Update all details for {editingOkr?.okrNumber} - {editingOkr ? formatPeriodLabel(editingOkr.quarter, editingOkr.year, planStartYear) : ""}
             </DialogDescription>
           </DialogHeader>
           <Form {...okrForm}>
@@ -2564,7 +2564,7 @@ export default function Data() {
           <DialogHeader>
             <DialogTitle>Edit Quarterly Update</DialogTitle>
             <DialogDescription>
-              Update the quarterly update for {editingUpdate?.quarter} {editingUpdate?.year}
+              Update the quarterly update for {editingUpdate ? formatPeriodLabel(editingUpdate.quarter, editingUpdate.year, planStartYear) : ""}
             </DialogDescription>
           </DialogHeader>
           <Form {...updateForm}>
@@ -3404,7 +3404,7 @@ export default function Data() {
                                   <div className="space-y-2 md:col-span-2 lg:col-span-3 border rounded-md p-3 bg-green-50/50 dark:bg-green-950/20">
                                     <label className="text-xs font-medium text-green-700 dark:text-green-300">Matched OKR Details</label>
                                     <div className="text-xs space-y-1">
-                                      <p><span className="font-medium">OKR:</span> {row.matchedOkrDetails.okrNumber} ({row.matchedOkrDetails.quarter} {row.matchedOkrDetails.year})</p>
+                                      <p><span className="font-medium">OKR:</span> {row.matchedOkrDetails.okrNumber} ({formatQuarterTag(row.matchedOkrDetails.quarter, row.matchedOkrDetails.year, planStartYear)})</p>
                                       <p><span className="font-medium">SPU:</span> {row.matchedOkrDetails.spuName}{row.matchedOkrDetails.subUnitName ? ` / ${row.matchedOkrDetails.subUnitName}` : ''}</p>
                                       <p><span className="font-medium">Staff:</span> {row.matchedOkrDetails.staffName || 'N/A'}</p>
                                       <p><span className="font-medium">Objective:</span> {row.matchedOkrDetails.objectiveStatement}</p>
@@ -3706,7 +3706,7 @@ export default function Data() {
                       <TableRow key={okr.id} data-testid={`row-okr-search-${oi}`}>
                         <TableCell className="text-sm font-medium">{okr.okrNumber}</TableCell>
                         <TableCell className="text-sm">{okr.spuName}{okr.subUnitName ? ` / ${okr.subUnitName}` : ''}</TableCell>
-                        <TableCell className="text-sm">{okr.quarter} {okr.year}</TableCell>
+                        <TableCell className="text-sm">{formatPeriodLabel(okr.quarter, okr.year, planStartYear)}</TableCell>
                         <TableCell className="text-sm">{okr.staffName}</TableCell>
                         <TableCell className="text-xs max-w-[200px]">
                           <span className="line-clamp-3" title={okr.objectiveStatement}>{okr.objectiveStatement}</span>

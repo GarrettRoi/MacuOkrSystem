@@ -13,8 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, AlertCircle, Sparkles, Star, PartyPopper } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { StaffWithDetails, OkrWithDetails, Year } from "@shared/schema";
-import { insertQuarterlyUpdateSchema, QUARTERS, getQuarterLabel } from "@shared/schema";
+import type { StaffWithDetails, OkrWithDetails } from "@shared/schema";
+import { insertQuarterlyUpdateSchema, QUARTERS, getQuarterLabel, PLANNING_YEARS, getPlanningYear, getCalendarYearForQuarter, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 
 // Schema for individual key result score (for internal form use)
@@ -60,6 +60,9 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [selectedQuarter, setSelectedQuarter] = useState(deepQuarter);
   const [selectedYear, setSelectedYear] = useState(deepQuarter ? deepYear : currentYear);
+  const [selectedPlanYear, setSelectedPlanYear] = useState<number | null>(
+    deepQuarter ? getPlanningYear(deepQuarter, deepYear, 2024) : null
+  );
 
   // Fetch every OKR the current staff session is allowed to score across
   // every SPU they're associated with (primary + staff_spu_assignments).
@@ -74,9 +77,20 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     enabled: !!staff.id,
   });
 
-  const { data: years } = useQuery<Year[]>({
-    queryKey: ["/api/years"],
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
   });
+  const planStartYear = planStartYearData?.startYear || 2024;
+  const defaultPlanYear = Math.min(4, Math.max(1, currentYear - planStartYear + 1));
+
+  // Once the configured start year loads, recompute the plan-year label for any
+  // deep-linked quarter/year so non-2024 start years tag correctly.
+  useEffect(() => {
+    if (selectedQuarter && selectedYear) {
+      setSelectedPlanYear(getPlanningYear(selectedQuarter, selectedYear, planStartYear));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planStartYear]);
 
   // For basic users, also fetch their staff_spu_assignments so we can show
   // OKRs from every sub-unit they're allowed to score, not just the primary.
@@ -195,6 +209,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     // Set quarter/year so filteredOkrs includes this OKR, then select it
     setSelectedQuarter(target.quarter);
     setSelectedYear(target.year);
+    setSelectedPlanYear(getPlanningYear(target.quarter, target.year, planStartYear));
     form.setValue("quarter", target.quarter);
     form.setValue("year", target.year);
 
@@ -256,6 +271,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     setSelectedOkr(null);
     setSelectedQuarter("");
     setSelectedYear(currentYear);
+    setSelectedPlanYear(null);
     form.reset({
       okrId: "",
       staffId: staff.id,
@@ -395,22 +411,60 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                   </div>
                 </div>
 
-                {/* Quarter and Year Selection */}
+                {/* Plan Year and Fiscal Quarter Selection */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormItem>
+                    <FormLabel>Plan Year *</FormLabel>
+                    <Select
+                      onValueChange={(val) => {
+                        const py = Number(val);
+                        setSelectedPlanYear(py);
+                        setSelectedOkr(null);
+                        form.setValue("okrId", "");
+                        if (selectedQuarter) {
+                          const derived = getCalendarYearForQuarter(py, selectedQuarter, planStartYear);
+                          setSelectedYear(derived);
+                          form.setValue("year", derived);
+                        }
+                      }}
+                      value={selectedPlanYear ? String(selectedPlanYear) : ""}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-update-plan-year">
+                          <SelectValue placeholder="Select plan year" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {PLANNING_YEARS.map((py) => (
+                          <SelectItem key={py} value={String(py)} data-testid={`option-update-plan-year-${py}`}>
+                            {formatPlanYearLabel(py, planStartYear)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Choose the strategic plan year.</FormDescription>
+                  </FormItem>
+
                   <FormField
                     control={form.control}
                     name="quarter"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Select Year and Quarter *</FormLabel>
-                        <Select 
+                        <FormLabel>Fiscal Quarter *</FormLabel>
+                        <Select
                           onValueChange={(value) => {
                             field.onChange(value);
                             setSelectedQuarter(value);
                             setSelectedOkr(null);
                             form.setValue("okrId", "");
-                          }} 
+                            if (selectedPlanYear) {
+                              const derived = getCalendarYearForQuarter(selectedPlanYear, value, planStartYear);
+                              setSelectedYear(derived);
+                              form.setValue("year", derived);
+                            }
+                          }}
                           value={field.value}
+                          disabled={!selectedPlanYear}
                         >
                           <FormControl>
                             <SelectTrigger data-testid="select-update-quarter">
@@ -420,50 +474,12 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
                           <SelectContent>
                             {QUARTERS.map((q) => (
                               <SelectItem key={q.value} value={q.value} data-testid={`option-update-quarter-${q.value}`}>
-                                {q.label}
+                                {selectedPlanYear ? `${formatQuarterTagForPlanYear(q.value, selectedPlanYear, planStartYear)} — ${q.label.split(": ")[1]}` : q.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                         <FormDescription>Choose which OKR you wish to score.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="year"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Year *</FormLabel>
-                        <Select 
-                          onValueChange={(val) => {
-                            const yearNum = Number(val);
-                            field.onChange(yearNum);
-                            setSelectedYear(yearNum);
-                            setSelectedOkr(null);
-                            form.setValue("okrId", "");
-                          }} 
-                          value={String(field.value)}
-                        >
-                          <FormControl>
-                            <SelectTrigger data-testid="select-update-year">
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {years && years.length > 0 ? (
-                              years.sort((a, b) => b.year - a.year).map((year) => (
-                                <SelectItem key={year.id} value={String(year.year)} data-testid={`option-update-year-${year.year}`}>
-                                  {year.year}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="no-years" disabled>No years available</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}

@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Download, FileSpreadsheet, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, StaffWithDetails } from "@shared/schema";
-import { getPlanningYear, parseMultiSelectField, PLANNING_YEARS, ALL_QUARTERS_LABEL, QUARTERS } from "@shared/schema";
+import { getPlanningYear, parseMultiSelectField, PLANNING_YEARS, ALL_QUARTERS_LABEL, QUARTERS, formatPlanYearLabel } from "@shared/schema";
 
 const NO_KR_LABEL = "(No Key Result)";
 
@@ -345,7 +345,7 @@ export default function Export() {
                     <SelectItem value="All">All Plan Years</SelectItem>
                     {PLANNING_YEARS.map((py) => (
                       <SelectItem key={py} value={String(py)} data-testid={`option-export-planning-year-${py}`}>
-                        Year {py}
+                        {formatPlanYearLabel(py, planStartYear)}
                       </SelectItem>
                     ))}
                   </SelectContent>

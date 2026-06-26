@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from "recharts";
 import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar, Building2, Users, ChevronRight, ChevronDown } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, StrategicChartData, AnalyticsDashboardWithWidgets, UniversityObjectiveWithKeyResults, UniversityYearlySnapshot } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS, ALL_QUARTERS_LABEL } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel } from "@shared/schema";
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
@@ -274,7 +274,7 @@ function DashboardTab() {
                 <SelectItem value="All">All Plan Years</SelectItem>
                 {PLANNING_YEARS.map((py) => (
                   <SelectItem key={py} value={String(py)} data-testid={`option-filter-planning-year-${py}`}>
-                    Year {py}
+                    {formatPlanYearLabel(py, planStartYear)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -621,7 +621,7 @@ function DashboardTab() {
                                         <span className="text-sm">{okr.staff?.name || "—"}</span>
                                       </td>
                                       <td className="px-4 py-3 align-top hidden md:table-cell">
-                                        <span className="text-sm text-muted-foreground whitespace-nowrap">{okr.quarter} {okr.year}</span>
+                                        <span className="text-sm text-muted-foreground whitespace-nowrap">{formatPeriodLabel(okr.quarter, okr.year, planStartYear)}</span>
                                       </td>
                                       <td className="px-4 py-3 align-top text-right">
                                         {hasScore ? (
@@ -663,7 +663,7 @@ function DashboardTab() {
                                                     data-testid={`text-drill-notes-${u.id}`}
                                                   >
                                                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                                      {u.quarter} {u.year}
+                                                      {formatPeriodLabel(u.quarter, u.year, planStartYear)}
                                                       {u.isPrimaryScore === false ? " · Collaborative" : ""}
                                                     </p>
                                                     <p className="whitespace-pre-wrap">{u.notes}</p>
@@ -1104,6 +1104,10 @@ function ObjectiveResultsTab() {
   });
   const { data: years } = useQuery<Year[]>({ queryKey: ["/api/years"] });
   const { data: spus } = useQuery<Spu[]>({ queryKey: ["/api/spus"] });
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
+  });
+  const planStartYear = planStartYearData?.startYear || 2024;
 
   const activeObjectives = useMemo(
     () => (universityObjectives || []).filter(o => o.isActive !== false).sort((a, b) => a.sortOrder - b.sortOrder),
@@ -1369,7 +1373,7 @@ function ObjectiveResultsTab() {
                         )}
                       </td>
                       <td className="px-4 py-3 align-top hidden md:table-cell">
-                        <span className="text-sm text-muted-foreground whitespace-nowrap">{okr.quarter} {okr.year}</span>
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">{formatPeriodLabel(okr.quarter, okr.year, planStartYear)}</span>
                       </td>
                       <td className="px-4 py-3 align-top hidden xl:table-cell">
                         <div className="flex flex-wrap gap-1">
