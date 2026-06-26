@@ -39,6 +39,7 @@ interface AggregatedOkr {
   subUnitId: string | null;
   derivedProgress: number;
   staff: { name: string };
+  actedByName: string | null;
   spu: { name: string } | null;
   subUnit: { name: string } | null;
   quarterlyUpdates: Array<{
@@ -51,6 +52,7 @@ interface AggregatedOkr {
     isPrimaryScore: boolean | null;
     isCollaborativeScore: boolean | null;
     scorerName: string | null;
+    actedByName: string | null;
   }>;
 }
 
@@ -445,6 +447,9 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                         </td>
                                         <td className="px-3 py-3 align-top hidden lg:table-cell">
                                           <span className="text-sm">{owner}</span>
+                                          {record.okr.actedByName && (
+                                            <p className="text-xs text-muted-foreground mt-0.5">Submitted by {record.okr.actedByName}</p>
+                                          )}
                                         </td>
                                         <td className="px-3 py-3 align-top hidden xl:table-cell">
                                           {strategicObjs.length > 0 ? (
@@ -522,7 +527,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                                                 {/* Scorer info */}
                                                 <div className="flex items-center gap-4 pt-1 border-t text-xs text-muted-foreground">
                                                   {record.latestUpdate.scorerName && (
-                                                    <span>Scored by <span className="font-medium text-foreground">{record.latestUpdate.scorerName}</span></span>
+                                                    <span>Scored by <span className="font-medium text-foreground">{record.latestUpdate.scorerName}</span>{record.latestUpdate.actedByName && <span> — entered by <span className="font-medium text-foreground">{record.latestUpdate.actedByName}</span></span>}</span>
                                                   )}
                                                   <span>Submitted {new Date(record.latestUpdate.submittedAt).toLocaleDateString()}</span>
                                                   {hasScore && <span>Overall score: <span className="font-medium text-foreground">{latestScore}%</span></span>}

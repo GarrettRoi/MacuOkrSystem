@@ -13,8 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, AlertCircle, Sparkles, Star, PartyPopper } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { StaffWithDetails, OkrWithDetails } from "@shared/schema";
+import type { StaffWithDetails, OkrWithDetails, Year } from "@shared/schema";
 import { insertQuarterlyUpdateSchema, QUARTERS, getQuarterLabel, PLANNING_YEARS, getPlanningYear, getCalendarYearForQuarter, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { OnBehalfStaffPicker } from "@/components/on-behalf-staff-picker";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 
 // Schema for individual key result score (for internal form use)
@@ -45,8 +46,26 @@ interface QuarterlyUpdateProps {
 
 const currentYear = new Date().getFullYear();
 
-export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
+export default function QuarterlyUpdate({ staff: currentUser }: QuarterlyUpdateProps) {
   const { toast } = useToast();
+
+  // Super admins may score on behalf of another staff member. The chosen
+  // person becomes the "effective" staff that drives OKR scoping; the
+  // logged-in super admin is recorded server-side as the actor.
+  const isSuperAdmin = currentUser.role === "super_admin";
+  const [onBehalfStaffId, setOnBehalfStaffId] = useState<string | null>(null);
+
+  const { data: allStaff } = useQuery<StaffWithDetails[]>({
+    queryKey: ["/api/staff"],
+    enabled: isSuperAdmin,
+  });
+
+  const onBehalfStaff = useMemo(
+    () => (onBehalfStaffId ? (allStaff || []).find((s) => s.id === onBehalfStaffId) : undefined),
+    [onBehalfStaffId, allStaff],
+  );
+  const effectiveStaff = isSuperAdmin && onBehalfStaff ? onBehalfStaff : currentUser;
+  const isActingOnBehalf = isSuperAdmin && !!onBehalfStaff;
 
   // Parse deep-link params: ?okrId=...&quarter=...&year=...
   const urlParams = new URLSearchParams(
@@ -68,13 +87,16 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   // every SPU they're associated with (primary + staff_spu_assignments).
   // The server enforces the same scoping.
   const { data: spuOkrs, isLoading } = useQuery<OkrWithDetails[]>({
-    queryKey: ["/api/my-okrs", staff.id],
+    queryKey: ["/api/my-okrs", effectiveStaff.id, isActingOnBehalf ? onBehalfStaffId : null],
     queryFn: async () => {
-      const response = await fetch(`/api/my-okrs`, { credentials: "include" });
+      const url = isActingOnBehalf && onBehalfStaffId
+        ? `/api/my-okrs?onBehalfOf=${encodeURIComponent(onBehalfStaffId)}`
+        : `/api/my-okrs`;
+      const response = await fetch(url, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to fetch OKRs");
       return response.json();
     },
-    enabled: !!staff.id,
+    enabled: !!effectiveStaff.id,
   });
 
   const { data: planStartYearData } = useQuery<{ startYear: number }>({
@@ -95,27 +117,27 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
   // For basic users, also fetch their staff_spu_assignments so we can show
   // OKRs from every sub-unit they're allowed to score, not just the primary.
   const { data: spuAssignments } = useQuery<any[]>({
-    queryKey: ["/api/staff", staff.id, "assignments"],
+    queryKey: ["/api/staff", effectiveStaff.id, "assignments"],
     queryFn: async () => {
-      const res = await fetch(`/api/staff/${staff.id}/assignments`, { credentials: "include" });
+      const res = await fetch(`/api/staff/${effectiveStaff.id}/assignments`, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: staff.role === "basic",
+    enabled: effectiveStaff.role === "basic",
   });
 
   // Allowed (spuId, subUnitId|null) pairs for basics. A pair with a null
   // sub-unit matches OKRs that have no sub-unit set ("whole SPU").
   const basicAllowedPairs = useMemo(() => {
-    if (staff.role !== "basic") return null;
+    if (effectiveStaff.role !== "basic") return null;
     const pairs = new Set<string>();
     const keyFor = (spu: string, sub: string | null) => `${spu}::${sub ?? ""}`;
-    pairs.add(keyFor(staff.spuId, staff.subUnitId ?? null));
+    pairs.add(keyFor(effectiveStaff.spuId, effectiveStaff.subUnitId ?? null));
     for (const a of (spuAssignments || []) as any[]) {
       if (a?.spuId) pairs.add(keyFor(a.spuId, a.subUnitId ?? null));
     }
     return pairs;
-  }, [staff.role, staff.spuId, staff.subUnitId, spuAssignments]);
+  }, [effectiveStaff.role, effectiveStaff.spuId, effectiveStaff.subUnitId, spuAssignments]);
 
   const isAllowedOkr = (okr: OkrWithDetails) => {
     if (!basicAllowedPairs) return true;
@@ -134,7 +156,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       okrId: "",
-      staffId: staff.id,
+      staffId: effectiveStaff.id,
       quarter: deepQuarter,
       year: deepQuarter ? deepYear : currentYear,
       progress: 0,
@@ -232,18 +254,39 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     setSelectedOkr(target);
   }, [deepOkrId, spuOkrs]);
 
+  // When a super admin changes who they're scoring for, clear the in-progress
+  // selection so they don't accidentally score with the previous person's OKR.
+  useEffect(() => {
+    setSelectedOkr(null);
+    setSelectedQuarter("");
+    setSelectedYear(currentYear);
+    form.reset({
+      okrId: "",
+      staffId: effectiveStaff.id,
+      quarter: "",
+      year: currentYear,
+      progress: 0,
+      keyResultScores: [],
+      averageScore: 0,
+      additionalKeyResults: "",
+      notes: "",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onBehalfStaffId]);
+
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
       const payload = {
         ...data,
         keyResultScores: JSON.stringify(data.keyResultScores),
         additionalKeyResults: data.additionalKeyResults?.trim() || null,
+        ...(isActingOnBehalf ? { onBehalfOfStaffId: onBehalfStaffId } : {}),
       };
       return await apiRequest("POST", "/api/quarterly-updates", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/okrs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/my-okrs", staff.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-okrs", effectiveStaff.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/quarterly-updates"] });
       setIsSubmitted(true);
       toast({
@@ -274,7 +317,7 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
     setSelectedPlanYear(null);
     form.reset({
       okrId: "",
-      staffId: staff.id,
+      staffId: effectiveStaff.id,
       quarter: "",
       year: currentYear,
       progress: 0,
@@ -386,26 +429,38 @@ export default function QuarterlyUpdate({ staff }: QuarterlyUpdateProps) {
           ) : (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                {isSuperAdmin && (
+                  <OnBehalfStaffPicker
+                    staff={allStaff || []}
+                    value={onBehalfStaffId}
+                    onChange={setOnBehalfStaffId}
+                    currentUserId={currentUser.id}
+                    label="Score on behalf of"
+                    description="Choose a staff member to score for. Leave empty to score as yourself."
+                  />
+                )}
                 {/* Staff Information */}
                 <div className="bg-muted/50 p-4 rounded-md space-y-2">
-                  <h3 className="font-medium text-sm text-muted-foreground">Staff Information</h3>
+                  <h3 className="font-medium text-sm text-muted-foreground">
+                    {isActingOnBehalf ? "Scoring for" : "Staff Information"}
+                  </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm font-medium">Name</p>
-                      <p className="text-sm text-muted-foreground" data-testid="text-staff-name">{staff.name}</p>
+                      <p className="text-sm text-muted-foreground" data-testid="text-staff-name">{effectiveStaff.name}</p>
                     </div>
                     <div>
                       <p className="text-sm font-medium">Email</p>
-                      <p className="text-sm text-muted-foreground" data-testid="text-staff-email">{staff.email}</p>
+                      <p className="text-sm text-muted-foreground" data-testid="text-staff-email">{effectiveStaff.email}</p>
                     </div>
                     <div>
                       <p className="text-sm font-medium">Primary SPU</p>
-                      <p className="text-sm text-muted-foreground" data-testid="text-staff-spu">{staff.spu.name}</p>
+                      <p className="text-sm text-muted-foreground" data-testid="text-staff-spu">{effectiveStaff.spu.name}</p>
                     </div>
-                    {staff.subUnit && (
+                    {effectiveStaff.subUnit && (
                       <div>
                         <p className="text-sm font-medium">Primary Sub-Unit</p>
-                        <p className="text-sm text-muted-foreground" data-testid="text-staff-subunit">{staff.subUnit.name}</p>
+                        <p className="text-sm text-muted-foreground" data-testid="text-staff-subunit">{effectiveStaff.subUnit.name}</p>
                       </div>
                     )}
                   </div>

@@ -1379,7 +1379,12 @@ export default function Data() {
                               )}
                             </Button>
                           </TableCell>
-                          <TableCell className="font-medium">{okr.staff.name}</TableCell>
+                          <TableCell className="font-medium">
+                            {okr.staff.name}
+                            {okr.actedByName && (
+                              <p className="text-xs font-normal text-muted-foreground">Submitted by {okr.actedByName}</p>
+                            )}
+                          </TableCell>
                           <TableCell>{okr.spu?.name || "N/A"}</TableCell>
                           <TableCell>{okr.okrNumber}</TableCell>
                           <TableCell>
@@ -1518,7 +1523,7 @@ export default function Data() {
                                                                   )}
                                                                 </div>
                                                                 {update.scorerName && (
-                                                                  <span className="text-xs text-muted-foreground">Scored by {update.scorerName}</span>
+                                                                  <span className="text-xs text-muted-foreground">Scored by {update.scorerName}{update.actedByName && ` — entered by ${update.actedByName}`}</span>
                                                                 )}
                                                               </div>
                                                               {update.notes && (
@@ -1565,7 +1570,7 @@ export default function Data() {
                                                   <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] px-1.5 py-0">Collab</Badge>
                                                 )}
                                                 {update.scorerName && (
-                                                  <span className="text-xs text-muted-foreground">by {update.scorerName}</span>
+                                                  <span className="text-xs text-muted-foreground">by {update.scorerName}{update.actedByName && ` — entered by ${update.actedByName}`}</span>
                                                 )}
                                               </div>
                                               <div className="flex items-center gap-2">

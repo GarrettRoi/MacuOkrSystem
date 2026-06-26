@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2, Sparkles, Smile, Frown } from "lucide-react";
-import type { StaffWithDetails, Spu, SubUnit, UniversityObjectiveWithKeyResults } from "@shared/schema";
+import { OnBehalfStaffPicker } from "@/components/on-behalf-staff-picker";
+import type { StaffWithDetails, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
 import { QUARTERS, PLANNING_YEARS, isLeaderRole, getCalendarYearForQuarter, getCalendarYearsForPlanningYear, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
@@ -45,9 +46,27 @@ interface SubmitOkrProps {
 const currentYear = new Date().getFullYear();
 const WHOLE_SPU_SENTINEL = "__whole_spu__";
 
-export default function SubmitOkr({ staff }: SubmitOkrProps) {
+export default function SubmitOkr({ staff: currentUser }: SubmitOkrProps) {
   const { toast } = useToast();
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Super admins may submit an OKR on behalf of another staff member. The
+  // chosen person becomes the "effective" staff that drives all SPU/sub-unit
+  // scoping; the logged-in super admin is recorded server-side as the actor.
+  const isSuperAdmin = currentUser.role === "super_admin";
+  const [onBehalfStaffId, setOnBehalfStaffId] = useState<string | null>(null);
+
+  const { data: allStaff } = useQuery<StaffWithDetails[]>({
+    queryKey: ["/api/staff"],
+    enabled: isSuperAdmin,
+  });
+
+  const onBehalfStaff = useMemo(
+    () => (onBehalfStaffId ? (allStaff || []).find((s) => s.id === onBehalfStaffId) : undefined),
+    [onBehalfStaffId, allStaff],
+  );
+  const effectiveStaff = isSuperAdmin && onBehalfStaff ? onBehalfStaff : currentUser;
+  const isActingOnBehalf = isSuperAdmin && !!onBehalfStaff;
 
   const { data: spus } = useQuery<Spu[]>({
     queryKey: ["/api/spus"],
@@ -73,9 +92,9 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   // additional SPU/sub-unit grants via staff_spu_assignments and we need
   // to honor them when populating the pickers.
   const { data: spuAssignments } = useQuery<any[]>({
-    queryKey: ["/api/staff", staff.id, "assignments"],
+    queryKey: ["/api/staff", effectiveStaff.id, "assignments"],
     queryFn: async () => {
-      const res = await fetch(`/api/staff/${staff.id}/assignments`, { credentials: "include" });
+      const res = await fetch(`/api/staff/${effectiveStaff.id}/assignments`, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
@@ -85,31 +104,31 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   // pairs they are allowed to submit OKRs for: primary + every entry in
   // staff_spu_assignments. A null subUnitId means "whole SPU" is allowed.
   const basicAllowedPairs = useMemo(() => {
-    if (staff.role !== "basic") return [] as { spuId: string; subUnitId: string | null }[];
+    if (effectiveStaff.role !== "basic") return [] as { spuId: string; subUnitId: string | null }[];
     const pairs: { spuId: string; subUnitId: string | null }[] = [
-      { spuId: staff.spuId, subUnitId: staff.subUnitId ?? null },
+      { spuId: effectiveStaff.spuId, subUnitId: effectiveStaff.subUnitId ?? null },
     ];
     for (const a of (spuAssignments || []) as any[]) {
       if (!a?.spuId) continue;
       pairs.push({ spuId: a.spuId, subUnitId: a.subUnitId ?? null });
     }
     return pairs;
-  }, [staff.role, staff.spuId, staff.subUnitId, spuAssignments]);
+  }, [effectiveStaff.role, effectiveStaff.spuId, effectiveStaff.subUnitId, spuAssignments]);
 
   // Get available SPUs for this user
   const getAvailableSpus = () => {
     if (!spus) return [];
 
     // Super admins can see all SPUs
-    if (staff.role === "super_admin") {
+    if (effectiveStaff.role === "super_admin") {
       return spus;
     }
 
     // Leaders can see their primary SPU plus assigned SPUs
-    if (isLeaderRole(staff.role)) {
+    if (isLeaderRole(effectiveStaff.role)) {
       const assignedSpuIds = (spuAssignments || []).map((a: any) => a.spuId);
       return spus.filter(spu =>
-        spu.id === staff.spuId || assignedSpuIds.includes(spu.id)
+        spu.id === effectiveStaff.spuId || assignedSpuIds.includes(spu.id)
       );
     }
 
@@ -137,14 +156,14 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   // Lock the SPU+sub-unit pickers only when the basic user has no choice
   // at all: a single SPU and a single sub-unit (their original primary).
   const lockedToSubUnit =
-    staff.role === "basic" && basicAllowedPairs.length === 1 && !!staff.subUnitId;
+    effectiveStaff.role === "basic" && basicAllowedPairs.length === 1 && !!effectiveStaff.subUnitId;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      staffId: staff.id,
-      spuId: lockedToSubUnit ? staff.spuId : "",
-      subUnitId: lockedToSubUnit ? (staff.subUnitId || undefined) : undefined,
+      staffId: effectiveStaff.id,
+      spuId: lockedToSubUnit ? effectiveStaff.spuId : "",
+      subUnitId: lockedToSubUnit ? (effectiveStaff.subUnitId || undefined) : undefined,
       planYear: defaultPlanYear,
       quarter: "",
       year: currentYear,
@@ -212,6 +231,16 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
     }
   }, [keyResultOptions]);
 
+  // When a super admin changes who they're submitting for, re-scope the
+  // staff/SPU/sub-unit fields to that person (respecting their locking).
+  useEffect(() => {
+    form.setValue("staffId", effectiveStaff.id);
+    form.setValue("spuId", lockedToSubUnit ? effectiveStaff.spuId : "");
+    form.setValue("subUnitId", lockedToSubUnit ? (effectiveStaff.subUnitId || undefined) : undefined);
+    form.clearErrors(["spuId", "subUnitId"]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onBehalfStaffId]);
+
   const ratingMutation = useMutation({
     mutationFn: async (rating: "good" | "bad") => {
       const pageUrl = (typeof window !== "undefined"
@@ -253,6 +282,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
         universityObjective: JSON.stringify(data.universityObjectives),
         universityKeyResult: JSON.stringify(data.universityKeyResults),
         keyResults: JSON.stringify(normalizedKeyResults),
+        ...(isActingOnBehalf ? { onBehalfOfStaffId: onBehalfStaffId } : {}),
       };
       delete (payload as any).universityObjectives;
       delete (payload as any).universityKeyResults;
@@ -284,7 +314,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
       (su) => su.spuId === data.spuId && availableSpuIds.includes(su.spuId)
     );
     // For basics, force a sub-unit pick unless the SPU is granted "whole SPU".
-    if (staff.role === "basic") {
+    if (effectiveStaff.role === "basic") {
       const { subUnitIds, allowsWholeSpu } = getBasicAllowedForSpu(data.spuId);
       if (subUnitIds.size > 0 && !allowsWholeSpu) {
         if (!data.subUnitId || data.subUnitId === WHOLE_SPU_SENTINEL) {
@@ -326,9 +356,9 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
   const handleSubmitAnother = () => {
     setIsSubmitted(false);
     form.reset({
-      staffId: staff.id,
-      spuId: lockedToSubUnit ? staff.spuId : "",
-      subUnitId: lockedToSubUnit ? (staff.subUnitId || undefined) : undefined,
+      staffId: effectiveStaff.id,
+      spuId: lockedToSubUnit ? effectiveStaff.spuId : "",
+      subUnitId: lockedToSubUnit ? (effectiveStaff.subUnitId || undefined) : undefined,
       planYear: defaultPlanYear,
       quarter: "",
       year: currentYear,
@@ -505,20 +535,30 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                {isSuperAdmin && (
+                  <OnBehalfStaffPicker
+                    staff={allStaff || []}
+                    value={onBehalfStaffId}
+                    onChange={setOnBehalfStaffId}
+                    currentUserId={currentUser.id}
+                  />
+                )}
                 <div className="bg-muted/50 p-4 rounded-md space-y-2">
-                <h3 className="font-medium text-sm text-muted-foreground">Staff Information</h3>
+                <h3 className="font-medium text-sm text-muted-foreground">
+                  {isActingOnBehalf ? "Submitting for" : "Staff Information"}
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm font-medium">Name</p>
-                    <p className="text-sm text-muted-foreground" data-testid="text-staff-name">{staff.name}</p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-staff-name">{effectiveStaff.name}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">Email</p>
-                    <p className="text-sm text-muted-foreground" data-testid="text-staff-email">{staff.email}</p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-staff-email">{effectiveStaff.email}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">Primary SPU (School, Department, Unit)</p>
-                    <p className="text-sm text-muted-foreground" data-testid="text-staff-spu">{staff.spu.name}</p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-staff-spu">{effectiveStaff.spu.name}</p>
                   </div>
                   {(() => {
                     const spuNameById = new Map((spus || []).map((s) => [s.id, s.name]));
@@ -530,8 +570,8 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                       seen.add(key);
                       entries.push({ key, label });
                     };
-                    if (staff.subUnit) {
-                      pushEntry(`primary:${staff.subUnit.id}`, staff.subUnit.name);
+                    if (effectiveStaff.subUnit) {
+                      pushEntry(`primary:${effectiveStaff.subUnit.id}`, effectiveStaff.subUnit.name);
                     }
                     for (const a of (spuAssignments || []) as any[]) {
                       if (!a?.spuId) continue;
@@ -539,11 +579,11 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         const su = subUnitById.get(a.subUnitId);
                         if (!su) continue;
                         const spuName = spuNameById.get(su.spuId);
-                        const label = spuName && su.spuId !== staff.spuId
+                        const label = spuName && su.spuId !== effectiveStaff.spuId
                           ? `${spuName} \u2014 ${su.name}`
                           : su.name;
                         pushEntry(`sub:${a.subUnitId}`, label);
-                      } else if (a.spuId !== staff.spuId) {
+                      } else if (a.spuId !== effectiveStaff.spuId) {
                         const spuName = spuNameById.get(a.spuId);
                         if (!spuName) continue;
                         pushEntry(`spu:${a.spuId}`, `${spuName} (entire SPU)`);
@@ -680,7 +720,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                             {availableSpus.map((spu) => (
                               <SelectItem key={spu.id} value={spu.id}>
                                 {spu.name}
-                                {spu.id === staff.spuId && " (Primary)"}
+                                {spu.id === effectiveStaff.spuId && " (Primary)"}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -688,7 +728,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                         <FormDescription className="text-xs">
                           {lockedToSubUnit
                             ? "You can only submit OKRs for your assigned SPU and sub-unit."
-                            : isLeaderRole(staff.role) || staff.role === "super_admin" 
+                            : isLeaderRole(effectiveStaff.role) || effectiveStaff.role === "super_admin" 
                               ? "Choose the department this OKR targets. You can submit for your assigned SPUs."
                               : "Choose the department this OKR targets"}
                         </FormDescription>
@@ -710,7 +750,7 @@ export default function SubmitOkr({ staff }: SubmitOkrProps) {
                     // For basics, narrow the list of sub-units to those they
                     // have an explicit grant for. Also decide if "whole SPU"
                     // is allowed for the chosen SPU.
-                    const basicAllowed = staff.role === "basic"
+                    const basicAllowed = effectiveStaff.role === "basic"
                       ? getBasicAllowedForSpu(selectedSpuId)
                       : null;
                     const filteredSubUnits = basicAllowed

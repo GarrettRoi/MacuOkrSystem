@@ -102,6 +102,36 @@ async function requireRole(req: Request, res: Response, roles: UserRole[]): Prom
   return true;
 }
 
+// Validate that a target staff member is allowed to own an OKR in the given
+// (spuId, subUnitId|null) combination, mirroring the role-based pinning each
+// role would have for themselves. Used by the super-admin "submit on behalf
+// of" flows. Basics are pinned to their explicit primary + assignment pairs;
+// leaders/cabinet to any sub-unit within their managed SPUs; super_admins are
+// unrestricted.
+async function isStaffAllowedForSpuSubUnit(
+  target: { id: string; role: string; spuId: string; subUnitId: string | null },
+  spuId: string,
+  subUnitId: string | null,
+): Promise<boolean> {
+  if (target.role === "super_admin") return true;
+  const assignments = await storage.getStaffSpuAssignments(target.id);
+  if (target.role === "basic") {
+    const keyFor = (spu: string, sub: string | null | undefined) => `${spu}::${sub ?? ""}`;
+    const allowedPairs = new Set<string>();
+    allowedPairs.add(keyFor(target.spuId, target.subUnitId));
+    for (const a of assignments as any[]) {
+      if (a.spuId) allowedPairs.add(keyFor(a.spuId, a.subUnitId ?? null));
+    }
+    return allowedPairs.has(keyFor(spuId, subUnitId));
+  }
+  // leader / cabinet: any sub-unit within a managed SPU (primary + assignments)
+  const allowedSpuIds = new Set<string>([
+    target.spuId,
+    ...assignments.map((a: any) => a.spuId).filter(Boolean),
+  ]);
+  return allowedSpuIds.has(spuId);
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -2819,11 +2849,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Please select a staff profile first" });
       }
 
-      const staffMember = await storage.getStaff(sessionStaffId);
-      if (!staffMember) {
+      const sessionStaff = await storage.getStaff(sessionStaffId);
+      if (!sessionStaff) {
         return res.status(401).json({ error: "Invalid staff session" });
       }
 
+      // "On behalf of": a super admin can view the OKRs another staff member is
+      // entitled to score, so the quarterly-update screen can scope to them.
+      const onBehalfOf =
+        typeof req.query.onBehalfOf === "string" && req.query.onBehalfOf.trim()
+          ? req.query.onBehalfOf.trim()
+          : null;
+
+      let staffMember = sessionStaff;
+      if (onBehalfOf) {
+        const isSuperAdmin = req.session.isAdmin || sessionStaff.role === "super_admin";
+        if (!isSuperAdmin) {
+          return res.status(403).json({ error: "Forbidden: Only super admins can view OKRs on behalf of staff." });
+        }
+        const target = await storage.getStaff(onBehalfOf);
+        if (!target) {
+          return res.status(400).json({ error: "Invalid staff member." });
+        }
+        staffMember = target;
+      }
+
+      // Scope OKRs to the (possibly on-behalf-of) staff member's SPUs.
+      const scopeStaffId = staffMember.id;
       const spuIds = new Set<string>();
       if (staffMember.spuId) spuIds.add(staffMember.spuId);
 
@@ -2831,7 +2883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // staff_spu_assignments. This now includes basic users with additional
       // SPU/sub-unit grants — without this they'd be missing OKRs they're
       // expected to score.
-      const assignments = await storage.getStaffSpuAssignments(sessionStaffId);
+      const assignments = await storage.getStaffSpuAssignments(scopeStaffId);
       for (const a of assignments) {
         if (a.spuId) spuIds.add(a.spuId);
       }
@@ -2873,6 +2925,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.session.isAdmin && !sessionStaffId) {
         return res.status(401).json({ error: "Unauthorized: Login required to submit OKRs." });
       }
+
+      // "Submit on behalf of": a super admin may file an OKR for another staff
+      // member. The record is OWNED by the target (their staffId + submitterName);
+      // the acting super admin is recorded separately for an audit trail.
+      const onBehalfOfStaffId =
+        typeof req.body?.onBehalfOfStaffId === "string" && req.body.onBehalfOfStaffId.trim()
+          ? req.body.onBehalfOfStaffId.trim()
+          : null;
+
       // Validate SPU exists; any role.
       const targetSpu = await storage.getSpu(parsed.data.spuId);
       if (!targetSpu) {
@@ -2885,11 +2946,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: "Selected sub-unit does not belong to the chosen SPU." });
         }
       }
-      // Role-scoped authorization for selected-staff sessions:
-      //  - basic: spuId must be primary SPU. If user has a sub-unit, OKR's sub-unit must match.
-      //  - leader: spuId must be their primary or one of their assigned SPUs.
-      //  - super_admin: unrestricted (also, isAdmin session bypasses this block).
-      if (sessionStaffId && !req.session.isAdmin) {
+
+      // Owner of the record (defaults to the submitted staffId) plus optional
+      // acting super admin attribution when submitting on behalf of someone.
+      let ownerStaffId: string | null | undefined = parsed.data.staffId;
+      let actedByStaffId: string | null = null;
+      let actedByName: string | null = null;
+
+      if (onBehalfOfStaffId) {
+        // Only super admins may submit on behalf of others.
+        const sessionStaff = sessionStaffId ? await storage.getStaff(sessionStaffId) : null;
+        const isSuperAdmin = req.session.isAdmin || sessionStaff?.role === "super_admin";
+        if (!isSuperAdmin) {
+          return res.status(403).json({ error: "Forbidden: Only super admins can submit on behalf of staff." });
+        }
+        const target = await storage.getStaff(onBehalfOfStaffId);
+        if (!target) {
+          return res.status(400).json({ error: "Invalid staff member selected to submit on behalf of." });
+        }
+        // Validate the chosen SPU/sub-unit against the TARGET's allowed pairs,
+        // mirroring the role-based pinning the target would have themselves.
+        const allowed = await isStaffAllowedForSpuSubUnit(target, parsed.data.spuId, parsed.data.subUnitId ?? null);
+        if (!allowed) {
+          return res.status(400).json({
+            error: "Selected SPU/sub-unit is not valid for the chosen staff member.",
+          });
+        }
+        ownerStaffId = target.id;
+        actedByStaffId = sessionStaffId ?? null;
+        actedByName = sessionStaff?.name ?? "Administrator";
+      } else if (sessionStaffId && !req.session.isAdmin) {
+        // Role-scoped authorization for normal selected-staff sessions:
+        //  - basic: spuId must be primary SPU. If user has a sub-unit, OKR's sub-unit must match.
+        //  - leader: spuId must be their primary or one of their assigned SPUs.
+        //  - super_admin: unrestricted (also, isAdmin session bypasses this block).
         const sessionStaff = await storage.getStaff(sessionStaffId);
         if (sessionStaff?.role === "basic") {
           // Build the set of (spuId, subUnitId-or-null) combinations this
@@ -2924,8 +3014,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get staff name to store as submitterName (persists even if staff is deleted)
       let submitterName: string | undefined;
-      if (parsed.data.staffId) {
-        const staffMember = await storage.getStaff(parsed.data.staffId);
+      if (ownerStaffId) {
+        const staffMember = await storage.getStaff(ownerStaffId);
         submitterName = staffMember?.name;
       }
       
@@ -2966,8 +3056,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const collaborationSpuId = rawCollabSpuIds.length > 0 ? rawCollabSpuIds[0] : null;
       const createData = {
         ...parsed.data,
+        staffId: ownerStaffId,
         okrNumber,
         submitterName,
+        actedByStaffId,
+        actedByName,
         collaborationSpuId,
         collaborationSpuIds: rawCollabSpuIds,
         collaborationSubUnitIds: rawCollabSubUnitIds,
@@ -3285,7 +3378,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.session.isAdmin && !sessionStaffId) {
         return res.status(401).json({ error: "Unauthorized: Login required to submit a quarterly update." });
       }
-      if (sessionStaffId && !req.session.isAdmin) {
+
+      // "Score on behalf of": a super admin may record a quarterly score for
+      // another staff member. The record is OWNED by the target (their staffId +
+      // scorerName); the acting super admin is recorded separately for an audit
+      // trail.
+      const onBehalfOfStaffId =
+        typeof req.body?.onBehalfOfStaffId === "string" && req.body.onBehalfOfStaffId.trim()
+          ? req.body.onBehalfOfStaffId.trim()
+          : null;
+
+      let ownerStaffId: string | null | undefined = parsed.data.staffId;
+      let actedByStaffId: string | null = null;
+      let actedByName: string | null = null;
+
+      if (onBehalfOfStaffId) {
+        // Only super admins may score on behalf of others.
+        const sessionStaff = sessionStaffId ? await storage.getStaff(sessionStaffId) : null;
+        const isSuperAdmin = req.session.isAdmin || sessionStaff?.role === "super_admin";
+        if (!isSuperAdmin) {
+          return res.status(403).json({ error: "Forbidden: Only super admins can score on behalf of staff." });
+        }
+        const target = await storage.getStaff(onBehalfOfStaffId);
+        if (!target) {
+          return res.status(400).json({ error: "Invalid staff member selected to score on behalf of." });
+        }
+        const okr = await storage.getOkr(parsed.data.okrId);
+        if (!okr) {
+          return res.status(404).json({ error: "OKR not found" });
+        }
+        // Validate the OKR's SPU/sub-unit against the TARGET's allowed pairs,
+        // mirroring the role-based pinning the target would have themselves.
+        const allowed = await isStaffAllowedForSpuSubUnit(target, okr.spuId, okr.subUnitId ?? null);
+        if (!allowed) {
+          return res.status(400).json({
+            error: "This OKR's SPU/sub-unit is not valid for the chosen staff member.",
+          });
+        }
+        ownerStaffId = target.id;
+        actedByStaffId = sessionStaffId ?? null;
+        actedByName = sessionStaff?.name ?? "Administrator";
+      } else if (sessionStaffId && !req.session.isAdmin) {
         const sessionStaff = await storage.getStaff(sessionStaffId);
         const okr = await storage.getOkr(parsed.data.okrId);
         if (!okr) {
@@ -3323,12 +3456,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get staff name to store as scorerName (persists even if staff is deleted)
       let scorerName: string | undefined;
-      if (parsed.data.staffId) {
-        const staffMember = await storage.getStaff(parsed.data.staffId);
+      if (ownerStaffId) {
+        const staffMember = await storage.getStaff(ownerStaffId);
         scorerName = staffMember?.name;
       }
       
-      const update = await storage.createQuarterlyUpdate({ ...parsed.data, scorerName });
+      const update = await storage.createQuarterlyUpdate({
+        ...parsed.data,
+        staffId: ownerStaffId,
+        scorerName,
+        actedByStaffId,
+        actedByName,
+      });
       res.status(201).json(update);
     } catch (error) {
       res.status(500).json({ error: "Failed to create quarterly update" });

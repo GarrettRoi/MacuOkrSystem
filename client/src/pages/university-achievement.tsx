@@ -594,6 +594,9 @@ function DashboardTab() {
                                       </td>
                                       <td className="px-4 py-3 align-top hidden lg:table-cell">
                                         <span className="text-sm">{okr.staff?.name || "—"}</span>
+                                        {okr.actedByName && (
+                                          <p className="text-xs text-muted-foreground mt-0.5">Submitted by {okr.actedByName}</p>
+                                        )}
                                       </td>
                                       <td className="px-4 py-3 align-top hidden md:table-cell">
                                         <span className="text-sm text-muted-foreground whitespace-nowrap">{formatPeriodLabel(okr.quarter, okr.year, planStartYear)}</span>
@@ -1044,6 +1047,7 @@ interface OkrWithUpdates {
   spuId: string;
   subUnitId: string | null;
   staff: { name: string } | null;
+  actedByName: string | null;
   spu: { name: string } | null;
   subUnit: { name: string } | null;
   quarterlyUpdates: Array<{
@@ -1055,6 +1059,7 @@ interface OkrWithUpdates {
     submittedAt: string;
     isPrimaryScore: boolean | null;
     scorerName: string | null;
+    actedByName: string | null;
   }>;
 }
 
@@ -1336,8 +1341,14 @@ function ObjectiveResultsTab() {
                       </td>
                       <td className="px-4 py-3 align-top hidden lg:table-cell">
                         <span className="text-sm">{okr.staff?.name || "—"}</span>
+                        {okr.actedByName && (
+                          <p className="text-xs text-muted-foreground mt-0.5">Submitted by {okr.actedByName}</p>
+                        )}
                         {primaryUpdate?.scorerName && primaryUpdate.scorerName !== okr.staff?.name && (
                           <p className="text-xs text-muted-foreground mt-0.5">Scored by {primaryUpdate.scorerName}</p>
+                        )}
+                        {primaryUpdate?.actedByName && (
+                          <p className="text-xs text-muted-foreground mt-0.5">Entered by {primaryUpdate.actedByName}</p>
                         )}
                       </td>
                       <td className="px-4 py-3 align-top hidden md:table-cell">

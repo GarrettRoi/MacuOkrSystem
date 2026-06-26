@@ -164,14 +164,14 @@ export interface IStorage {
   countOkrsBySpu(spuId: string, year: number, quarter: string): Promise<number>;
   getOkrsWithDetailsBySpu(spuId: string): Promise<OkrWithDetails[]>;
   getOkrsWithDetailsForStaff(staffId: string | null, spuIds: string[]): Promise<OkrWithDetails[]>;
-  createOkr(okr: InsertOkr & { okrNumber: string }): Promise<Okr>;
+  createOkr(okr: InsertOkr & { okrNumber: string; actedByStaffId?: string | null; actedByName?: string | null }): Promise<Okr>;
   updateOkr(id: string, updates: Partial<Okr>): Promise<Okr>;
   deleteOkr(id: string): Promise<void>;
   
   getAllQuarterlyUpdates(): Promise<QuarterlyUpdate[]>;
   getQuarterlyUpdate(id: string): Promise<QuarterlyUpdate | undefined>;
   getQuarterlyUpdatesByOkr(okrId: string): Promise<QuarterlyUpdate[]>;
-  createQuarterlyUpdate(update: InsertQuarterlyUpdate): Promise<QuarterlyUpdate>;
+  createQuarterlyUpdate(update: InsertQuarterlyUpdate & { actedByStaffId?: string | null; actedByName?: string | null }): Promise<QuarterlyUpdate>;
   updateQuarterlyUpdate(id: string, updates: Partial<InsertQuarterlyUpdate>): Promise<QuarterlyUpdate>;
   deleteQuarterlyUpdate(id: string): Promise<void>;
   
@@ -872,6 +872,8 @@ export class DatabaseStorage implements IStorage {
       okrNumber: string;
       collaborationSpuIds?: string[] | null;
       collaborationSubUnitIds?: string[];
+      actedByStaffId?: string | null;
+      actedByName?: string | null;
     }
   ): Promise<Okr> {
     const { collaborationSubUnitIds, ...okrCols } = insertOkr as any;
@@ -1023,7 +1025,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(quarterlyUpdates).where(eq(quarterlyUpdates.okrId, okrId));
   }
 
-  async createQuarterlyUpdate(insertUpdate: InsertQuarterlyUpdate): Promise<QuarterlyUpdate> {
+  async createQuarterlyUpdate(insertUpdate: InsertQuarterlyUpdate & { actedByStaffId?: string | null; actedByName?: string | null }): Promise<QuarterlyUpdate> {
     // Simply create the quarterly update without modifying the parent OKR
     // The dashboard and other consumers should calculate current progress
     // from the latest quarterly update's averageScore when needed

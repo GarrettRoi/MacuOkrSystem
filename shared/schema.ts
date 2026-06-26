@@ -175,6 +175,8 @@ export const okrs = pgTable("okrs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   staffId: varchar("staff_id").references(() => staff.id, { onDelete: "set null" }),
   submitterName: text("submitter_name"),
+  actedByStaffId: varchar("acted_by_staff_id").references(() => staff.id, { onDelete: "set null" }),
+  actedByName: text("acted_by_name"),
   spuId: varchar("spu_id").notNull().references(() => spus.id),
   subUnitId: varchar("sub_unit_id").references(() => subUnits.id),
   okrNumber: text("okr_number").notNull(),
@@ -207,6 +209,8 @@ export const quarterlyUpdates = pgTable("quarterly_updates", {
   okrId: varchar("okr_id").notNull().references(() => okrs.id, { onDelete: "cascade" }),
   staffId: varchar("staff_id").references(() => staff.id, { onDelete: "set null" }),
   scorerName: text("scorer_name"),
+  actedByStaffId: varchar("acted_by_staff_id").references(() => staff.id, { onDelete: "set null" }),
+  actedByName: text("acted_by_name"),
   quarter: text("quarter").notNull(),
   year: integer("year").notNull(),
   progress: integer("progress").notNull(),
@@ -416,7 +420,7 @@ export const insertOkrResponsibilitySchema = createInsertSchema(okrResponsibilit
   role: z.enum(RESPONSIBILITY_ROLES),
 });
 
-export const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true, okrNumber: true });
+export const baseInsertOkrSchema = createInsertSchema(okrs).omit({ id: true, createdAt: true, currentValue: true, status: true, title: true, description: true, targetValue: true, okrNumber: true, actedByStaffId: true, actedByName: true });
 
 export const updateOkrSchema = z.object({
   objectiveStatement: z.string().min(20, "Objective must be at least 20 characters").optional(),
@@ -457,7 +461,7 @@ export const insertOkrSchema = baseInsertOkrSchema.refine(
   }
 );
 
-export const insertQuarterlyUpdateSchema = createInsertSchema(quarterlyUpdates).omit({ id: true, submittedAt: true });
+export const insertQuarterlyUpdateSchema = createInsertSchema(quarterlyUpdates).omit({ id: true, submittedAt: true, actedByStaffId: true, actedByName: true });
 
 // Schema for individual key result score
 const keyResultScoreSchema = z.object({
