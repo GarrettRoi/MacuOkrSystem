@@ -22,9 +22,15 @@ default 2024). The fiscal year runs June–May (Year 1 = Jun startYear – May s
 - Forms pick Plan Year + Fiscal Quarter, then derive the calendar `year`
   client-side before POSTing; filters/exports filter by plan year + quarter, not
   a standalone calendar year.
-- Deliberately left as literal calendar years: calendar-year comparison charts
-  (year-over-year trends, university-achievement comparisons) and raw CSV
-  import/matching diagnostics — these reconcile against source data.
+- Comparison charts (standalone trends page + university-achievement Dashboard/
+  Trends tabs) compare plan year vs plan year: bucket OKRs with
+  `getPlanningYear(quarter, year, startYear)`, options from `PLANNING_YEARS`,
+  labels via `formatPlanYearLabel`, quarter ticks via `formatQuarterTagForPlanYear`.
+- Server `computeAnalyticsData` rolls `okr_count_by_year` up by plan year and tags
+  per-quarter series with `formatQuarterTag` when a calendar year is in scope.
+- Deliberately left as literal calendar years: the university-achievement objective
+  drilldown filter and raw CSV import/matching diagnostics — these reconcile
+  against source data.
 - Deep links must recompute the plan-year label once the async start-year setting
   loads (don't hardcode 2024). Anything reading that setting must use the snake_case
   key `strategic_plan_start_year` — a camelCase variant silently defaults to 2024.

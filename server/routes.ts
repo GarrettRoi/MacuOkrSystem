@@ -1509,6 +1509,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   ): Promise<AnalyticsData> {
     const { quarter, year, spuId } = filters;
 
+    const startYearSetting = await storage.getSetting("strategic_plan_start_year");
+    const planStartYear = startYearSetting ? parseInt(startYearSetting) : 2024;
+
     const buildOkrWhere = () => {
       const parts: string[] = [];
       if (quarter) parts.push(`o.quarter = '${quarter.replace(/'/g, "''")}'`);
@@ -1544,14 +1547,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           SELECT o.quarter AS label, COUNT(*)::int AS value
           FROM okrs o WHERE 1=1 ${buildOkrWhere()}
           GROUP BY o.quarter ORDER BY o.quarter`);
-        return { type: "series", data: rows };
+        // When a calendar year is in scope each quarter maps to one plan-year tag.
+        const labeled = year
+          ? rows.map(r => ({ label: formatQuarterTag(r.label, year, planStartYear), value: r.value }))
+          : rows;
+        return { type: "series", data: labeled };
       }
       case "okr_count_by_year": {
-        const rows = await simpleRows(`
-          SELECT o.year::text AS label, COUNT(*)::int AS value
+        const res = await db.execute(sql.raw(`
+          SELECT o.quarter AS quarter, o.year AS year, COUNT(*)::int AS value
           FROM okrs o WHERE 1=1 ${spuId ? `AND o.spu_id='${spuId.replace(/'/g,"''")}'` : ""}
-          GROUP BY o.year ORDER BY o.year`);
-        return { type: "series", data: rows };
+          GROUP BY o.quarter, o.year`));
+        // Roll calendar (quarter, year) rows up into plan years.
+        const counts: Record<number, number> = {};
+        for (const row of (res as any).rows as { quarter: string; year: number; value: number }[]) {
+          const py = getPlanningYear(row.quarter, row.year, planStartYear);
+          counts[py] = (counts[py] || 0) + row.value;
+        }
+        const data = Object.entries(counts)
+          .map(([py, value]) => ({ planYear: parseInt(py), label: formatPlanYearLabel(parseInt(py), planStartYear), value }))
+          .sort((a, b) => a.planYear - b.planYear)
+          .map(({ label, value }) => ({ label, value }));
+        return { type: "series", data };
       }
       case "okr_count_by_status": {
         const rows = await simpleRows(`
@@ -1577,7 +1594,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           JOIN okrs o ON qu.okr_id = o.id
           WHERE qu.average_score IS NOT NULL AND qu.is_primary_score = true ${buildQuWhere()}
           GROUP BY qu.quarter ORDER BY qu.quarter`);
-        return { type: "series", data: rows };
+        const labeled = year
+          ? rows.map(r => ({ label: formatQuarterTag(r.label, year, planStartYear), value: r.value }))
+          : rows;
+        return { type: "series", data: labeled };
       }
       case "score_distribution": {
         const rows = await simpleRows(`

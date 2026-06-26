@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from "recharts";
 import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar, Building2, Users, ChevronRight, ChevronDown } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, StrategicChartData, AnalyticsDashboardWithWidgets, UniversityObjectiveWithKeyResults, UniversityYearlySnapshot } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, formatQuarterTagForPlanYear } from "@shared/schema";
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
@@ -20,7 +20,6 @@ import { MultiSelectSpus } from "@/components/multi-select-spus";
 
 function DashboardTab() {
   const [quarterFilter, setQuarterFilter] = usePersistedFilter("ua-dash:quarter", "All");
-  const [yearFilter, setYearFilter] = usePersistedFilter("ua-dash:year", "All");
   const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("ua-dash:planningYear", "All");
   const [spuFilterRaw, setSpuFilterRaw] = usePersistedFilter("ua-dash:spu", "");
   const spuFilterIds = useMemo(
@@ -59,20 +58,8 @@ function DashboardTab() {
 
   const isLoading = okrsLoading || updatesLoading || spusLoading;
 
-  const availableYears = okrs
-    ? Array.from(new Set(okrs.map(o => o.year))).sort((a, b) => b - a)
-    : [];
-  const YEARS = ["All", ...availableYears.map(String)];
-
-  useEffect(() => {
-    if (yearFilter === "All" && availableYears.length > 0) {
-      setYearFilter(String(availableYears[0]));
-    }
-  }, [availableYears.length]);
-
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
-    const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
     const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
     const spuMatch = spuFilterIds.length === 0 || spuFilterIds.includes(okr.spuId);
     const keywordMatch = !keywordSearch || 
@@ -81,12 +68,11 @@ function DashboardTab() {
       parseMultiSelectField(okr.universityKeyResult).some(kr => kr.toLowerCase().includes(keywordSearch.toLowerCase())) ||
       okr.okrNumber.toLowerCase().includes(keywordSearch.toLowerCase());
     
-    return quarterMatch && yearMatch && planningYearMatch && spuMatch && keywordMatch;
+    return quarterMatch && planningYearMatch && spuMatch && keywordMatch;
   }) || [];
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
-    setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
     setSpuFilterIds([]);
     setKeywordSearch("");
@@ -95,7 +81,6 @@ function DashboardTab() {
 
   const activeFilterCount = [
     quarterFilter !== "All",
-    yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
     planningYearFilter !== "All",
     spuFilterIds.length > 0,
     keywordSearch !== "",
@@ -249,19 +234,9 @@ function DashboardTab() {
                 <SelectItem key="All" value="All" data-testid="option-filter-quarter-All">{ALL_QUARTERS_LABEL}</SelectItem>
                 {SCHEMA_QUARTERS.map((q) => (
                   <SelectItem key={q.value} value={q.value} data-testid={`option-filter-quarter-${q.value}`}>
-                    {q.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={yearFilter} onValueChange={setYearFilter}>
-              <SelectTrigger className="w-32" data-testid="select-filter-year">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {YEARS.map((y) => (
-                  <SelectItem key={y} value={y} data-testid={`option-filter-year-${y}`}>
-                    {y}
+                    {planningYearFilter !== "All"
+                      ? formatQuarterTagForPlanYear(q.value, parseInt(planningYearFilter), planStartYear)
+                      : q.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -695,9 +670,8 @@ function DashboardTab() {
 }
 
 function TrendsTab() {
-  const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState(currentYear.toString());
-  const [comparisonYear, setComparisonYear] = useState((currentYear - 1).toString());
+  const [selectedPlanYear, setSelectedPlanYear] = useState("");
+  const [comparisonPlanYear, setComparisonPlanYear] = useState("");
 
   const { data: okrs, isLoading: okrsLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/okrs"],
@@ -707,28 +681,34 @@ function TrendsTab() {
     queryKey: ["/api/quarterly-updates"],
   });
 
-  const { data: yearsData } = useQuery<Year[]>({
-    queryKey: ["/api/years"],
+  const { data: planStartYearData } = useQuery<{ startYear: number }>({
+    queryKey: ["/api/settings/strategic-plan-start-year"],
   });
+  const planStartYear = planStartYearData?.startYear || 2024;
 
   const isLoading = okrsLoading;
 
-  const years = yearsData
-    ? yearsData.map(y => y.year).sort((a, b) => b - a)
+  const availablePlanYears = okrs
+    ? Array.from(new Set(okrs.map((o) => getPlanningYear(o.quarter, o.year, planStartYear)))).sort((a, b) => b - a)
     : [];
 
   useEffect(() => {
-    if (years.length > 0) {
-      if (!years.includes(parseInt(selectedYear))) {
-        setSelectedYear(years[0].toString());
-      }
-      if (!years.includes(parseInt(comparisonYear)) && years.length > 1) {
-        setComparisonYear(years[1].toString());
-      } else if (!years.includes(parseInt(comparisonYear)) && years.length === 1) {
-        setComparisonYear(years[0].toString());
-      }
+    if (availablePlanYears.length === 0) return;
+    if (!selectedPlanYear || !availablePlanYears.includes(parseInt(selectedPlanYear))) {
+      setSelectedPlanYear(String(availablePlanYears[0]));
     }
-  }, [years, selectedYear, comparisonYear]);
+    if (!comparisonPlanYear || !availablePlanYears.includes(parseInt(comparisonPlanYear))) {
+      setComparisonPlanYear(String(availablePlanYears[1] ?? availablePlanYears[0]));
+    }
+  }, [availablePlanYears.length]);
+
+  const selectedPy = parseInt(selectedPlanYear);
+  const comparisonPy = parseInt(comparisonPlanYear);
+  const selectedLabel = selectedPlanYear ? formatPlanYearLabel(selectedPy, planStartYear) : "";
+  const comparisonLabel = comparisonPlanYear ? formatPlanYearLabel(comparisonPy, planStartYear) : "";
+
+  const inPlanYear = (okr: OkrWithDetails, py: number) =>
+    getPlanningYear(okr.quarter, okr.year, planStartYear) === py;
 
   const getOkrProgress = (okrId: string): number | null => {
     if (!updates) return null;
@@ -748,21 +728,14 @@ function TrendsTab() {
 
   const quarterlyData = okrs
     ? ["Q1", "Q2", "Q3", "Q4"].map((quarter) => {
-        const currentYearOkrs = okrs.filter(
-          (okr) => okr.year === parseInt(selectedYear) && okr.quarter === quarter
-        );
-        const comparisonYearOkrs = okrs.filter(
-          (okr) => okr.year === parseInt(comparisonYear) && okr.quarter === quarter
-        );
-
-        const currentAvg = avgScoredProgress(currentYearOkrs);
-        const comparisonAvg = avgScoredProgress(comparisonYearOkrs);
+        const currentOkrs = okrs.filter((okr) => inPlanYear(okr, selectedPy) && okr.quarter === quarter);
+        const comparisonOkrs = okrs.filter((okr) => inPlanYear(okr, comparisonPy) && okr.quarter === quarter);
 
         return {
-          quarter,
-          [selectedYear]: Math.round(currentAvg),
-          [comparisonYear]: Math.round(comparisonAvg),
-          count: currentYearOkrs.length,
+          quarter: selectedPlanYear ? formatQuarterTagForPlanYear(quarter, selectedPy, planStartYear) : quarter,
+          current: Math.round(avgScoredProgress(currentOkrs)),
+          comparison: Math.round(avgScoredProgress(comparisonOkrs)),
+          count: currentOkrs.length,
         };
       })
     : [];
@@ -774,8 +747,8 @@ function TrendsTab() {
           if (!acc[spuName]) {
             acc[spuName] = {
               spu: spuName,
-              currentYear: 0,
-              comparisonYear: 0,
+              currentTotal: 0,
+              comparisonTotal: 0,
               currentCount: 0,
               comparisonCount: 0,
             };
@@ -784,11 +757,11 @@ function TrendsTab() {
           const progressPercent = getOkrProgress(okr.id);
           if (progressPercent === null) return acc;
 
-          if (okr.year === parseInt(selectedYear)) {
-            acc[spuName].currentYear += progressPercent;
+          if (inPlanYear(okr, selectedPy)) {
+            acc[spuName].currentTotal += progressPercent;
             acc[spuName].currentCount += 1;
-          } else if (okr.year === parseInt(comparisonYear)) {
-            acc[spuName].comparisonYear += progressPercent;
+          } else if (inPlanYear(okr, comparisonPy)) {
+            acc[spuName].comparisonTotal += progressPercent;
             acc[spuName].comparisonCount += 1;
           }
 
@@ -796,55 +769,50 @@ function TrendsTab() {
         }, {} as Record<string, any>)
       ).map((spu) => ({
         spu: spu.spu,
-        [selectedYear]: spu.currentCount > 0 ? Math.round(spu.currentYear / spu.currentCount) : 0,
-        [comparisonYear]: spu.comparisonCount > 0 ? Math.round(spu.comparisonYear / spu.comparisonCount) : 0,
+        current: spu.currentCount > 0 ? Math.round(spu.currentTotal / spu.currentCount) : 0,
+        comparison: spu.comparisonCount > 0 ? Math.round(spu.comparisonTotal / spu.comparisonCount) : 0,
       }))
     : [];
 
   const completionRates = okrs
     ? ["Q1", "Q2", "Q3", "Q4"].map((quarter) => {
-        const currentYearOkrs = okrs.filter(
-          (okr) => okr.year === parseInt(selectedYear) && okr.quarter === quarter
-        );
-        const completedCount = currentYearOkrs.filter((okr) => (getOkrProgress(okr.id) ?? -1) >= 100).length;
-        const completionRate = currentYearOkrs.length > 0
-          ? Math.round((completedCount / currentYearOkrs.length) * 100)
+        const currentOkrs = okrs.filter((okr) => inPlanYear(okr, selectedPy) && okr.quarter === quarter);
+        const completedCount = currentOkrs.filter((okr) => (getOkrProgress(okr.id) ?? -1) >= 100).length;
+        const completionRate = currentOkrs.length > 0
+          ? Math.round((completedCount / currentOkrs.length) * 100)
           : 0;
 
         return {
-          quarter,
+          quarter: selectedPlanYear ? formatQuarterTagForPlanYear(quarter, selectedPy, planStartYear) : quarter,
           completionRate,
-          total: currentYearOkrs.length,
+          total: currentOkrs.length,
           completed: completedCount,
         };
       })
     : [];
 
-  const totalOkrs = okrs?.filter((okr) => okr.year === parseInt(selectedYear)).length || 0;
-  const completedOkrs = okrs?.filter(
-    (okr) => okr.year === parseInt(selectedYear) && (getOkrProgress(okr.id) ?? -1) >= 100
-  ).length || 0;
-  const avgProgress = okrs
-    ? Math.round(avgScoredProgress(okrs.filter((okr) => okr.year === parseInt(selectedYear))))
-    : 0;
+  const selectedYearOkrs = okrs?.filter((okr) => inPlanYear(okr, selectedPy)) || [];
+  const totalOkrs = selectedYearOkrs.length;
+  const completedOkrs = selectedYearOkrs.filter((okr) => (getOkrProgress(okr.id) ?? -1) >= 100).length;
+  const avgProgress = totalOkrs > 0 ? Math.round(avgScoredProgress(selectedYearOkrs)) : 0;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="text-muted-foreground">
-          Year-over-year comparison and quarterly performance trends
+          Plan-year comparison and quarterly performance trends
         </p>
         <div className="flex gap-3 flex-wrap">
           <div className="space-y-1">
-            <label className="text-sm text-muted-foreground">Current Year</label>
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-32" data-testid="select-current-year">
+            <label className="text-sm text-muted-foreground">Current Plan Year</label>
+            <Select value={selectedPlanYear} onValueChange={setSelectedPlanYear}>
+              <SelectTrigger className="w-40" data-testid="select-current-plan-year">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {years.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
+                {PLANNING_YEARS.map((py) => (
+                  <SelectItem key={py} value={String(py)} data-testid={`option-current-plan-year-${py}`}>
+                    {formatPlanYearLabel(py, planStartYear)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -852,14 +820,14 @@ function TrendsTab() {
           </div>
           <div className="space-y-1">
             <label className="text-sm text-muted-foreground">Compare To</label>
-            <Select value={comparisonYear} onValueChange={setComparisonYear}>
-              <SelectTrigger className="w-32" data-testid="select-comparison-year">
+            <Select value={comparisonPlanYear} onValueChange={setComparisonPlanYear}>
+              <SelectTrigger className="w-40" data-testid="select-comparison-plan-year">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {years.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
+                {PLANNING_YEARS.map((py) => (
+                  <SelectItem key={py} value={String(py)} data-testid={`option-comparison-plan-year-${py}`}>
+                    {formatPlanYearLabel(py, planStartYear)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -879,7 +847,7 @@ function TrendsTab() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total OKRs ({selectedYear})</CardTitle>
+                <CardTitle className="text-sm font-medium">Total OKRs ({selectedLabel})</CardTitle>
                 <Target className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -925,9 +893,9 @@ function TrendsTab() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Year-over-Year Progress Comparison</CardTitle>
+              <CardTitle>Plan-Year Progress Comparison</CardTitle>
               <CardDescription>
-                Average OKR progress by quarter comparing {selectedYear} vs {comparisonYear}
+                Average OKR progress by quarter comparing {selectedLabel} vs {comparisonLabel}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -938,8 +906,8 @@ function TrendsTab() {
                   <YAxis label={{ value: "Progress (%)", angle: -90, position: "insideLeft" }} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey={selectedYear} fill="hsl(var(--primary))" name={`${selectedYear}`} />
-                  <Bar dataKey={comparisonYear} fill="hsl(var(--muted-foreground))" name={`${comparisonYear}`} />
+                  <Bar dataKey="current" fill="hsl(var(--primary))" name={selectedLabel} />
+                  <Bar dataKey="comparison" fill="hsl(var(--muted-foreground))" name={comparisonLabel} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -947,7 +915,7 @@ function TrendsTab() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Quarterly Completion Trends ({selectedYear})</CardTitle>
+              <CardTitle>Quarterly Completion Trends ({selectedLabel})</CardTitle>
               <CardDescription>
                 Percentage of OKRs marked as completed each quarter
               </CardDescription>
@@ -976,7 +944,7 @@ function TrendsTab() {
             <CardHeader>
               <CardTitle>SPU Performance Comparison</CardTitle>
               <CardDescription>
-                Average progress across all quarters: {selectedYear} vs {comparisonYear}
+                Average progress across all quarters: {selectedLabel} vs {comparisonLabel}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -987,8 +955,8 @@ function TrendsTab() {
                   <YAxis type="category" dataKey="spu" width={150} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey={selectedYear} fill="hsl(var(--primary))" name={`${selectedYear}`} />
-                  <Bar dataKey={comparisonYear} fill="hsl(var(--muted-foreground))" name={`${comparisonYear}`} />
+                  <Bar dataKey="current" fill="hsl(var(--primary))" name={selectedLabel} />
+                  <Bar dataKey="comparison" fill="hsl(var(--muted-foreground))" name={comparisonLabel} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
