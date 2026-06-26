@@ -17,14 +17,14 @@ default 2024). The fiscal year runs June–May (Year 1 = Jun startYear – May s
 (`POST /api/okrs`, `POST /api/quarterly-updates` take `quarter, year`).
 
 **How to apply:**
-- Helpers live in `shared/schema.ts`: `getCalendarYearForQuarter` (Q1/Q2 -> start;
-  Q3/Q4 -> start+1) and `getPlanningYear` (the inverse) MUST stay exact inverses,
-  or derived calendar years won't match stored data.
-- Forms (submit-okr, quarterly-update, my-okrs) pick Plan Year + Fiscal Quarter,
-  then derive the calendar `year` client-side before POSTing.
-- Display surfaces use `formatPeriodLabel` / `formatQuarterTag` /
-  `formatPlanYearLabel`. Deliberately left as literal calendar years:
-  calendar-year comparison charts (trends year-over-year, university-achievement
-  comparisons) and raw CSV import/matching diagnostics in data.tsx.
-- Deep links into quarterly-update must recompute the plan-year label once the
-  async start-year setting loads (don't hardcode 2024), so non-2024 configs tag right.
+- The plan-year<->calendar-year derivation and its inverse (in `shared/schema.ts`)
+  MUST stay exact inverses, or derived calendar years won't match stored rows.
+- Forms pick Plan Year + Fiscal Quarter, then derive the calendar `year`
+  client-side before POSTing; filters/exports filter by plan year + quarter, not
+  a standalone calendar year.
+- Deliberately left as literal calendar years: calendar-year comparison charts
+  (year-over-year trends, university-achievement comparisons) and raw CSV
+  import/matching diagnostics — these reconcile against source data.
+- Deep links must recompute the plan-year label once the async start-year setting
+  loads (don't hardcode 2024). Anything reading that setting must use the snake_case
+  key `strategic_plan_start_year` — a camelCase variant silently defaults to 2024.

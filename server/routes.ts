@@ -39,7 +39,7 @@ import {
   sendAnnouncementSchema,
 } from "@shared/schema";
 import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole, AnalyticsData, Spu } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, formatPlanYearLabel, formatQuarterTag } from "@shared/schema";
 import { z } from "zod";
 import webpush from "web-push";
 
@@ -3460,6 +3460,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/export/csv", async (req, res) => {
     try {
       const { quarter, year, planningYear, spuId } = req.query;
+      const startYearSetting = await storage.getSetting("strategic_plan_start_year");
+      const startYear = startYearSetting ? parseInt(startYearSetting) : 2024;
       let okrs = await storage.getAllOkrsWithDetails();
       
       if (quarter && quarter !== "All") {
@@ -3471,8 +3473,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (planningYear && planningYear !== "All") {
-        const startYearSetting = await storage.getSetting("strategicPlanStartYear");
-        const startYear = startYearSetting ? parseInt(startYearSetting) : 2024;
         const pyNum = parseInt(planningYear as string);
         okrs = okrs.filter((okr) => getPlanningYear(okr.quarter, okr.year, startYear) === pyNum);
       }
@@ -3492,6 +3492,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "OKR Submitted for SPU",
         "OKR Submitted for Sub-Unit",
         "Collaboration SPU",
+        "Plan Year",
+        "Quarter Tag",
         "Quarter",
         "Year",
         "OKR Number",
@@ -3548,6 +3550,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           `"${okr.spu?.name || "N/A"}"`,
           `"${okr.subUnit?.name || "N/A"}"`,
           `"${(okr.collaborationSpus && okr.collaborationSpus.length > 0) ? okr.collaborationSpus.map((s: Spu) => s.name).join(", ") : (okr.collaborationSpu?.name || "Not Applicable")}"`,
+          `"${formatPlanYearLabel(getPlanningYear(okr.quarter, okr.year, startYear), startYear)}"`,
+          `"${formatQuarterTag(okr.quarter, okr.year, startYear)}"`,
           okr.quarter,
           okr.year,
           okr.okrNumber,

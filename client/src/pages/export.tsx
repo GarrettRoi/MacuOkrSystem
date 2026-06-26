@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Download, FileSpreadsheet, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, StaffWithDetails } from "@shared/schema";
-import { getPlanningYear, parseMultiSelectField, PLANNING_YEARS, ALL_QUARTERS_LABEL, QUARTERS, formatPlanYearLabel } from "@shared/schema";
+import { getPlanningYear, parseMultiSelectField, PLANNING_YEARS, ALL_QUARTERS_LABEL, QUARTERS, formatPlanYearLabel, formatQuarterTag, formatQuarterTagForPlanYear } from "@shared/schema";
 
 const NO_KR_LABEL = "(No Key Result)";
 
@@ -30,7 +30,6 @@ function sanitizeSheetName(name: string, used: Set<string>): string {
 export default function Export() {
   const { toast } = useToast();
   const [quarterFilter, setQuarterFilter] = usePersistedFilter("export:quarter", "All");
-  const [yearFilter, setYearFilter] = usePersistedFilter("export:year", "All");
   const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("export:planningYear", "All");
   const [spuFilter, setSpuFilter] = usePersistedFilter("export:spu", "All");
   const [isExporting, setIsExporting] = useState(false);
@@ -58,37 +57,23 @@ export default function Export() {
   });
   const planStartYear = planStartYearData?.startYear || 2024;
 
-  const availableYears = okrs
-    ? Array.from(new Set(okrs.map(o => o.year))).sort((a, b) => b - a)
-    : [];
-  const YEARS = ["All", ...availableYears.map(String)];
-
-  useEffect(() => {
-    if (yearFilter === "All" && availableYears.length > 0) {
-      setYearFilter(String(availableYears[0]));
-    }
-  }, [availableYears.length]);
-
   const activeFilterCount = [
     quarterFilter !== "All",
-    yearFilter !== "All" && yearFilter !== (availableYears.length > 0 ? String(availableYears[0]) : "All"),
     planningYearFilter !== "All",
     spuFilter !== "All",
   ].filter(Boolean).length;
 
   const clearAllFilters = () => {
     setQuarterFilter("All");
-    setYearFilter(availableYears.length > 0 ? String(availableYears[0]) : "All");
     setPlanningYearFilter("All");
     setSpuFilter("All");
   };
 
   const filteredOkrs = okrs?.filter((okr) => {
     const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
-    const yearMatch = yearFilter === "All" || String(okr.year) === yearFilter;
     const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
     const spuMatch = spuFilter === "All" || okr.spuId === spuFilter;
-    return quarterMatch && yearMatch && planningYearMatch && spuMatch;
+    return quarterMatch && planningYearMatch && spuMatch;
   }) || [];
 
   const handleExport = async () => {
@@ -96,7 +81,6 @@ export default function Export() {
     try {
       const params = new URLSearchParams();
       if (quarterFilter !== "All") params.append("quarter", quarterFilter);
-      if (yearFilter !== "All") params.append("year", yearFilter);
       if (planningYearFilter !== "All") params.append("planningYear", planningYearFilter);
       if (spuFilter !== "All") params.append("spuId", spuFilter);
 
@@ -110,7 +94,7 @@ export default function Export() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `okrs_export_${quarterFilter}_${yearFilter}_${new Date().toISOString().split("T")[0]}.csv`;
+      a.download = `okrs_export_${quarterFilter}_${planningYearFilter}_${new Date().toISOString().split("T")[0]}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -171,6 +155,8 @@ export default function Export() {
         okr.orphanCollaboratorIds && okr.orphanCollaboratorIds.length > 0
           ? okr.orphanCollaboratorIds.join(", ")
           : "",
+      "Plan Year": formatPlanYearLabel(getPlanningYear(okr.quarter, okr.year, planStartYear), planStartYear),
+      "Quarter Tag": formatQuarterTag(okr.quarter, okr.year, planStartYear),
       "Quarter": okr.quarter,
       "Year": okr.year,
       "OKR Number": okr.okrNumber,
@@ -255,7 +241,7 @@ export default function Export() {
       }
 
       const date = new Date().toISOString().split("T")[0];
-      XLSX.writeFile(wb, `okrs_by_key_result_${quarterFilter}_${yearFilter}_${date}.xlsx`);
+      XLSX.writeFile(wb, `okrs_by_key_result_${quarterFilter}_${planningYearFilter}_${date}.xlsx`);
 
       toast({
         title: "Export Successful",
@@ -312,23 +298,9 @@ export default function Export() {
                     </SelectItem>
                     {QUARTERS.map((q) => (
                       <SelectItem key={q.value} value={q.value} data-testid={`option-export-quarter-${q.value}`}>
-                        {q.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="export-year">Year</Label>
-                <Select value={yearFilter} onValueChange={setYearFilter}>
-                  <SelectTrigger id="export-year" data-testid="select-export-year">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {YEARS.map((y) => (
-                      <SelectItem key={y} value={y} data-testid={`option-export-year-${y}`}>
-                        {y}
+                        {planningYearFilter !== "All"
+                          ? formatQuarterTagForPlanYear(q.value, parseInt(planningYearFilter), planStartYear)
+                          : q.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
