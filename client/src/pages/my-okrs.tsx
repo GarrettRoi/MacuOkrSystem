@@ -913,7 +913,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {QUARTERS.map((q) => (
-                      <SelectItem key={q.value} value={q.value}>{`${formatQuarterTagForPlanYear(q.value, editPlanYear, planStartYear)} — ${q.label.split(": ")[1]}`}</SelectItem>
+                      <SelectItem key={q.value} value={q.value}>{formatQuarterTagForPlanYear(q.value, editPlanYear, planStartYear)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

@@ -668,7 +668,7 @@ export default function SubmitOkr({ staff: currentUser }: SubmitOkrProps) {
                         <SelectContent>
                           {QUARTERS.map((q) => (
                             <SelectItem key={q.value} value={q.value} data-testid={`option-quarter-${q.value}`}>
-                              {watchedPlanYear ? `${formatQuarterTagForPlanYear(q.value, watchedPlanYear, planStartYear)} — ${q.label.split(": ")[1]}` : q.label}
+                              {watchedPlanYear ? formatQuarterTagForPlanYear(q.value, watchedPlanYear, planStartYear) : q.label}
                             </SelectItem>
                           ))}
                         </SelectContent>

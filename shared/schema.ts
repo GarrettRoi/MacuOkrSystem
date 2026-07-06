@@ -299,6 +299,14 @@ export const QUARTERS = [
 
 export const ALL_QUARTERS_LABEL = "All quarters";
 
+// Abbreviated month range for each fiscal quarter (fiscal year runs June–May).
+export const QUARTER_MONTHS: Record<string, string> = {
+  Q1: "Jun-Aug",
+  Q2: "Sep-Nov",
+  Q3: "Dec-Feb",
+  Q4: "Mar-May",
+};
+
 export const getQuarterLabel = (value: string): string => {
   const quarter = QUARTERS.find(q => q.value === value);
   return quarter?.label || value;
@@ -341,25 +349,27 @@ function twoDigitYear(year: number): string {
   return String(((year % 100) + 100) % 100).padStart(2, "0");
 }
 
-// Primary year tag, e.g. "Year 1 (24)".
+// Primary year tag, e.g. "Year 1 (24-25)" (a plan year spans two calendar years).
 export function formatPlanYearLabel(planningYear: number, planStartYear: number): string {
   const startYear = getPlanYearStartCalendarYear(planningYear, planStartYear);
-  return `Year ${planningYear} (${twoDigitYear(startYear)})`;
+  return `Year ${planningYear} (${twoDigitYear(startYear)}-${twoDigitYear(startYear + 1)})`;
 }
 
-// Quarter tag given the plan year it belongs to.
-// Q1/Q2 -> "Qx (YY)", Q3 -> "Q3 (YY/YY)" (crosses calendar years), Q4 -> "Q4 (YY)".
+// Quarter tag given the plan year it belongs to, including its month range.
+// Q1/Q2 -> "Qx Mon-Mon, YY", Q3 -> "Q3 Dec-Feb, YY/YY" (crosses calendar years),
+// Q4 -> "Q4 Mar-May, YY".
 export function formatQuarterTagForPlanYear(quarter: string, planningYear: number, planStartYear: number): string {
   const startYear = getPlanYearStartCalendarYear(planningYear, planStartYear);
+  const months = QUARTER_MONTHS[quarter];
   switch (quarter) {
     case "Q1":
-      return `Q1 (${twoDigitYear(startYear)})`;
+      return `Q1 ${months}, ${twoDigitYear(startYear)}`;
     case "Q2":
-      return `Q2 (${twoDigitYear(startYear)})`;
+      return `Q2 ${months}, ${twoDigitYear(startYear)}`;
     case "Q3":
-      return `Q3 (${twoDigitYear(startYear)}/${twoDigitYear(startYear + 1)})`;
+      return `Q3 ${months}, ${twoDigitYear(startYear)}/${twoDigitYear(startYear + 1)}`;
     case "Q4":
-      return `Q4 (${twoDigitYear(startYear + 1)})`;
+      return `Q4 ${months}, ${twoDigitYear(startYear + 1)}`;
     default:
       return quarter;
   }

@@ -529,7 +529,7 @@ export default function QuarterlyUpdate({ staff: currentUser }: QuarterlyUpdateP
                           <SelectContent>
                             {QUARTERS.map((q) => (
                               <SelectItem key={q.value} value={q.value} data-testid={`option-update-quarter-${q.value}`}>
-                                {selectedPlanYear ? `${formatQuarterTagForPlanYear(q.value, selectedPlanYear, planStartYear)} — ${q.label.split(": ")[1]}` : q.label}
+                                {selectedPlanYear ? formatQuarterTagForPlanYear(q.value, selectedPlanYear, planStartYear) : q.label}
                               </SelectItem>
                             ))}
                           </SelectContent>

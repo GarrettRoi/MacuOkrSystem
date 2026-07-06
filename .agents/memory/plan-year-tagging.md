@@ -7,9 +7,14 @@ description: How OKR periods are tagged (Plan Year + Fiscal Quarter) vs how they
 
 OKRs and quarterly_updates store the period as `(quarter: text, year: int)` where
 `year` is the **calendar year** the quarter falls in. The UI presents periods as
-Plan Year + Fiscal Quarter (e.g. `Year 1 (24)`, `Q3 (24/25)`), derived from the
-configured strategic plan start year (`/api/settings/strategic-plan-start-year`,
-default 2024). The fiscal year runs June–May (Year 1 = Jun startYear – May startYear+1).
+Plan Year + Fiscal Quarter. Labels include month ranges and both relevant years:
+plan years show two years (e.g. `Year 1 (24-25)`) and quarter tags include the
+fiscal month range (`Q1 Jun-Aug, 24`, `Q3 Dec-Feb, 24/25` — Q3 crosses calendar
+years). Derived from the configured strategic plan start year
+(`/api/settings/strategic-plan-start-year`, default 2024). The fiscal year runs
+June–May (Year 1 = Jun startYear – May startYear+1). Month ranges live in
+`QUARTER_MONTHS` in `shared/schema.ts`; quarter Select dropdowns render the tag
+directly (do NOT re-append `q.label` months or labels double up).
 
 **Rule:** plan year is presentation/derivation only — never migrate the DB to store it.
 
