@@ -314,6 +314,34 @@ export const getQuarterLabel = (value: string): string => {
 
 export const PLANNING_YEARS = [1, 2, 3, 4] as const;
 
+// Plan-year numbers whose PRIMARY (start, i.e. June) calendar year is one of the
+// given years — e.g. the admin "Years" tab. With planStartYear=2024, a Years-tab
+// entry of 2024 -> plan year 1, 2025 -> 2, 2026 -> 3. This is the authoritative
+// list of plan years available for NEW submissions.
+export function planningYearsFromYears(availableYears: number[], planStartYear: number): number[] {
+  const set = new Set<number>();
+  for (const y of availableYears) {
+    const py = y - planStartYear + 1;
+    if (py >= 1) set.add(py);
+  }
+  return Array.from(set).sort((a, b) => a - b);
+}
+
+// Plan-year numbers that actually have stored data, derived from (quarter,
+// calendarYear) rows. Used to keep historical plan years visible in VIEW filters
+// even after they leave the Years tab. Q3/Q4 rollover years map back correctly
+// (e.g. a Q3 row stored in 2027 belongs to plan year 3 when planStartYear=2024).
+export function planningYearsFromPeriods(rows: { quarter: string; year: number }[], planStartYear: number): number[] {
+  const set = new Set<number>();
+  for (const r of rows) {
+    const py = getPlanningYear(r.quarter, r.year, planStartYear);
+    // Ignore rows that map below plan year 1 (stray/legacy data) — a "Year 0"
+    // option is never a real, selectable plan year.
+    if (py >= 1) set.add(py);
+  }
+  return Array.from(set).sort((a, b) => a - b);
+}
+
 export function getPlanningYear(quarter: string, calendarYear: number, planStartYear: number): number {
   if (quarter === "Q1" || quarter === "Q2") {
     return calendarYear - planStartYear + 1;

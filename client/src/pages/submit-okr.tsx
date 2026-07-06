@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Plus, Trash2, Sparkles, Smile, Frown } from "lucide-react";
 import { OnBehalfStaffPicker } from "@/components/on-behalf-staff-picker";
 import type { StaffWithDetails, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { QUARTERS, PLANNING_YEARS, isLeaderRole, getCalendarYearForQuarter, getCalendarYearsForPlanningYear, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { QUARTERS, isLeaderRole, getCalendarYearForQuarter, getCalendarYearsForPlanningYear, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { usePlanningYears } from "@/hooks/use-planning-years";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
@@ -84,7 +85,15 @@ export default function SubmitOkr({ staff: currentUser }: SubmitOkrProps) {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
-  const defaultPlanYear = Math.min(4, Math.max(1, currentYear - planStartYear + 1));
+  const planningYears = usePlanningYears();
+  // Prefer the plan year matching today's fiscal position, but only if the Years
+  // tab actually offers it; otherwise fall back to the latest submittable year.
+  const clampedPlanYear = Math.min(4, Math.max(1, currentYear - planStartYear + 1));
+  const defaultPlanYear = planningYears.submission.includes(clampedPlanYear)
+    ? clampedPlanYear
+    : planningYears.submission.length > 0
+      ? planningYears.submission[planningYears.submission.length - 1]
+      : clampedPlanYear;
 
   
 
@@ -179,6 +188,17 @@ export default function SubmitOkr({ staff: currentUser }: SubmitOkrProps) {
     control: form.control,
     name: "keyResults",
   });
+
+  // Once the submittable plan years load, snap the selection onto a valid option
+  // if the initial default (seeded before the list arrived) is no longer offered.
+  useEffect(() => {
+    if (planningYears.submission.length === 0) return;
+    const current = form.getValues("planYear");
+    if (!planningYears.submission.includes(current)) {
+      form.setValue("planYear", defaultPlanYear);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planningYears.submission]);
 
   const watchedKeyResults = form.watch("keyResults");
   const watchedPlanYear = form.watch("planYear");
@@ -309,6 +329,14 @@ export default function SubmitOkr({ staff: currentUser }: SubmitOkrProps) {
   });
 
   const onSubmit = (data: FormValues) => {
+    // Guard: never submit a plan year that isn't offered by the Years tab.
+    if (planningYears.submission.length > 0 && !planningYears.submission.includes(data.planYear)) {
+      form.setError("planYear", {
+        type: "manual",
+        message: "Please select a valid plan year.",
+      });
+      return;
+    }
     const availableSpuIds = availableSpus.map((s) => s.id);
     const subUnitsForSpu = (subUnits || []).filter(
       (su) => su.spuId === data.spuId && availableSpuIds.includes(su.spuId)
@@ -638,7 +666,7 @@ export default function SubmitOkr({ staff: currentUser }: SubmitOkrProps) {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {PLANNING_YEARS.map((py) => (
+                          {planningYears.submission.map((py) => (
                             <SelectItem key={py} value={String(py)} data-testid={`option-plan-year-${py}`}>
                               {formatPlanYearLabel(py, planStartYear)}
                             </SelectItem>

@@ -29,8 +29,27 @@ directly (do NOT re-append `q.label` months or labels double up).
   a standalone calendar year.
 - Comparison charts (standalone trends page + university-achievement Dashboard/
   Trends tabs) compare plan year vs plan year: bucket OKRs with
-  `getPlanningYear(quarter, year, startYear)`, options from `PLANNING_YEARS`,
-  labels via `formatPlanYearLabel`, quarter ticks via `formatQuarterTagForPlanYear`.
+  `getPlanningYear(quarter, year, startYear)`, labels via `formatPlanYearLabel`,
+  quarter ticks via `formatQuarterTagForPlanYear`.
+- Plan-year dropdown OPTIONS are NOT hardcoded (the old `PLANNING_YEARS=[1,2,3,4]`
+  wrongly showed a phantom Year 4). They come from `GET /api/planning-years` via
+  the `usePlanningYears()` hook, which returns two lists: `submission` (plan years
+  whose PRIMARY/start calendar year is configured in the admin Years tab) and
+  `viewing` (`submission` ∪ any plan year that still has stored data). Use
+  `submission` for NEW writes (submit-okr, quarterly-update selectors) and
+  `viewing` for every view/filter/export/edit dropdown. `PLANNING_YEARS` const
+  still exists in schema.ts but must not drive dropdowns.
+- **Why:** future plan years without a configured Year must not be selectable, but
+  historical plan years with data must stay visible in filters. A Q3/Q4 rollover
+  year (e.g. Q3 2027 = plan year 3 when start=2024) is a valid data year, not a
+  primary — deriving from `getPlanningYear` handles this automatically.
+- **Guarding writes:** the dropdown alone is not enough — submit-okr also seeds a
+  default plan year from clamped fiscal math, so it must snap that default onto
+  the `submission` list once it loads AND reject on submit if the chosen year is
+  not in `submission`. quarterly-update needs no such guard: its plan-year selector
+  only filters existing OKRs and the submitted period comes from the chosen OKR.
+- Invalidate `["/api/planning-years"]` whenever the Years tab changes (add/delete
+  year) or the strategic plan start year changes, alongside their own keys.
 - Server `computeAnalyticsData` rolls `okr_count_by_year` up by plan year and tags
   per-quarter series with `formatQuarterTag` when a calendar year is in scope.
 - Deliberately left as literal calendar years: the university-achievement objective

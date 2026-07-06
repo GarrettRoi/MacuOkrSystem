@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, Users, Target, AlertTriangle, Search, X, Filter, CalendarClock } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { usePlanningYears } from "@/hooks/use-planning-years";
 
 const QUARTERS = ["All", "Q1", "Q2", "Q3", "Q4"];
 const QUARTER_LABELS: Record<string, string> = { All: ALL_QUARTERS_LABEL, Q1: "Q1", Q2: "Q2", Q3: "Q3", Q4: "Q4" };
@@ -66,6 +67,7 @@ export default function Dashboard() {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+  const planningYears = usePlanningYears();
 
   const isLoading = okrsLoading || updatesLoading || spusLoading;
 
@@ -234,7 +236,7 @@ export default function Dashboard() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">All Plan Years</SelectItem>
-                {PLANNING_YEARS.map((py) => (
+                {planningYears.viewing.map((py) => (
                   <SelectItem key={py} value={String(py)} data-testid={`option-filter-planning-year-${py}`}>
                     {formatPlanYearLabel(py, planStartYear)}
                   </SelectItem>

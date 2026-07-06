@@ -19,7 +19,8 @@ import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/
 import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
 import type { StaffWithDetails, OkrWithDetails, QuarterlyUpdate, Spu, SubUnit, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, isLeaderRole, formatPlanYearLabel, formatQuarterTagForPlanYear, formatPeriodLabel, getCalendarYearForQuarter } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, ALL_QUARTERS_LABEL, isLeaderRole, formatPlanYearLabel, formatQuarterTagForPlanYear, formatPeriodLabel, getCalendarYearForQuarter } from "@shared/schema";
+import { usePlanningYears } from "@/hooks/use-planning-years";
 
 interface MyOkrsProps {
   staff: StaffWithDetails;
@@ -54,6 +55,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+  const planningYears = usePlanningYears();
 
   const { data: spuOkrs, isLoading: okrsLoading } = useQuery<OkrWithDetails[]>({
     queryKey: ["/api/my-okrs", staff.id],
@@ -551,7 +553,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Plan Years</SelectItem>
-                  {PLANNING_YEARS.map((py) => (
+                  {planningYears.viewing.map((py) => (
                     <SelectItem key={py} value={String(py)}>{formatPlanYearLabel(py, planStartYear)}</SelectItem>
                   ))}
                 </SelectContent>
@@ -899,7 +901,7 @@ export default function MyOkrs({ staff }: MyOkrsProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PLANNING_YEARS.map((py) => (
+                    {planningYears.viewing.map((py) => (
                       <SelectItem key={py} value={String(py)}>{formatPlanYearLabel(py, planStartYear)}</SelectItem>
                     ))}
                   </SelectContent>

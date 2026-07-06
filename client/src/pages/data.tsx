@@ -17,7 +17,8 @@ import { z } from "zod";
 import { ChevronDown, ChevronRight, Edit, Database, Trash2, AlertTriangle, Filter, X, Upload, FileUp, Plus, Minus, Search, Link, Unlink, Eye, FileText, Shuffle, CheckCircle, Clock, HardDriveDownload, RotateCcw, Shield, CloudDownload } from "lucide-react";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 import type { OkrWithDetails, QuarterlyUpdate, Staff, Spu, SubUnit, Year, UniversityObjectiveWithKeyResults, EditLog, UnmatchedScore, DataBackupMeta, StaffWithDetails } from "@shared/schema";
-import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, formatQuarterTag } from "@shared/schema";
+import { getQuarterLabel, parseMultiSelectField, QUARTERS, getPlanningYear, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, formatQuarterTag } from "@shared/schema";
+import { usePlanningYears } from "@/hooks/use-planning-years";
 import { compareNames } from "@/lib/utils";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
 
@@ -201,6 +202,7 @@ export default function Data() {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+  const planningYears = usePlanningYears();
 
   const { data: sessionData } = useQuery<{ authenticated: boolean; isAdmin?: boolean; selectedStaff?: StaffWithDetails }>({
     queryKey: ["/api/auth/session"],
@@ -1203,7 +1205,7 @@ export default function Data() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Plan Years</SelectItem>
-                      {PLANNING_YEARS.map((py) => (
+                      {planningYears.viewing.map((py) => (
                         <SelectItem key={py} value={String(py)}>
                           {formatPlanYearLabel(py, planStartYear)}
                         </SelectItem>

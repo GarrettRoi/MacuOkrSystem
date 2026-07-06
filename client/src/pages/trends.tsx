@@ -7,7 +7,8 @@ import { TrendingUp, Calendar, Target } from "lucide-react";
 import { useEffect } from "react";
 import { usePersistedFilter } from "@/hooks/use-persisted-filter";
 import type { OkrWithDetails } from "@shared/schema";
-import { getPlanningYear, PLANNING_YEARS, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { getPlanningYear, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { usePlanningYears } from "@/hooks/use-planning-years";
 
 export default function TrendsPage() {
   const [selectedPlanYear, setSelectedPlanYear] = usePersistedFilter("trends:selectedPlanYear", "");
@@ -22,6 +23,7 @@ export default function TrendsPage() {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+  const planningYears = usePlanningYears();
 
   // Plan years that actually have data, newest first
   const availablePlanYears = okrs
@@ -147,7 +149,7 @@ export default function TrendsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PLANNING_YEARS.map((py) => (
+                    {planningYears.viewing.map((py) => (
                       <SelectItem key={py} value={String(py)} data-testid={`option-current-plan-year-${py}`}>
                         {formatPlanYearLabel(py, planStartYear)}
                       </SelectItem>
@@ -162,7 +164,7 @@ export default function TrendsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PLANNING_YEARS.map((py) => (
+                    {planningYears.viewing.map((py) => (
                       <SelectItem key={py} value={String(py)} data-testid={`option-comparison-plan-year-${py}`}>
                         {formatPlanYearLabel(py, planStartYear)}
                       </SelectItem>

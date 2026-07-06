@@ -12,7 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from "recharts";
 import { TrendingUp, Target, AlertTriangle, Search, X, Filter, Calendar, Building2, Users, ChevronRight, ChevronDown } from "lucide-react";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, Year, StrategicAdvancementData, StrategicChartData, AnalyticsDashboardWithWidgets, UniversityObjectiveWithKeyResults, UniversityYearlySnapshot } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear, PLANNING_YEARS, QUARTERS as SCHEMA_QUARTERS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, QUARTERS as SCHEMA_QUARTERS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { usePlanningYears } from "@/hooks/use-planning-years";
 import { AnalyticsWidgetCard } from "@/components/analytics-widget";
 import { generateQuarterPeriods, CHART_COLORS } from "@/lib/utils";
 import { MultiSelectSpus } from "@/components/multi-select-spus";
@@ -55,6 +56,7 @@ function DashboardTab() {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+  const planningYears = usePlanningYears();
 
   const isLoading = okrsLoading || updatesLoading || spusLoading;
 
@@ -247,7 +249,7 @@ function DashboardTab() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">All Plan Years</SelectItem>
-                {PLANNING_YEARS.map((py) => (
+                {planningYears.viewing.map((py) => (
                   <SelectItem key={py} value={String(py)} data-testid={`option-filter-planning-year-${py}`}>
                     {formatPlanYearLabel(py, planStartYear)}
                   </SelectItem>
@@ -688,6 +690,7 @@ function TrendsTab() {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+  const planningYears = usePlanningYears();
 
   const isLoading = okrsLoading;
 
@@ -813,7 +816,7 @@ function TrendsTab() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PLANNING_YEARS.map((py) => (
+                {planningYears.viewing.map((py) => (
                   <SelectItem key={py} value={String(py)} data-testid={`option-current-plan-year-${py}`}>
                     {formatPlanYearLabel(py, planStartYear)}
                   </SelectItem>
@@ -828,7 +831,7 @@ function TrendsTab() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PLANNING_YEARS.map((py) => (
+                {planningYears.viewing.map((py) => (
                   <SelectItem key={py} value={String(py)} data-testid={`option-comparison-plan-year-${py}`}>
                     {formatPlanYearLabel(py, planStartYear)}
                   </SelectItem>

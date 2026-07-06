@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, AlertCircle, Sparkles, Star, PartyPopper } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StaffWithDetails, OkrWithDetails, Year } from "@shared/schema";
-import { insertQuarterlyUpdateSchema, QUARTERS, getQuarterLabel, PLANNING_YEARS, getPlanningYear, getCalendarYearForQuarter, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { insertQuarterlyUpdateSchema, QUARTERS, getQuarterLabel, getPlanningYear, getCalendarYearForQuarter, formatPlanYearLabel, formatQuarterTagForPlanYear } from "@shared/schema";
+import { usePlanningYears } from "@/hooks/use-planning-years";
 import { OnBehalfStaffPicker } from "@/components/on-behalf-staff-picker";
 import { apiRequest, queryClient, getErrorMessage, logClientError } from "@/lib/queryClient";
 
@@ -103,6 +104,7 @@ export default function QuarterlyUpdate({ staff: currentUser }: QuarterlyUpdateP
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+  const planningYears = usePlanningYears();
   const defaultPlanYear = Math.min(4, Math.max(1, currentYear - planStartYear + 1));
 
   // Once the configured start year loads, recompute the plan-year label for any
@@ -490,7 +492,7 @@ export default function QuarterlyUpdate({ staff: currentUser }: QuarterlyUpdateP
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {PLANNING_YEARS.map((py) => (
+                        {planningYears.submission.map((py) => (
                           <SelectItem key={py} value={String(py)} data-testid={`option-update-plan-year-${py}`}>
                             {formatPlanYearLabel(py, planStartYear)}
                           </SelectItem>

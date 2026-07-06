@@ -11,7 +11,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Calendar, X, ChevronRight, ChevronDown, Building2, Users, Target, MessageSquare } from "lucide-react";
 import type { StaffWithDetails, Spu, EmployeeProgressSummary, EmployeeProgressRecord, OkrResponsibilityWithDetails, Year, UniversityObjectiveWithKeyResults } from "@shared/schema";
-import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, PLANNING_YEARS, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, getCalendarYearForQuarter, formatQuarterTagForPlanYear } from "@shared/schema";
+import { QUARTERS, getQuarterLabel, parseMultiSelectField, getPlanningYear, ALL_QUARTERS_LABEL, formatPlanYearLabel, formatPeriodLabel, getCalendarYearForQuarter, formatQuarterTagForPlanYear } from "@shared/schema";
+import { usePlanningYears } from "@/hooks/use-planning-years";
 
 interface SpuGroup {
   spuName: string;
@@ -84,6 +85,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+  const planningYears = usePlanningYears();
 
   const { data: universityObjectives } = useQuery<UniversityObjectiveWithKeyResults[]>({
     queryKey: ["/api/university-objectives"],
@@ -292,7 +294,7 @@ export default function EmployeeProgress({ staff }: EmployeeProgressProps) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All plan years</SelectItem>
-                    {PLANNING_YEARS.map(py => (
+                    {planningYears.viewing.map(py => (
                       <SelectItem key={py} value={String(py)}>{formatPlanYearLabel(py, planStartYear)}</SelectItem>
                     ))}
                   </SelectContent>

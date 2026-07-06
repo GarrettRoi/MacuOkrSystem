@@ -40,7 +40,7 @@ import {
   sendAnnouncementSchema,
 } from "@shared/schema";
 import type { Okr, OkrWithDetails, EmployeeProgressRecord, UserRole, AnalyticsData, Spu } from "@shared/schema";
-import { parseMultiSelectField, getPlanningYear, formatPlanYearLabel, formatQuarterTag } from "@shared/schema";
+import { parseMultiSelectField, getPlanningYear, formatPlanYearLabel, formatQuarterTag, planningYearsFromYears, planningYearsFromPeriods } from "@shared/schema";
 import { z } from "zod";
 import webpush from "web-push";
 
@@ -2522,6 +2522,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(years);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch years" });
+    }
+  });
+
+  // Authoritative plan-year lists, derived from the admin "Years" tab (the primary
+  // start years of each plan year) and, for viewing, unioned with any plan year
+  // that still has stored data. This replaces the old hardcoded [1,2,3,4] so that
+  // future plan years without a configured Year (e.g. plan year 4) no longer show
+  // up, while historical plan years with data stay visible in view filters.
+  app.get("/api/planning-years", async (_req, res) => {
+    try {
+      const startYearSetting = await storage.getSetting("strategic_plan_start_year");
+      const planStartYear = startYearSetting ? parseInt(startYearSetting) : 2024;
+
+      const years = await storage.getAllYears();
+      const submission = planningYearsFromYears(years.map((y) => y.year), planStartYear);
+
+      const okrs = await storage.getAllOkrs();
+      const updates = await storage.getAllQuarterlyUpdates();
+      const periods = [
+        ...okrs.map((o) => ({ quarter: o.quarter, year: o.year })),
+        ...updates.map((u) => ({ quarter: u.quarter, year: u.year })),
+      ];
+      const dataPlanYears = planningYearsFromPeriods(periods, planStartYear);
+      const viewing = Array.from(new Set([...submission, ...dataPlanYears])).sort((a, b) => a - b);
+
+      res.json({ submission, viewing });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to compute planning years" });
     }
   });
 

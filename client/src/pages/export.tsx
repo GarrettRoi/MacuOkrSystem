@@ -9,7 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Download, FileSpreadsheet, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, StaffWithDetails } from "@shared/schema";
-import { getPlanningYear, parseMultiSelectField, PLANNING_YEARS, ALL_QUARTERS_LABEL, QUARTERS, formatPlanYearLabel, formatQuarterTag, formatQuarterTagForPlanYear } from "@shared/schema";
+import { getPlanningYear, parseMultiSelectField, ALL_QUARTERS_LABEL, QUARTERS, formatPlanYearLabel, formatQuarterTag, formatQuarterTagForPlanYear } from "@shared/schema";
+import { usePlanningYears } from "@/hooks/use-planning-years";
 
 const NO_KR_LABEL = "(No Key Result)";
 
@@ -56,6 +57,7 @@ export default function Export() {
     queryKey: ["/api/settings/strategic-plan-start-year"],
   });
   const planStartYear = planStartYearData?.startYear || 2024;
+  const planningYears = usePlanningYears();
 
   const activeFilterCount = [
     quarterFilter !== "All",
@@ -315,7 +317,7 @@ export default function Export() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="All">All Plan Years</SelectItem>
-                    {PLANNING_YEARS.map((py) => (
+                    {planningYears.viewing.map((py) => (
                       <SelectItem key={py} value={String(py)} data-testid={`option-export-planning-year-${py}`}>
                         {formatPlanYearLabel(py, planStartYear)}
                       </SelectItem>

@@ -1443,6 +1443,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/strategic-plan-start-year"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/planning-years"] });
       toast({
         title: "Strategic Plan Start Year Updated",
         description: "The planning year calculations have been updated across the system.",
@@ -1748,6 +1749,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/years"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/planning-years"] });
       setYearDialogOpen(false);
       setNewYear("");
       toast({ title: "Year Added", description: "The year has been added successfully." });
@@ -1760,6 +1762,7 @@ export default function Admin({ staff, isAdmin }: AdminProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/years"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/planning-years"] });
       toast({ title: "Year Deleted", description: "The year has been removed." });
     },
   });
