@@ -73,6 +73,10 @@ async function runStartupMigrations() {
     `ALTER TABLE invite_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP`,
     `ALTER TABLE okrs ADD COLUMN IF NOT EXISTS collaboration_spu_ids text[] DEFAULT ARRAY[]::text[]`,
     `UPDATE okrs SET collaboration_spu_ids = ARRAY[collaboration_spu_id]::text[] WHERE collaboration_spu_id IS NOT NULL AND (collaboration_spu_ids IS NULL OR collaboration_spu_ids = ARRAY[]::text[])`,
+    `ALTER TABLE okrs ADD COLUMN IF NOT EXISTS acted_by_staff_id VARCHAR REFERENCES staff(id) ON DELETE SET NULL`,
+    `ALTER TABLE okrs ADD COLUMN IF NOT EXISTS acted_by_name TEXT`,
+    `ALTER TABLE quarterly_updates ADD COLUMN IF NOT EXISTS acted_by_staff_id VARCHAR REFERENCES staff(id) ON DELETE SET NULL`,
+    `ALTER TABLE quarterly_updates ADD COLUMN IF NOT EXISTS acted_by_name TEXT`,
     // ── De-dupe staff_spu_assignments before adding unique index ─────────────
     `DELETE FROM staff_spu_assignments a USING staff_spu_assignments b
        WHERE a.ctid < b.ctid
