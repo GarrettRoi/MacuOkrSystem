@@ -16,6 +16,19 @@ June–May (Year 1 = Jun startYear – May startYear+1). Month ranges live in
 `QUARTER_MONTHS` in `shared/schema.ts`; quarter Select dropdowns render the tag
 directly (do NOT re-append `q.label` months or labels double up).
 
+**Storage convention (the load-bearing detail):** each quarter is stored under
+the calendar year of its FIRST month. Q1 (Jun), Q2 (Sep), AND Q3 (Dec) all fall
+in the plan year's START calendar year; only Q4 (Mar–May) spills into the next
+calendar year. So for plan year P (startYear = planStart + P − 1): Q1/Q2/Q3 →
+startYear, Q4 → startYear+1. Even though Q3's LABEL reads `24/25` (Dec 24 → Feb
+25), its stored `year` is the start year (24). `getPlanningYear` inverts this:
+Q4 → `year − planStart`, every other quarter → `year − planStart + 1`.
+**Why this matters:** a prior version lumped Q3 with Q4 (both rolling over),
+which mis-filed real Q3 data one plan year early — e.g. Q3 2025 (Year 2 data)
+showed under Year 1 and Year 2 Q3 rendered empty, while Q3 2024 mapped to a
+dropped "Year 0". Confirmed against real MACU data: PY1 = {Q1 24, Q2 24, Q3 24,
+Q4 25}, PY2 = {Q1 25, Q2 25, Q3 25, Q4 26}, PY3 = {Q1 26 …}.
+
 **Rule:** plan year is presentation/derivation only — never migrate the DB to store it.
 
 **Why:** changing storage would break existing rows and all server contracts
@@ -40,9 +53,10 @@ directly (do NOT re-append `q.label` months or labels double up).
   `viewing` for every view/filter/export/edit dropdown. `PLANNING_YEARS` const
   still exists in schema.ts but must not drive dropdowns.
 - **Why:** future plan years without a configured Year must not be selectable, but
-  historical plan years with data must stay visible in filters. A Q3/Q4 rollover
-  year (e.g. Q3 2027 = plan year 3 when start=2024) is a valid data year, not a
-  primary — deriving from `getPlanningYear` handles this automatically.
+  historical plan years with data must stay visible in filters. Only Q4 rolls into
+  the next calendar year (e.g. Q4 2027 = plan year 3 when start=2024) — that Q4
+  rollover is a valid data year, not a primary; `getPlanningYear` handles it
+  automatically. (Q3 does NOT roll over — see the Storage convention section.)
 - **Guarding writes:** the dropdown alone is not enough — submit-okr also seeds a
   default plan year from clamped fiscal math, so it must snap that default onto
   the `submission` list once it loads AND reject on submit if the chosen year is

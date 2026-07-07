@@ -329,8 +329,8 @@ export function planningYearsFromYears(availableYears: number[], planStartYear: 
 
 // Plan-year numbers that actually have stored data, derived from (quarter,
 // calendarYear) rows. Used to keep historical plan years visible in VIEW filters
-// even after they leave the Years tab. Q3/Q4 rollover years map back correctly
-// (e.g. a Q3 row stored in 2027 belongs to plan year 3 when planStartYear=2024).
+// even after they leave the Years tab. Q4 rollover years map back correctly
+// (e.g. a Q4 row stored in 2027 belongs to plan year 3 when planStartYear=2024).
 export function planningYearsFromPeriods(rows: { quarter: string; year: number }[], planStartYear: number): number[] {
   const set = new Set<number>();
   for (const r of rows) {
@@ -343,10 +343,14 @@ export function planningYearsFromPeriods(rows: { quarter: string; year: number }
 }
 
 export function getPlanningYear(quarter: string, calendarYear: number, planStartYear: number): number {
-  if (quarter === "Q1" || quarter === "Q2") {
-    return calendarYear - planStartYear + 1;
+  // Fiscal year runs Jun–May. Each quarter is stored under the calendar year of
+  // its FIRST month: Q1 (Jun), Q2 (Sep), and Q3 (Dec) all fall in the plan
+  // year's start calendar year; only Q4 (Mar–May) spills into the next calendar
+  // year. So Q4 rolls back a year; every other quarter maps to start+1.
+  if (quarter === "Q4") {
+    return calendarYear - planStartYear;
   }
-  return calendarYear - planStartYear;
+  return calendarYear - planStartYear + 1;
 }
 
 export function getPlanningYearLabel(planningYear: number): string {
@@ -365,11 +369,11 @@ export function getPlanYearStartCalendarYear(planningYear: number, planStartYear
 }
 
 // Derive the calendar year to STORE for a given plan-year + fiscal-quarter
-// selection. Q1/Q2 fall in the plan year's start calendar year; Q3/Q4 spill
-// into the next calendar year.
+// selection. Q1 (Jun), Q2 (Sep), and Q3 (Dec) fall in the plan year's start
+// calendar year; only Q4 (Mar–May) spills into the next calendar year.
 export function getCalendarYearForQuarter(planningYear: number, quarter: string, planStartYear: number): number {
   const startYear = getPlanYearStartCalendarYear(planningYear, planStartYear);
-  return quarter === "Q1" || quarter === "Q2" ? startYear : startYear + 1;
+  return quarter === "Q4" ? startYear + 1 : startYear;
 }
 
 // Two-digit calendar year, e.g. 2024 -> "24".
