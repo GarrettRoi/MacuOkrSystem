@@ -217,12 +217,12 @@ export default function SubmitOkr({ staff: currentUser }: SubmitOkrProps) {
 
   const objectiveOptions = useMemo(() => {
     if (!universityObjectivesData) return [];
-    const { q1q2Year, q3q4Year } = getCalendarYearsForPlanningYear(watchedPlanYear, planStartYear);
+    const { q1ToQ3Year, q4Year } = getCalendarYearsForPlanningYear(watchedPlanYear, planStartYear);
     return universityObjectivesData
       .filter(obj => obj.isActive !== false)
       .filter(obj => {
         if (!obj.applicableYears || obj.applicableYears.length === 0) return true;
-        return obj.applicableYears.includes(q1q2Year) || obj.applicableYears.includes(q3q4Year);
+        return obj.applicableYears.includes(q1ToQ3Year) || obj.applicableYears.includes(q4Year);
       })
       .map(obj => `${obj.label}: ${obj.description}`);
   }, [universityObjectivesData, watchedPlanYear, planStartYear]);

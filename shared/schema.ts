@@ -357,10 +357,13 @@ export function getPlanningYearLabel(planningYear: number): string {
   return `Year ${planningYear}`;
 }
 
-export function getCalendarYearsForPlanningYear(planningYear: number, planStartYear: number): { q1q2Year: number; q3q4Year: number } {
-  const q1q2Year = planStartYear + planningYear - 1;
-  const q3q4Year = planStartYear + planningYear;
-  return { q1q2Year, q3q4Year };
+// The two calendar years a plan year spans: Q1 (Jun), Q2 (Sep), and Q3 (Dec)
+// fall in the start calendar year; only Q4 (Mar–May) spills into the next.
+// Mirrors getCalendarYearForQuarter / getPlanningYear.
+export function getCalendarYearsForPlanningYear(planningYear: number, planStartYear: number): { q1ToQ3Year: number; q4Year: number } {
+  const q1ToQ3Year = planStartYear + planningYear - 1;
+  const q4Year = planStartYear + planningYear;
+  return { q1ToQ3Year, q4Year };
 }
 
 // The calendar year in which a plan year begins (its June).
