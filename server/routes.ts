@@ -3645,28 +3645,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/export/csv", async (req, res) => {
+  app.get("/api/export/csv", requireAuth, async (req, res) => {
     try {
       const { quarter, year, planningYear, spuId } = req.query;
       const startYearSetting = await storage.getSetting("strategic_plan_start_year");
       const startYear = startYearSetting ? parseInt(startYearSetting) : 2024;
       let okrs = await storage.getAllOkrsWithDetails();
-      
-      if (quarter && quarter !== "All") {
-        okrs = okrs.filter((okr) => okr.quarter === quarter);
-      }
-      
-      if (year && year !== "All") {
-        okrs = okrs.filter((okr) => String(okr.year) === year);
+
+      // Each filter accepts a single value or a comma-separated list; "All" (or absence) means no filter.
+      const parseListParam = (param: unknown): string[] =>
+        param
+          ? String(param)
+              .split(",")
+              .map((v) => v.trim())
+              .filter((v) => v && v !== "All")
+          : [];
+
+      const quarters = parseListParam(quarter);
+      if (quarters.length > 0) {
+        okrs = okrs.filter((okr) => quarters.includes(okr.quarter));
       }
 
-      if (planningYear && planningYear !== "All") {
-        const pyNum = parseInt(planningYear as string);
-        okrs = okrs.filter((okr) => getPlanningYear(okr.quarter, okr.year, startYear) === pyNum);
+      const years = parseListParam(year);
+      if (years.length > 0) {
+        okrs = okrs.filter((okr) => years.includes(String(okr.year)));
       }
 
-      if (spuId && spuId !== "All") {
-        okrs = okrs.filter((okr) => okr.spuId === spuId);
+      const planningYearNums = parseListParam(planningYear)
+        .map((v) => parseInt(v))
+        .filter((n) => !isNaN(n));
+      if (planningYearNums.length > 0) {
+        okrs = okrs.filter((okr) => planningYearNums.includes(getPlanningYear(okr.quarter, okr.year, startYear)));
+      }
+
+      const spuIds = parseListParam(spuId);
+      if (spuIds.length > 0) {
+        okrs = okrs.filter((okr) => spuIds.includes(okr.spuId));
       }
       
       const updates = await storage.getAllQuarterlyUpdates();

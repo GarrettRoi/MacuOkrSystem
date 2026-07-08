@@ -1,3 +1,4 @@
 - [Auth login paths & impersonation](auth-login-paths.md) — select-staff serves BOTH genuine staff logins and admin impersonation; discriminate by session.isAdmin.
 - [Plan year period tagging](plan-year-tagging.md) — periods stored as (quarter, calendar year), shown as Plan Year + Fiscal Quarter; derivation only, never migrate.
 - [Prod→preview data sync](prod-to-preview-sync.md) — daily Railway→preview mirror; tolerate schema drift (raw SELECT * + column-name map), fail-closed DB-identity guard so prod is never wiped.
+- [Dev server reload behavior](dev-server-reload.md) — only client code hot-reloads; restart the workflow before curl-testing server/ changes or old code answers.

@@ -1,15 +1,16 @@
-import { useState, useEffect } from "react";
-import { usePersistedFilter } from "@/hooks/use-persisted-filter";
+import { useState } from "react";
+import { usePersistedMultiFilter } from "@/hooks/use-persisted-filter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MultiSelectCheckboxes } from "@/components/multi-select-checkboxes";
+import { MultiSelectSpus } from "@/components/multi-select-spus";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Download, FileSpreadsheet, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { OkrWithDetails, QuarterlyUpdate, Spu, StaffWithDetails } from "@shared/schema";
-import { getPlanningYear, parseMultiSelectField, ALL_QUARTERS_LABEL, QUARTERS, formatPlanYearLabel, formatQuarterTag, formatQuarterTagForPlanYear } from "@shared/schema";
+import { getPlanningYear, parseMultiSelectField, QUARTERS, formatPlanYearLabel, formatQuarterTag, formatQuarterTagForPlanYear } from "@shared/schema";
 import { usePlanningYears } from "@/hooks/use-planning-years";
 
 const NO_KR_LABEL = "(No Key Result)";
@@ -30,9 +31,9 @@ function sanitizeSheetName(name: string, used: Set<string>): string {
 
 export default function Export() {
   const { toast } = useToast();
-  const [quarterFilter, setQuarterFilter] = usePersistedFilter("export:quarter", "All");
-  const [planningYearFilter, setPlanningYearFilter] = usePersistedFilter("export:planningYear", "All");
-  const [spuFilter, setSpuFilter] = usePersistedFilter("export:spu", "All");
+  const [quarterFilters, setQuarterFilters] = usePersistedMultiFilter("export:quarters");
+  const [planningYearFilters, setPlanningYearFilters] = usePersistedMultiFilter("export:planningYears");
+  const [spuFilters, setSpuFilters] = usePersistedMultiFilter("export:spus");
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
 
@@ -60,31 +61,40 @@ export default function Export() {
   const planningYears = usePlanningYears();
 
   const activeFilterCount = [
-    quarterFilter !== "All",
-    planningYearFilter !== "All",
-    spuFilter !== "All",
+    quarterFilters.length > 0,
+    planningYearFilters.length > 0,
+    spuFilters.length > 0,
   ].filter(Boolean).length;
 
   const clearAllFilters = () => {
-    setQuarterFilter("All");
-    setPlanningYearFilter("All");
-    setSpuFilter("All");
+    setQuarterFilters([]);
+    setPlanningYearFilters([]);
+    setSpuFilters([]);
   };
 
+  const selectedPlanYearNums = planningYearFilters.map((py) => parseInt(py)).filter((n) => !isNaN(n));
+
   const filteredOkrs = okrs?.filter((okr) => {
-    const quarterMatch = quarterFilter === "All" || okr.quarter === quarterFilter;
-    const planningYearMatch = planningYearFilter === "All" || getPlanningYear(okr.quarter, okr.year, planStartYear) === parseInt(planningYearFilter);
-    const spuMatch = spuFilter === "All" || okr.spuId === spuFilter;
+    const quarterMatch = quarterFilters.length === 0 || quarterFilters.includes(okr.quarter);
+    const planningYearMatch = planningYearFilters.length === 0 ||
+      selectedPlanYearNums.includes(getPlanningYear(okr.quarter, okr.year, planStartYear));
+    const spuMatch = spuFilters.length === 0 || spuFilters.includes(okr.spuId);
     return quarterMatch && planningYearMatch && spuMatch;
   }) || [];
+
+  // Compact filter descriptions for the downloaded file names.
+  const quarterFilePart = quarterFilters.length > 0 ? [...quarterFilters].sort().join("-") : "AllQuarters";
+  const planYearFilePart = planningYearFilters.length > 0
+    ? [...selectedPlanYearNums].sort((a, b) => a - b).map((py) => `Y${py}`).join("-")
+    : "AllPlanYears";
 
   const handleExport = async () => {
     setIsExporting(true);
     try {
       const params = new URLSearchParams();
-      if (quarterFilter !== "All") params.append("quarter", quarterFilter);
-      if (planningYearFilter !== "All") params.append("planningYear", planningYearFilter);
-      if (spuFilter !== "All") params.append("spuId", spuFilter);
+      if (quarterFilters.length > 0) params.append("quarter", quarterFilters.join(","));
+      if (planningYearFilters.length > 0) params.append("planningYear", planningYearFilters.join(","));
+      if (spuFilters.length > 0) params.append("spuId", spuFilters.join(","));
 
       const response = await fetch(`/api/export/csv?${params.toString()}`);
       
@@ -96,7 +106,7 @@ export default function Export() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `okrs_export_${quarterFilter}_${planningYearFilter}_${new Date().toISOString().split("T")[0]}.csv`;
+      a.download = `okrs_export_${quarterFilePart}_${planYearFilePart}_${new Date().toISOString().split("T")[0]}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -243,7 +253,7 @@ export default function Export() {
       }
 
       const date = new Date().toISOString().split("T")[0];
-      XLSX.writeFile(wb, `okrs_by_key_result_${quarterFilter}_${planningYearFilter}_${date}.xlsx`);
+      XLSX.writeFile(wb, `okrs_by_key_result_${quarterFilePart}_${planYearFilePart}_${date}.xlsx`);
 
       toast({
         title: "Export Successful",
@@ -289,58 +299,46 @@ export default function Export() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="export-quarter">Quarter</Label>
-                <Select value={quarterFilter} onValueChange={setQuarterFilter}>
-                  <SelectTrigger id="export-quarter" data-testid="select-export-quarter">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All" data-testid="option-export-quarter-All">
-                      {ALL_QUARTERS_LABEL}
-                    </SelectItem>
-                    {QUARTERS.map((q) => (
-                      <SelectItem key={q.value} value={q.value} data-testid={`option-export-quarter-${q.value}`}>
-                        {planningYearFilter !== "All"
-                          ? formatQuarterTagForPlanYear(q.value, parseInt(planningYearFilter), planStartYear)
-                          : q.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Quarters</Label>
+                <MultiSelectCheckboxes
+                  options={QUARTERS.map((q) => q.value)}
+                  selected={quarterFilters}
+                  onChange={setQuarterFilters}
+                  placeholder="All quarters"
+                  testIdPrefix="select-export-quarter"
+                  labelExtractor={(value) => {
+                    const label = planningYearFilters.length === 1
+                      ? formatQuarterTagForPlanYear(value, parseInt(planningYearFilters[0]), planStartYear)
+                      : QUARTERS.find((q) => q.value === value)?.label || value;
+                    return { short: value, full: label };
+                  }}
+                />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="export-planning-year">Plan Year</Label>
-                <Select value={planningYearFilter} onValueChange={setPlanningYearFilter}>
-                  <SelectTrigger id="export-planning-year" data-testid="select-export-planning-year">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Plan Years</SelectItem>
-                    {planningYears.viewing.map((py) => (
-                      <SelectItem key={py} value={String(py)} data-testid={`option-export-planning-year-${py}`}>
-                        {formatPlanYearLabel(py, planStartYear)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Plan Years</Label>
+                <MultiSelectCheckboxes
+                  options={planningYears.viewing.map((py) => String(py))}
+                  selected={planningYearFilters}
+                  onChange={setPlanningYearFilters}
+                  placeholder="All plan years"
+                  testIdPrefix="select-export-planning-year"
+                  labelExtractor={(value) => {
+                    const label = formatPlanYearLabel(parseInt(value), planStartYear);
+                    return { short: label, full: label };
+                  }}
+                />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="export-spu">SPU</Label>
-                <Select value={spuFilter} onValueChange={setSpuFilter}>
-                  <SelectTrigger id="export-spu" data-testid="select-export-spu">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All" data-testid="option-export-spu-all">All SPUs</SelectItem>
-                    {spus?.map((spu) => (
-                      <SelectItem key={spu.id} value={spu.id} data-testid={`option-export-spu-${spu.id}`}>
-                        {spu.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>SPUs</Label>
+                <MultiSelectSpus
+                  options={(spus || []).map((spu) => ({ id: spu.id, name: spu.name }))}
+                  selectedIds={spuFilters}
+                  onChange={setSpuFilters}
+                  placeholder="All SPUs"
+                  testIdPrefix="select-export-spu"
+                />
               </div>
             </div>
           </div>
