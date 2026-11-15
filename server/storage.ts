@@ -315,7 +315,7 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  private adminPassword: string = process.env.ADMIN_PASSWORD ?? "admin14:12";
+  private adminPassword: string = process.env.ADMIN_PASSWORD ?? "";
   private staffPassword: string = process.env.STAFF_PASSWORD ?? "staff14:12";
 
   async verifyPassword(password: string): Promise<{ isValid: boolean; isAdmin: boolean }> {
